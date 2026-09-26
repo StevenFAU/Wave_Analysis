@@ -29,14 +29,12 @@ OUT="$WORK/live"
 
 export GIT_INDEX_FILE="$WORK/index"
 git -C "$REPO" read-tree --empty
-(
-    cd "$OUT"
-    find . -type f -name '*.json' -print0 | sort -z | while IFS= read -r -d '' f; do
-        path="${f#./}"
-        blob="$(git -C "$REPO" hash-object -w -- "$f")"
-        git -C "$REPO" update-index --add --cacheinfo "100644,$blob,$path"
-    done
-)
+# `git -C` resolves relative paths against the repository, so pass absolute ones.
+find "$OUT" -type f -name '*.json' -print0 | sort -z | while IFS= read -r -d '' f; do
+    path="${f#"$OUT"/}"
+    blob="$(git -C "$REPO" hash-object -w -- "$f")"
+    git -C "$REPO" update-index --add --cacheinfo "100644,$blob,$path"
+done
 tree="$(git -C "$REPO" write-tree)"
 stamp="$(date -u +%FT%TZ)"
 commit="$(git -C "$REPO" commit-tree "$tree" -m "Dashboard live data $stamp" \
