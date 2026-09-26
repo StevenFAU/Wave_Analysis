@@ -55,6 +55,14 @@ separately (`docs/REPRODUCIBILITY.md`).
   Optional hourly collector for the five Yin et al. (2025) cameras
   (`install_collectors.sh --webcoos`). Camera sites updated with API positions
   (Oak Island was 7.8 km off) and Jennette's Pier added.
+- ERA5 adapter (`wave_analysis.sources.era5`, `wave-analysis era5 download |
+  standardize`): 12 wave parameters from the Copernicus CDS, one month per request
+  for a box around a camera site, raw files with their requests and a manifest;
+  months still ERA5T or incomplete are requested again once they could have changed.
+  Normalized at the nearest sea grid point, flagged `era5`/`era5t`. The key stays in
+  `~/.cdsapirc` (mode 600), goes only to the CDS host and is never logged. New
+  variables `wave_energy_period`, `wind_wave_energy_period`, `swell_energy_period`
+  (ERA5's `mwp` is m-1/m0, not Tm01). Optional extra `cds`. Real CDS fixture.
 - Shared resumable archiver (`wave_analysis.ingest.archive`) used by the PacIOOS
   and WebCOOS image collections.
 - The downloader streams bodies to disk while hashing them, so files larger

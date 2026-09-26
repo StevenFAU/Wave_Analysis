@@ -47,6 +47,7 @@ nav:
       - PacIOOS beach cameras: datasets/pacioos_beachcam.md
       - IOOS / ERDDAP: datasets/ioos.md
       - WebCOOS: datasets/webcoos.md
+      - ERA5 waves: datasets/era5.md
       - USGS CoastCam: datasets/coastcam.md
       - Satellite SAR: datasets/satellite_sar.md
       - Multispectral: datasets/multispectral.md

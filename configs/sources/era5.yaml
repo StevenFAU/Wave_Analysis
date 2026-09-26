@@ -1,0 +1,13 @@
+# ERA5 ocean-wave parameters from the Copernicus CDS (v0.2.0; docs/datasets/era5.md).
+# Model output = context and non-vision baseline, never ground truth.
+source_id: era5_waves
+role: context
+dataset: reanalysis-era5-single-levels
+request:
+  product_type: reanalysis
+  per_request: one calendar month, all hours
+  box_half_width_deg: 1.0        # snapped outward to the 0.5 deg grid
+  data_format: netcdf
+variables: [swh, pp1d, mwp, mp1, mp2, mwd, shww, mpww, mdww, shts, mpts, mdts]
+point_selection: nearest grid point with sea data
+recheck_after: {incomplete: 1 day, preliminary_era5t: 30 days}

@@ -35,7 +35,9 @@ Priorities from the [landscape review](literature/landscape_review.md) §7:
   calibration. Pair with CDIP 214, 156, 221, and 121, and with the Dorado Spotter
   (five sites for leave-site-out tests).
 - **Required non-vision baselines:** WIS/WW3/ERA5 nowcast at the site,
-  persistence, and propagated offshore buoy (Q-M6).
+  persistence, and propagated offshore buoy (Q-M6). ✅ ERA5 adapter (12 wave
+  parameters, nearest sea point); Waimea 2009–2013 and the NC sites since 2026-07
+  requested 2026-09-26. Still to do: WIS/WW3, wind.
 - ERDDAP adapter (SECOORA, PacIOOS), discovery by CF standard name.
 - ✅ WebCOOS access terms and adapter; hourly collection of the Yin et al. (2025)
   cameras. Next: request historical access (webcoos@secoora.org); pairing study for

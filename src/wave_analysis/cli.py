@@ -26,6 +26,11 @@ Commands
     List WebCOOS cameras; show a camera's still-image inventory; archive
     one-minute stills thinned to a time grid (token from
     ``$WEBCOOS_API_TOKEN`` or ``~/.config/wave-analysis/webcoos_token``).
+``era5 download | standardize``
+    Request ERA5 ocean-wave parameters, one month per request, for a box around
+    camera sites (``data/registry/camera_sites.yaml``) from the Copernicus CDS
+    (key in ``~/.cdsapirc``); write standardized tables at the nearest sea
+    grid point.
 ``registry validate``
     Validate ``data/registry/datasets.yaml`` against the registry schema.
 ``dashboard catalog | live | build``
@@ -599,6 +604,161 @@ def _cmd_webcoos_download(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def _era5_sites(names: Sequence[str]) -> dict[str, tuple[float, float]]:
+    from wave_analysis.dashboard.catalog import load_camera_sites
+
+    sites = {
+        s.site_id: (s.latitude, s.longitude)
+        for s in load_camera_sites(repo_root() / "data" / "registry" / "camera_sites.yaml")
+    }
+    unknown = [n for n in names if n not in sites]
+    if unknown:
+        raise SystemExit(f"unknown sites {unknown}; known: {', '.join(sorted(sites))}")
+    return {n: sites[n] for n in dict.fromkeys(names)}
+
+
+def _cmd_era5_download(args: argparse.Namespace) -> int:
+    from wave_analysis.ingest.manifest import EntryStatus, ManifestEntry, write_manifest
+    from wave_analysis.sources.era5 import (
+        CITATION,
+        DATASET_PAGE,
+        CDSConfigError,
+        ERA5WaveSource,
+        months,
+    )
+
+    sites = _era5_sites(args.sites)
+    periods = months(args.start, args.end or pd.Timestamp.now(tz="UTC").strftime("%Y-%m"))
+    dest = Path(args.out) if args.out else data_dir("raw") / "era5"
+    manifest = Path(args.manifest) if args.manifest else data_dir("manifests") / "raw" / "era5.csv"
+
+    def log(msg: str) -> None:
+        print(f"{pd.Timestamp.now(tz='UTC'):%Y-%m-%dT%H:%M:%SZ} {msg}", flush=True)
+
+    src = ERA5WaveSource(log=log if args.verbose else None)
+    plan = src.discover(sites, periods, dest_root=dest, box_deg=args.box, refresh=args.refresh)
+    todo = plan[plan["request"]]
+    log(
+        f"{len(plan)} site-months, {len(todo)} to request "
+        f"({todo['fields'].sum():,} fields; {plan['fields'].max():,} per request at most)"
+    )
+    if args.list_only:
+        with pd.option_context("display.width", 200, "display.max_rows", 500):
+            print(plan.drop(columns="path").to_string(index=False))
+        return 0
+    dest.mkdir(parents=True, exist_ok=True)
+    failed = 0
+
+    def record(batch: list[ManifestEntry]) -> None:
+        # Called as each month completes, so a long run shows progress and keeps its ledger.
+        write_manifest(batch, manifest)
+        for e in batch:
+            size = f"{e.size_bytes / 1e6:,.2f} MB" if e.size_bytes is not None else "-"
+            log(f"{e.station_id} {e.period}: {e.status.value} ({size}) {e.note}")
+            if e.status == EntryStatus.FAILED and "licen" in (e.note or "").lower():
+                log(f"accept the dataset licence at {DATASET_PAGE} (Download tab)")
+
+    with _exclusive_lock(dest / ".era5.lock") as acquired:
+        if not acquired:
+            print(f"another run holds {dest / '.era5.lock'}; skipping")
+            return 0
+        try:
+            for site, (lat, lon) in sites.items():
+                site_periods = [
+                    pd.Period(p, freq="M") for p in todo.loc[todo["site_id"] == site, "period"]
+                ]
+                entries = src.fetch(
+                    site,
+                    lat,
+                    lon,
+                    site_periods,
+                    dest_root=dest,
+                    box_deg=args.box,
+                    refresh=args.refresh,
+                    sink=record,
+                )
+                failed += sum(e.status == EntryStatus.FAILED for e in entries)
+        except CDSConfigError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    log(f"cite: {CITATION}")
+    return 1 if failed else 0
+
+
+def _cmd_era5_standardize(args: argparse.Namespace) -> int:
+    from wave_analysis.datasets.provenance import build_provenance, write_provenance
+    from wave_analysis.ingest.checksum import sha256_file
+    from wave_analysis.schemas.observation import validate_observation_frame
+    from wave_analysis.sources.era5 import (
+        ERA5WaveSource,
+        month_status,
+        months,
+        nearest_sea_point,
+        raw_path,
+    )
+
+    sites = _era5_sites(args.sites)
+    periods = months(args.start, args.end)
+    raw = data_dir("raw") / "era5"
+    out_root = data_dir("processed") / "era5"
+    tag = f"{periods[0]}_{periods[-1]}"
+    src = ERA5WaveSource()
+    for site, (lat, lon) in sites.items():
+        frames, inputs, states = [], [], []
+        point = None
+        for p in periods:
+            path = raw_path(raw, site, p)
+            if not path.exists():
+                continue
+            ds = src.parse(path)
+            point = nearest_sea_point(ds, lat, lon)
+            frames.append(
+                src.normalize(
+                    ds,
+                    site_id=site,
+                    latitude=lat,
+                    longitude=lon,
+                    source_file=path.name,
+                    source_checksum=sha256_file(path),
+                )
+            )
+            inputs.append(path)
+            states.append(month_status(path, p))
+        if not frames or point is None:
+            print(f"{site}: no raw files for {tag}; run 'wave-analysis era5 download {site}'")
+            return 1
+        obs = pd.concat(frames, ignore_index=True)
+        validate_observation_frame(obs)
+        out = out_root / site
+        out.mkdir(parents=True, exist_ok=True)
+        written = [out / f"bulk_{tag}.parquet"]
+        obs.to_parquet(written[0], index=False)
+        write_provenance(
+            build_provenance(
+                artifact_id=f"era5_standardized_{site}_{tag}",
+                inputs=inputs,
+                outputs=written,
+                config={
+                    "start": str(periods[0]),
+                    "end": str(periods[-1]),
+                    "site": {"latitude": lat, "longitude": lon},
+                    "grid_point": {
+                        "latitude": point.latitude,
+                        "longitude": point.longitude,
+                        "distance_km": round(point.distance_km, 2),
+                    },
+                },
+            ),
+            out / f"provenance_{tag}.yaml",
+        )
+        n_final = states.count("final")
+        print(
+            f"{site}: {len(inputs)} months ({n_final} final) -> {len(obs):,} rows at grid point "
+            f"{point.latitude:.2f}, {point.longitude:.2f} ({point.distance_km:.1f} km from the site)"
+        )
+    return 0
+
+
 def _cmd_registry_validate(args: argparse.Namespace) -> int:
     from wave_analysis.registry import validate_registry
 
@@ -800,6 +960,27 @@ def build_parser() -> argparse.ArgumentParser:
     wdl.add_argument("--out", help="archive root (default: data/raw/webcoos)")
     wdl.add_argument("--min-interval", type=float, default=1.0)
     wdl.set_defaults(func=_cmd_webcoos_download)
+
+    era = sub.add_parser("era5", help="ERA5 reanalysis wave parameters (Copernicus CDS)")
+    era_sub = era.add_subparsers(dest="cmd", required=True)
+    edl = era_sub.add_parser("download", help="request monthly files for camera sites (resumable)")
+    edl.add_argument("sites", nargs="+", help="site ids from data/registry/camera_sites.yaml")
+    edl.add_argument("--start", required=True, help="first month, e.g. 2009-02")
+    edl.add_argument("--end", help="last month, inclusive (default: this month)")
+    edl.add_argument("--box", type=float, default=1.0, help="half-width of the box [deg]")
+    edl.add_argument("--refresh", action="store_true", help="request months already final too")
+    edl.add_argument("--list-only", action="store_true", help="print the plan; request nothing")
+    edl.add_argument("--verbose", action="store_true", help="show the CDS client's messages")
+    edl.add_argument("--out", help="raw directory (default: data/raw/era5)")
+    edl.add_argument("--manifest", help="manifest CSV (default: data/manifests/raw/era5.csv)")
+    edl.set_defaults(func=_cmd_era5_download)
+    estd = era_sub.add_parser(
+        "standardize", help="write standardized tables at the nearest sea point"
+    )
+    estd.add_argument("sites", nargs="+")
+    estd.add_argument("--start", required=True, help="first month, e.g. 2009-02")
+    estd.add_argument("--end", required=True, help="last month, inclusive")
+    estd.set_defaults(func=_cmd_era5_standardize)
 
     dash = sub.add_parser("dashboard", help="public dashboard data and site").add_subparsers(
         dest="cmd", required=True

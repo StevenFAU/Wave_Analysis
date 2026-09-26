@@ -66,6 +66,13 @@ _VARS: tuple[VariableSpec, ...] = (
         "Mean wave period sqrt(m0/m2)",
     ),
     VariableSpec(
+        "wave_energy_period",
+        "sea_surface_wave_mean_period_from_variance_spectral_density_inverse_frequency_moment",
+        "s",
+        "Energy mean wave period m-1/m0 (Tm-10, Te)",
+        "ERA5 'mean wave period' (mwp) is this period, not Tm01.",
+    ),
+    VariableSpec(
         "wave_zero_upcrossing_period",
         "sea_surface_wave_zero_upcrossing_period",
         "s",
@@ -97,7 +104,7 @@ _VARS: tuple[VariableSpec, ...] = (
         "sea_surface_swell_wave_significant_height",
         "m",
         "Swell significant height",
-        "NDBC SwH; partition by NDBC separation frequency.",
+        "NDBC SwH; partition by NDBC separation frequency. ERA5 shts uses ERA5's wind-sea/swell split.",
     ),
     VariableSpec(
         "swell_period",
@@ -107,11 +114,19 @@ _VARS: tuple[VariableSpec, ...] = (
         "NDBC SwP.",
     ),
     VariableSpec(
+        "swell_energy_period",
+        "sea_surface_swell_wave_mean_period_from_variance_spectral_density_inverse_frequency_moment",
+        "s",
+        "Total-swell energy mean period m-1/m0",
+        "ERA5 mpts (total swell, ERA5's wind-sea/swell split).",
+    ),
+    VariableSpec(
         "swell_from_direction",
         "sea_surface_swell_wave_from_direction",
         "degree",
         "Swell direction (from)",
-        "NDBC SwD, reported as a 16-point compass string; converted to degrees (22.5 deg resolution).",
+        "NDBC SwD, reported as a 16-point compass string; converted to degrees (22.5 deg resolution). "
+        "ERA5 mdts is the mean direction of the total swell (method spectral_mean_direction).",
         is_angle=True,
     ),
     VariableSpec(
@@ -119,17 +134,25 @@ _VARS: tuple[VariableSpec, ...] = (
         "sea_surface_wind_wave_significant_height",
         "m",
         "Wind-wave significant height",
-        "NDBC WWH.",
+        "NDBC WWH. ERA5 shww uses ERA5's wind-sea/swell split.",
     ),
     VariableSpec(
         "wind_wave_period", "sea_surface_wind_wave_period", "s", "Wind-wave period", "NDBC WWP."
+    ),
+    VariableSpec(
+        "wind_wave_energy_period",
+        "sea_surface_wind_wave_mean_period_from_variance_spectral_density_inverse_frequency_moment",
+        "s",
+        "Wind-sea energy mean period m-1/m0",
+        "ERA5 mpww (wind-sea part of the spectrum, ERA5's wind-sea/swell split).",
     ),
     VariableSpec(
         "wind_wave_from_direction",
         "sea_surface_wind_wave_from_direction",
         "degree",
         "Wind-wave direction (from)",
-        "NDBC WWD, 16-point compass string converted to degrees.",
+        "NDBC WWD, 16-point compass string converted to degrees. "
+        "ERA5 mdww is the mean direction of the wind sea (method spectral_mean_direction).",
         is_angle=True,
     ),
     VariableSpec(

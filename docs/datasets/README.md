@@ -9,16 +9,18 @@ counterpart is the registry, `data/registry/datasets.yaml`, whose
 |---|---|---|---|
 | NOAA NDBC (met, waves, spectra, cameras) | [ndbc.md](ndbc.md) | `ndbc` | **implemented** v0.1 · verified |
 | NDBC ADCP currents | [ndbc_adcp.md](ndbc_adcp.md) | `ndbc` | inventory + parser v0.1 |
-| CDIP Waverider network | [cdip.md](cdip.md) | `cdip` | planned v0.2 · verified access |
+| CDIP Waverider network | [cdip.md](cdip.md) | `cdip` | **implemented** v0.2 · verified |
 | IOOS / ERDDAP regional servers | [ioos.md](ioos.md) | `ioos_erddap` | planned v0.2 · candidate |
-| WebCOOS webcams | [webcoos.md](webcoos.md) | `webcoos` | planned v0.2 · candidate |
+| PacIOOS beach cameras (Waimea Bay) | [pacioos_beachcam.md](pacioos_beachcam.md) | `pacioos_beachcam` | **implemented** v0.2 |
+| WebCOOS webcams | [webcoos.md](webcoos.md) | `webcoos` | **implemented** v0.2 · verified |
+| ERA5 ocean-wave parameters (model) | [era5.md](era5.md) | `era5_waves` | **implemented** v0.2 · verified |
 | USGS CoastCam | [coastcam.md](coastcam.md) | `usgs_coastcam` | planned v0.3 · documented |
 | Sentinel-1 SAR | [satellite_sar.md](satellite_sar.md) | `sentinel1_ocn` | planned v0.4 · candidate |
 | Multispectral (Sentinel-2/Landsat/HLS) | [multispectral.md](multispectral.md) | `hls` | planned v0.4 · candidate |
 | Thermal IR | [thermal_ir.md](thermal_ir.md) | — | research direction |
 
 Other registry entries without a full datasheet yet (USACE FRF, Yin et al. 2025
-VWBT, WASS stereo, Copernicus Marine, ERA5, WAVEWATCH III, NOAA Digital
+VWBT, WASS stereo, Copernicus Marine, WAVEWATCH III, NOAA Digital
 Coast) are described in `datasets.yaml`. Each gets a datasheet once
 implementation starts.
 

@@ -375,16 +375,52 @@ datasets:
 
   - dataset_id: era5_waves
     name: ECMWF ERA5 reanalysis (ocean-wave parameters)
-    provider: ECMWF / Copernicus Climate Change Service
+    provider: ECMWF / Copernicus Climate Change Service (C3S)
     modalities: [numerical_model]
     intended_roles: [context]
-    access: {public: true, authentication_required: true, protocols: [API]}
-    data_types: [swh, mwp, mwd, pp1d, wind]
-    documentation: [https://cds.climate.copernicus.eu/]
-    license: {status: copernicus_licence}
-    phase: v0.4.0
-    doc: docs/datasets/README.md
-    verification: {status: candidate}
+    access:
+      public: true
+      authentication_required: true
+      protocols: [API]
+      endpoints:
+        - https://cds.climate.copernicus.eu/api/retrieve/v1/processes/reanalysis-era5-single-levels
+        - https://cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-single-levels
+      rate_limit_guidance: "At most 121,000 fields per request (download form, 2026-09-26); requests are queued."
+    data_types: [swh, pp1d, mwp, mp1, mp2, mwd, shww, mpww, mdww, shts, mpts, mdts]
+    temporal:
+      timezone: UTC
+      acquisition_window: "instantaneous model fields at valid_time"
+      interval: "1 h"
+      coverage: "1940 to about 5 days behind real time (ERA5T for the last ~3 months)"
+    spatial: {coverage: "global ocean", resolution: "0.36 deg reduced grid, served on a regular 0.5 deg grid"}
+    formats: [netcdf, grib]
+    documentation:
+      - https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels
+      - https://confluence.ecmwf.int/display/CKB/ERA5%3A+data+documentation
+      - https://confluence.ecmwf.int/download/attachments/59774192/wave_parameters.pdf
+    citation: "Hersbach, H. et al. (2023): ERA5 hourly data on single levels from 1940 to present. Copernicus Climate Change Service (C3S) Climate Data Store (CDS), DOI: 10.24381/cds.adbb2d47 (accessed <date>)."
+    license:
+      status: cc_by_4_0
+      url: https://spdx.org/licenses/CC-BY-4.0
+      notes: "CDS catalogue licence link 'cc-by'. The licence is accepted once per account on the dataset's Download tab."
+    phase: v0.2.0
+    adapter: wave_analysis.sources.era5.ERA5WaveSource
+    doc: docs/datasets/era5.md
+    verification:
+      status: verified
+      date: 2026-09-26
+      evidence:
+        - https://cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-single-levels
+        - https://cds.climate.copernicus.eu/api/retrieve/v1/processes/reanalysis-era5-single-levels
+        - https://confluence.ecmwf.int/download/attachments/59774192/wave_parameters.pdf
+      notes: >
+        Requests for all 12 parameters returned netCDF on a regular 0.5 deg grid with
+        GRIB_paramId attributes, GRIB_stepType instant, NaN over land, and an expver
+        coordinate per valid_time (0001 for June 2026, 0005 for September 2026). A request
+        past the latest hour returned the hours available (to 2026-09-21T18). mwp is
+        m-1/m0, mp1 m0/m1, mp2 sqrt(m0/m2) (Bidlot 2020, eqs. 5, 7, 8). Fixture:
+        tests/fixtures/era5/.
+    notes: "Model output: context and non-vision baseline, never ground truth."
 
   - dataset_id: noaa_ww3
     name: NOAA WAVEWATCH III operational and hindcast products

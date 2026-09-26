@@ -52,7 +52,9 @@ netcdf = ["xarray>=2024.6", "h5netcdf>=1.3", "netCDF4>=1.7"]
 imaging = ["pillow>=10.3", "opencv-python-headless>=4.9"]
 # Reference deep-learning architectures (see src/wave_analysis/models).
 ml = ["torch>=2.3", "torchvision>=0.18"]
-all = ["wave-analysis[netcdf,imaging,ml]"]
+# Copernicus Climate Data Store (ERA5); needs a key in ~/.cdsapirc.
+cds = ["cdsapi>=0.7.7"]
+all = ["wave-analysis[netcdf,imaging,ml,cds]"]
 
 [project.scripts]
 wave-analysis = "wave_analysis.cli:main"
@@ -163,7 +165,7 @@ warn_unreachable = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["scipy.*", "torch.*", "torchvision.*", "cv2.*", "PIL.*", "xarray.*", "pyarrow.*"]
+module = ["scipy.*", "torch.*", "torchvision.*", "cv2.*", "PIL.*", "xarray.*", "pyarrow.*", "cdsapi.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
