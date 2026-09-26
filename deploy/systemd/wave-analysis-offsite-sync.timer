@@ -1,0 +1,10 @@
+[Unit]
+Description=Wave_Analysis: daily offsite copy of the raw archive
+
+[Timer]
+OnCalendar=*-*-* 04:15:00
+RandomizedDelaySec=900
+Persistent=true
+
+[Install]
+WantedBy=timers.target

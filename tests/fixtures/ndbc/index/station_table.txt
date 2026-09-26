@@ -1,0 +1,6 @@
+# STATION_ID | OWNER | TTYPE | HULL | NAME | PAYLOAD | LOCATION | TIMEZONE | FORECAST | NOTE
+#
+41001|N|3-meter foam buoy|3DV31|EAST HATTERAS - 150 NM East of Cape Hatteras|SCOOP payload|34.738 N 72.503 W (34&#176;44'15" N 72&#176;30'11" W)|E|FZNT22.KWBC |Buoy recovered	9/9/26.
+41009|N|3-meter discus buoy|3D65|CANAVERAL 20 NM East of Cape Canaveral, FL|SCOOP payload|28.508 N 80.185 W (28&#176;30'27" N 80&#176;11'6" W)|E|FZUS52.KMLB |Right whales are active off FL from November to April. Speed restrictions of 10 knots apply to vessels 65 feet or greater in specific areas and times along the U.S. East Coast.  It is illegal to approach right whales within 500 yards.  To learn more about right whales and rules protecting them, go to: <a href="http://www.nmfs.noaa.gov/pr/shipstrike">http://www.nmfs.noaa.gov/pr/shipstrike</a>.<br /><br />
+41010|N|2.1-meter ionomer foam buoy|3D41|CANAVERAL EAST - 120NM East of Cape Canaveral|SCOOP payload|28.860 N 78.478 W (28&#176;51'36" N 78&#176;28'39" W)|E|FZNT23.KNHC |
+fpsn7|N|C-MAN Station||Frying Pan Shoals, NC|DACT payload|33.485 N 77.590 W (33&#176;29'6" N 77&#176;35'24" W)|E|FZUS52.KMHX FZUS52.KILM|The CMAN station at FPSN7 has been disestablished on December 31, 2008.&nbsp; For local data, please refer to buoy <a href="http://www.ndbc.noaa.gov/station_page.php?station=41013">41013</a>.<br /><br />

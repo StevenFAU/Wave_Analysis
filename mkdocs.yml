@@ -1,0 +1,72 @@
+site_name: Wave_Analysis
+site_description: Reproducible multimodal ocean-wave data and vision-based wave-state estimation
+repo_url: https://github.com/StevenFAU/Wave_Analysis
+edit_uri: edit/main/docs/
+theme:
+  name: material
+  features: [navigation.sections, navigation.top, search.highlight, content.code.copy]
+markdown_extensions:
+  - admonition
+  - tables
+  - toc: {permalink: true}
+  - pymdownx.arithmatex: {generic: true}
+  - pymdownx.superfences
+  - pymdownx.highlight
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+not_in_nav: |
+  literature/bibliography.bib
+nav:
+  - Home: index.md
+  - Project:
+      - Standards: STANDARDS.md
+      - Architecture: ARCHITECTURE.md
+      - Data model: DATA_MODEL.md
+      - Quality control: QUALITY_CONTROL.md
+      - Provenance: PROVENANCE.md
+      - Reproducibility: REPRODUCIBILITY.md
+      - Citation policy: CITATION_POLICY.md
+      - Roadmap: ROADMAP.md
+  - Methodology:
+      - Acquisition: methodology/acquisition.md
+      - Preprocessing: methodology/preprocessing.md
+      - Wave parameters: methodology/wave_parameters.md
+      - Spectral analysis: methodology/spectral_analysis.md
+      - Synchronisation: methodology/synchronization.md
+      - Imagery: methodology/imagery_processing.md
+      - Dataset splitting: methodology/dataset_splitting.md
+      - Evaluation: methodology/evaluation.md
+      - Models: methodology/models.md
+  - Datasets:
+      - Overview & template: datasets/README.md
+      - NDBC: datasets/ndbc.md
+      - NDBC ADCP: datasets/ndbc_adcp.md
+      - CDIP: datasets/cdip.md
+      - IOOS / ERDDAP: datasets/ioos.md
+      - WebCOOS: datasets/webcoos.md
+      - USGS CoastCam: datasets/coastcam.md
+      - Satellite SAR: datasets/satellite_sar.md
+      - Multispectral: datasets/multispectral.md
+      - Thermal IR: datasets/thermal_ir.md
+  - Operations:
+      - Continuous data collection: operations/data_collection.md
+  - Literature:
+      - Matrix: literature/literature_matrix.md
+      - Research gaps: literature/research_gaps.md
+      - Source verification: literature/source_verification.md
+      - Paper notes:
+          - Overview: literature/papers/README.md
+          - Choi 2020: literature/papers/choi2020.md
+          - Kim 2023: literature/papers/kim2023.md
+          - Kamagata 2026: literature/papers/kamagata2026.md
+          - Yang 2026: literature/papers/yang2026.md
+  - Decisions:
+      - Index: decisions/README.md
+      - 0001 Preserve & annotate: decisions/0001-preserve-raw-annotate-dont-delete.md
+      - 0002 Long-format observations: decisions/0002-long-format-observations.md
+      - 0003 Preserve spectra: decisions/0003-preserve-spectra.md
+      - 0004 QC flag vocabulary: decisions/0004-single-qc-flag-vocabulary.md
+      - 0005 Group-based splits: decisions/0005-group-based-splits.md
+      - 0006 Manifests not data: decisions/0006-manifests-not-data-in-git.md
+      - 0007 Optional deep learning: decisions/0007-optional-deep-learning.md
+      - 0008 Collection & storage: decisions/0008-prospective-collection-and-storage.md

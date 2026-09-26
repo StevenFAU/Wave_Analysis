@@ -1,0 +1,17 @@
+# Twice-monthly snapshot of the 45-day realtime wave files for every camera
+# station, so each archived image has its spectrum even before NDBC's
+# QC'd historical files are published. Stored gzip-compressed.
+[Unit]
+Description=Wave_Analysis: snapshot NDBC realtime wave files for camera stations
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/.venv/bin/wave-analysis ndbc download --camera-stations --realtime --gzip \
+    --products stdmet spec swden swdir swdir2 swr1 swr2 \
+    --manifest @REPO@/data/raw/ndbc/_manifests/realtime.csv
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=2h

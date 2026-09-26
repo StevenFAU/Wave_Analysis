@@ -1,0 +1,4 @@
+# Sentinel-2 / HLS multispectral (planned v0.4.0; docs/datasets/multispectral.md)
+source_id: hls
+bands_of_interest: [B02, B03, B04, B08, B11, B12]   # blue, green, red, NIR, SWIR1, SWIR2
+role: context

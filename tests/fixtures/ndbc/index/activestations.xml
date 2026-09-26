@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?><stations created="2026-09-26T00:40:06UTC" count="1354">
+  <!--Site Elevation (elev attribute), when present, is reported in meters above mean sea level.-->
+    <station id="41001" lat="34.738" lon="-72.503" elev="0" name="EAST HATTERAS - 150 NM East of Cape Hatteras" owner="NDBC" pgm="NDBC Meteorological/Ocean" type="buoy" met="n" currents="n" waterquality="n" dart="n"/>
+  <station id="41009" lat="28.508" lon="-80.185" elev="0" name="CANAVERAL 20 NM East of Cape Canaveral, FL" owner="NDBC" pgm="NDBC Meteorological/Ocean" type="buoy" met="y" currents="n" waterquality="n" dart="n"/>
+  <station id="41010" lat="28.86" lon="-78.478" elev="0" name="CANAVERAL EAST - 120NM East of Cape Canaveral" owner="NDBC" pgm="NDBC Meteorological/Ocean" type="buoy" met="y" currents="n" waterquality="n" dart="n"/>
+</stations>

@@ -1,0 +1,12 @@
+# 1st and 15th of each month: at most ~17 days between snapshots of a 45-day
+# window, so up to ~4 weeks of downtime loses nothing.
+[Unit]
+Description=Wave_Analysis: twice-monthly NDBC realtime wave snapshot
+
+[Timer]
+OnCalendar=*-*-01,15 03:20:00
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

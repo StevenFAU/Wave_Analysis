@@ -1,0 +1,16 @@
+# Hourly NDBC buoy-camera archiver (see docs/operations/data_collection.md).
+# Rendered into ~/.config/systemd/user/ by scripts/install_collectors.sh,
+# which replaces @REPO@ with the repository path.
+[Unit]
+Description=Wave_Analysis: archive NDBC buoy-camera images (latest + 70 h backfill)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/.venv/bin/wave-analysis ndbc cameras
+Nice=10
+IOSchedulingClass=idle
+# The first run backfills ~5,500 images at 1 request/s.
+TimeoutStartSec=3h

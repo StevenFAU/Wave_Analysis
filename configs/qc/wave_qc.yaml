@@ -1,0 +1,29 @@
+# Wave QC thresholds (QARTOD In-Situ Surface Waves v2.1, doi:10.25607/OBP-759).
+# QARTOD thresholds are operator-defined and location-dependent: these are
+# conservative *global* defaults. Override per station/region and record the
+# override in the dataset provenance.
+expected_interval_s: 3600          # Test 9 gap: hourly bulk records (1800 for half-hourly stations)
+gross_range:                       # Test 19
+  wave_significant_height: {fail: [0.0, 25.0], suspect: [0.05, 15.0]}
+  wave_peak_period:        {fail: [1.0, 30.0], suspect: [2.0, 25.0]}
+  wave_mean_period:        {fail: [1.0, 25.0], suspect: [2.0, 20.0]}
+  wave_from_direction_at_peak: {fail: [0.0, 360.0]}
+flat_line:                         # Test 16 (manual example REP_CNT_SUSPECT=3, REP_CNT_FAIL=5)
+  suspect_count: 3
+  fail_count: 5
+  tolerance: 0.001
+rate_of_change:                    # Test 20 (manual example MAXHSDIFF = 2 m)
+  max_change: 2.0
+mean_std:                          # Test 15 (manual example: 24 h, N = 2; 3 used to limit storm false positives)
+  window: 24h
+  n_std: 3.0
+  min_periods: 6
+steepness:                         # project physical check
+  suspect_above: 0.07
+  fail_above: 0.142
+spectral_consistency:              # project check: |WVHT - 4 sqrt(m0)|
+  abs_tol: 0.10
+  rel_tol: 0.10
+operational_frequency_range:       # Test 17 (NDBC 47-band grid)
+  instrument_span: [0.02, 0.485]
+  local_span: [0.0325, 0.40]

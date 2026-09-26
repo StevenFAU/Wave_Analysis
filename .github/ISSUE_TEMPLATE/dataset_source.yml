@@ -1,0 +1,30 @@
+name: Dataset source proposal
+description: Propose a new upstream data source for the registry
+labels: [data-source]
+body:
+  - type: input
+    id: name
+    attributes: {label: Source name and provider}
+    validations: {required: true}
+  - type: input
+    id: url
+    attributes: {label: Access URL / documentation}
+    validations: {required: true}
+  - type: dropdown
+    id: modality
+    attributes:
+      label: Modalities
+      multiple: true
+      options: [in_situ_wave, acoustic, radar, sar, rgb, thermal_ir, multispectral, stereo, imu, wind, current, bathymetry, numerical_model]
+  - type: dropdown
+    id: role
+    attributes:
+      label: Intended role
+      multiple: true
+      options: [reference, input, context, calibration]
+  - type: textarea
+    id: why
+    attributes: {label: Why is it valuable?, description: Which research gap (G-x) or question (Q-x) does it address?}
+  - type: textarea
+    id: terms
+    attributes: {label: Licence / terms of use}

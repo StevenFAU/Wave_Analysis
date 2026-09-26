@@ -1,0 +1,11 @@
+# CDIP acquisition configuration (planned v0.2.0; docs/datasets/cdip.md)
+source_id: cdip
+thredds:
+  realtime: https://thredds.cdip.ucsd.edu/thredds/dodsC/cdip/realtime/{stn}p1_rt.nc
+  archive: https://thredds.cdip.ucsd.edu/thredds/dodsC/cdip/archive/{stn}p1/{stn}p1_historic.nc
+variables:
+  bulk: [waveHs, waveTp, waveTa, waveDp, waveTz]
+  spectral: [waveFrequency, waveBandwidth, waveEnergyDensity, waveA1Value, waveB1Value, waveA2Value, waveB2Value]
+  time: [waveTime, waveTimeBounds]
+  qc: [waveFlagPrimary, waveFlagSecondary]
+  displacement: [xyzZDisplacement]   # archive files; enables zero-crossing labels

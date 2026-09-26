@@ -1,0 +1,169 @@
+station_id,adcp_first,adcp_last,adcp_years,adcp_and_spectrum_years,name,latitude,longitude,has_camera_now,realtime_products
+46088,2007,2025,17,17,"NEW DUNGENESS - 17 NM NE of Port Angeles, WA",48.332,-123.179,True,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+42085,2009,2025,17,0,"Southeast of Ponce, PR",17.87,-66.537,False,"adcp,ocean,spec,stdmet"
+42013,2008,2025,16,0,"C10 - WFS Central Buoy, 25m Isobath",27.173,-82.924,False,"adcp,ocean,stdmet"
+41053,2010,2025,16,0,"San Juan, PR",18.474,-66.099,False,"adcp,ocean,spec,stdmet"
+41052,2011,2025,15,0,"South of St. John, VI",18.249,-64.763,False,
+46087,2011,2025,14,14,"Neah Bay - 6 NM North of Cape Flattery, WA (Traffic Separation Lighted Buoy)",48.493,-124.727,True,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+45026,2011,2025,14,0,"Cook Nuclear Plant Buoy, Stevensville, MI",41.982,-86.619,False,"adcp,ocean,spec,stdmet"
+42023,2011,2025,14,0,"C13 - WFS South Buoy, 50m Isobath",26.01,-83.086,False,"adcp,ocean,stdmet"
+41056,2013,2025,13,0,"Vieques Island, PR",18.261,-65.464,False,"adcp,ocean,spec,stdmet"
+42050,2010,2021,12,0,TABS F,28.842,-94.242,False,
+45165,2014,2025,12,0,"Toledo Water Intake Buoy, Oregon, OH",41.704,-83.264,False,"adcp,spec,stdmet"
+45013,2013,2025,12,0,"ATW20 - Atwater Park, WI",43.098,-87.85,False,"ocean,spec,stdmet"
+42045,2010,2021,12,0,TGLO TABS Buoy K,26.217,-96.5,False,
+42022,2013,2025,12,0,"C12 - WFS Central Buoy, 50m Isobath",27.505,-83.741,False,"adcp,ocean,stdmet"
+42048,2010,2021,12,0,TABS D,27.939,-96.843,False,
+42360,2011,2021,11,0,,,,False,
+42043,2010,2021,11,0,TGLO TABS Buoy B,28.982,-94.899,False,stdmet
+45014,2014,2025,11,0,"GB17 - South Green Bay, WI",44.794,-87.758,False,"spec,stdmet"
+46054,1994,2005,11,10,"WEST SANTA BARBARA  38 NM West of Santa Barbara, CA",34.274,-120.468,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+45023,2014,2024,11,0,"North Entry Buoy, North Keweenaw Peninsula, MI",47.27,-88.607,False,"adcp,ocean,spec,stdmet"
+42049,2010,2020,11,0,TABS W,28.351,-96.006,False,
+42044,2010,2020,11,0,TGLO TABS Buoy J,26.191,-97.051,False,stdmet
+41012,2002,2013,11,11,,,,False,
+42051,2010,2019,10,0,TABS R,29.635,-93.642,False,
+45175,2015,2024,10,0,"Mackinac Straits West, Mackinaw City, MI ",45.825,-84.772,False,"spec,stdmet"
+46023,1996,2005,10,10,,,,False,
+44072,2016,2025,9,0,"York Spit, VA   ",37.201,-76.266,False,"ocean,stdmet"
+51211,2017,2025,9,0,"Pearl Harbor Entrance, HI (233)",21.297,-157.959,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46237,2017,2025,9,0,"San Francisco Bar, CA  (142)",37.788,-122.634,False,
+44063,2018,2025,8,0,"Annapolis, MD",38.963,-76.448,False,"ocean,stdmet"
+44062,2018,2025,8,0,"Gooses Reef, MD",38.556,-76.415,False,"ocean,stdmet"
+45187,2018,2025,8,0,"Winthrop Harbor Buoy, IL",42.491,-87.779,False,"adcp,spec,stdmet"
+44042,2018,2025,8,0,"Potomac, MD",38.033,-76.335,False,"ocean,stdmet"
+44058,2018,2025,8,0,"Stingray Point, VA",37.567,-76.257,False,"ocean,stdmet"
+46060,2004,2012,8,8,"WEST ORCA BAY - 8NM NW of Hinchinbrook Is., AK",60.571,-146.795,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46089,2004,2013,8,8,"TILLAMOOK, OR - 85 NM WNW of Tillamook, OR",45.928,-125.815,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+45186,2018,2025,8,0,"Waukegan Buoy, IL",42.368,-87.795,False,"adcp,spec,stdmet"
+42026,2019,2025,7,0,"C22 - Loop Current Pressure Point Buoy, 70m Isobath",25.171,-83.475,False,"adcp,ocean,stdmet"
+SSBN7,2012,2018,7,0,Sunset Beach Nearshore Waves (SUN2WAVE),33.838,-78.484,False,"spec,stdmet"
+42395,2015,2021,7,0,,,,False,
+46081,2005,2011,7,7,Western Prince William Sound,60.802,-148.283,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46062,1997,2003,7,7,,,,False,
+42047,2014,2019,6,0,,,,False,
+42046,2011,2016,6,0,,,,False,
+46108,2020,2025,6,0,Lower Cook Inlet (204),59.598,-151.828,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+42095,2020,2025,6,0,"Satan Shoal, FL (244)",24.407,-81.968,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46267,2020,2025,6,0,"Angeles Point, WA (248)",48.171,-123.6,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46268,2020,2025,6,0,"Topanga Nearshore, CA (103)",34.022,-118.578,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+41036,2007,2012,6,6,,,,False,
+41108,2020,2025,6,0,"Wilmington Harbor, NC - (200)",33.719,-78.016,False,
+44064,2018,2024,6,0,"First Landing, VA",36.998,-76.087,False,
+41008,2005,2012,6,6,"GRAYS REEF - 40 NM Southeast of Savannah, GA",31.4,-80.866,False,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+44088,2020,2025,6,0,"Virginia Beach Offshore, VA (171)",36.612,-74.839,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+51212,2020,2025,5,0,"Barbers Point, Kalaeloa, HI (238)",21.323,-158.149,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+45166,2014,2019,5,0,Lake Champlain - Inland Sea,44.785,-73.258,False,
+46053,1994,2007,5,2,"EAST SANTA BARBARA  - 12NM Southwest of Santa Barbara, CA",34.246,-119.842,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+44014,2007,2013,5,5,"VIRGINIA BEACH 64 NM East of Virginia Beach, VA",36.603,-74.837,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+42067,2011,2020,5,0,USM-R1,30.05,-88.583,False,
+41112,2020,2024,5,0,"Offshore Fernandina Beach, FL (132)",30.709,-81.292,False,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+45194,2021,2025,5,0,"McGulpin Point North, MI (253)",45.803,-84.792,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+42084,2021,2025,5,0,"Southwest Pass Entrance W, LA (256)",28.988,-89.649,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+44041,2019,2024,5,0,,,,False,
+46011,2005,2008,4,4,"SANTA MARIA - 21NM NW of Point Arguello, CA",34.937,-120.999,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+44085,2022,2025,4,0,"Buzzards Bay, MA (260)",41.387,-71.032,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+41120,2022,2025,4,0,"Cape Hatteras East, NC (250)",35.258,-75.285,False,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+42020,2010,2013,4,4,"CORPUS CHRISTI, TX - 60NM SSE of Corpus Christi, TX",26.97,-96.679,True,
+44090,2022,2025,4,0,"Cape Cod Bay, MA (221)",41.84,-70.329,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+45199,2022,2025,4,0,Salmon Unlimited Wisconsin,42.702,-87.647,False,"adcp,ocean,spec,stdmet"
+46063,2006,2009,4,4,,,,False,
+41117,2021,2024,4,0,"St. Augustine, FL (194)",29.999,-81.079,False,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+41051,2013,2016,4,0,,,,False,
+42036,2006,2012,4,4,"WEST TAMPA  - 112 NM WNW of Tampa, FL",28.5,-84.505,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46027,2005,2008,4,4,"ST GEORGES - 8 NM NW of Crescent City, CA",41.84,-124.382,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+52212,2022,2025,4,0,"Ngaraard, Babeldaob, Palau (219)",7.63,134.671,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46266,2019,2022,4,0,"Del Mar Nearshore, CA (153)",32.957,-117.279,False,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46269,2020,2023,4,0,,,,False,
+52213,2023,2025,3,0,"North Point, Pohnpei, Micronesia (178)",7.081,158.244,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+MBLA1,2013,2016,3,0,"Middle Bay Lighthouse, AL",30.437,-88.011,False,
+46239,2023,2025,3,0,"Point Sur, CA (157)",36.342,-122.11,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46244,2023,2025,3,0,"Humboldt Bay, North Spit, CA (168)",40.896,-124.358,False,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+52201,2023,2025,3,0,"Kalo, Majuro, Marshall Islands (163)",7.078,171.384,False,stdmet
+46275,2023,2025,3,0,"Red Beach Nearshore, CA (264)",33.291,-117.501,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46264,2017,2019,3,0,,,,False,
+46128,2017,2019,3,0,"Buoy CB-06 - West of Coos Bay, OR",43.292,-124.538,False,stdmet
+44100,2023,2025,3,0,"Duck FRF 26m, NC (430)",36.257,-75.593,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46001,2010,2012,3,3,"WESTERN GULF OF ALASKA  - 175NM SE of Kodiak, AK",56.296,-148.027,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+44027,2003,2012,3,3,"Jonesport, ME - 20 NM SE of Jonesport, ME",44.284,-67.301,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+42080,2007,2009,3,2,,,,False,
+46086,2007,2011,3,3,"SAN CLEMENTE BASIN - 27NM SE Of San Clemente Is, CA",32.504,-118.029,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+41035,2007,2011,3,3,,,,False,
+41029,2007,2009,3,0,"Capers Nearshore, SC (CAP2)",32.803,-79.624,False,"ocean,stdmet"
+41024,2007,2009,3,0,"Sunset Nearshore, NC (SUN2)",33.837,-78.477,False,"ocean,stdmet"
+42021,2008,2010,3,0,,,,False,
+46047,2010,2012,3,3,"TANNER BANK - 121 NM West of San Diego, CA",32.418,-119.535,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46013,2011,2013,3,3,"BODEGA BAY - 48NM NW of San Francisco, CA",38.235,-123.317,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46278,2023,2025,3,0,"Tillamook Bay South Jetty, OR (270)",45.559,-123.991,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46276,2023,2025,3,0,,,,False,
+42099,2023,2025,3,0,"Offshore St. Petersburg, FL (144)",27.352,-84.275,False,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46277,2023,2025,3,0,"Green Beach Offshore, CA (271)",33.336,-117.659,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+41030,2007,2008,2,0,,,,False,
+41122,2023,2025,2,0,"Hollywood Beach, FL (265)",26.001,-80.096,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+41118,2017,2018,2,0,,,,False,
+41033,2007,2008,2,0,"Fripp Nearshore, SC (FRP2)",32.279,-80.406,False,"ocean,stdmet"
+42038,2004,2005,2,2,,,,False,
+52211,2024,2025,2,0,"Tanapag, Saipan, NMI (197)",15.269,145.664,False,
+46213,2024,2025,2,0,"Cape Mendocino, CA (094)",40.291,-124.748,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46022,2010,2011,2,2,"EEL RIVER - 17NM WSW of Eureka, CA",40.716,-124.54,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+45218,2024,2025,2,0,"Wisconsin Shipwreck Coast NMS / Sheboygan, WI",43.731,-87.624,False,
+44043,2023,2024,2,0,,,,False,
+44011,2007,2010,2,2,"GEORGES BANK 170 NM East of Hyannis, MA",41.088,-66.546,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+44013,2009,2010,2,2,"BOSTON 16 NM East of Boston, MA",42.346,-70.651,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46284,2024,2025,2,0,,,,False,
+46107,2008,2009,2,2,,,,False,
+51214,2024,2025,2,0,"King-Poloa, American Samoa (273)",-14.296,-170.875,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+42024,2008,2009,2,0,,,,False,
+41038,2007,2008,2,0,"Wrightsville Beach Nearshore, NC (ILM2)",34.141,-77.715,False,"ocean,stdmet"
+46265,2018,2019,2,0,"Nome, AK (241)",64.474,-165.479,False,
+52215,2024,2025,2,0,"UTWE, KOSRAE, MICRONESIA (276)",5.241,163.001,False,
+OCPN7,2008,2009,2,0,,,,False,
+FGBL1,2007,2010,2,0,,,,False,
+46029,2008,2009,2,2,COLUMBIA RIVER BAR - 20NM West of Columbia River Mouth,46.148,-124.508,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+42001,2011,2011,1,1,"MID GULF - 180 nm South of Southwest Pass, LA",25.922,-89.638,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+42041,2003,2003,1,1,,,,False,
+41116,2017,2017,1,0,,,,False,
+41037,2008,2008,1,0,"Wrightsville Beach Offshore, NC (ILM3)",33.988,-77.362,False,"ocean,stdmet"
+41058,2017,2017,1,0,"North of St. Thomas, VI",18.476,-65.157,False,
+41110,2025,2025,1,0,"Masonboro Inlet, ILM2, NC (150)",34.144,-77.715,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+41025,2009,2009,1,1,"Diamond Shoals, NC",35.026,-75.38,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+41010,2010,2010,1,1,CANAVERAL EAST - 120NM East of Cape Canaveral,28.86,-78.478,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+41001,2010,2010,1,1,EAST HATTERAS - 150 NM East of Cape Hatteras,34.738,-72.503,False,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+42002,2008,2008,1,1,"WEST GULF - 207 NM East of Brownsville, TX",25.95,-93.78,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+42079,2018,2018,1,0,,,,False,
+42098,2025,2025,1,0,"Egmont Channel Entrance, FL (214)",27.59,-82.931,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+42078,2018,2018,1,0,,,,False,
+44030,2025,2025,1,0,Buoy B01 - Western Maine Shelf,43.179,-70.426,False,"adcp,ocean,stdmet"
+44056,2025,2025,1,0,"Duck FRF, NC",36.2,-75.714,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46002,2007,2007,1,1,"WEST OREGON - 275NM West of Coos Bay, OR",42.56,-130.523,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+45029,2013,2013,1,0,"Holland Buoy, MI",42.9,-86.272,False,"ocean,spec,stdmet"
+45024,2014,2014,1,0,"Ludington Buoy, MI",43.98,-86.56,False,"spec,stdmet"
+45163,2013,2013,1,0,"Saginaw Bay Buoy, MI",43.983,-83.6,False,
+45161,2013,2013,1,0,"Muskegon Buoy, MI",43.185,-86.354,False,"ocean,stdmet"
+44070,2008,2008,1,1,,,,False,
+44098,2025,2025,1,0,"Jeffrey's Ledge, NH (160)",42.8,-70.169,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+44091,2025,2025,1,0,"Barnegat, NJ (209)",39.772,-73.769,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+44084,2024,2024,1,0,"Bethany Beach, DE (263)",38.537,-75.044,False,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+44008,2007,2007,1,1,NANTUCKET 54 NM Southeast of Nantucket,40.5,-69.254,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+44007,2010,2010,1,1,"PORTLAND - 12 NM Southeast of Portland,ME",43.525,-70.14,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+44029,2025,2025,1,0,Buoy A01 - Massachusetts Bay,42.523,-70.566,False,"adcp,ocean,stdmet"
+44034,2025,2025,1,0,Buoy I01 - Eastern Maine Shelf,44.103,-68.112,False,"adcp,ocean,stdmet"
+44033,2025,2025,1,0,Buoy F01 - Penobscot Bay,44.055,-68.996,False,"adcp,ocean,stdmet"
+46026,2007,2007,1,1,"SAN FRANCISCO - 18NM West of San Francisco, CA",37.75,-122.838,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46025,2007,2007,1,1,"Santa Monica Basin - 33NM WSW of Santa Monica, CA",33.765,-119.077,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46235,2025,2025,1,0,"Imperial Beach Nearshore, CA (155)",32.57,-117.169,False,
+46233,2007,2007,1,0,,,,False,
+46224,2017,2017,1,0,"Oceanside Offshore, CA (045)",33.178,-117.472,False,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46072,2010,2010,1,1,CENTRAL ALEUTIANS 230 NM SW Dutch Harbor,51.645,-172.145,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46050,2008,2008,1,1,"STONEWALL BANK - 20NM West of Newport, OR",44.679,-124.535,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46044,2013,2013,1,0,,,,False,
+46041,2007,2007,1,1,"CAPE ELIZABETH - 45NM NW of Aberdeen, WA",47.3526,-124.74,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46061,2006,2006,1,1,"Seal Rocks - Between Montague and Hinchinbrook Islands, AK",60.23,-146.837,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46015,2011,2011,1,1,"PORT ORFORD - 15 NM West of Port Orford, OR",42.754,-124.839,True,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+48213,2015,2015,1,0,,,,False,
+46243,2025,2025,1,0,"Clatsop Spit, OR (162)",46.215,-124.129,False,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+46282,2024,2024,1,0,,,,False,
+48216,2015,2015,1,0,,,,False,
+48214,2015,2015,1,0,,,,False,
+51202,2025,2025,1,0,"Mokapu Point, HI (098)",21.414,-157.681,False,"spec,stdmet,swden,swdir,swdir2,swr1,swr2"
+52214,2024,2024,1,0,"Rumung, Yap, Micronesia (272)",9.678,138.176,False,"adcp,spec,stdmet,swden,swdir,swdir2,swr1,swr2"

@@ -1,0 +1,4 @@
+# Copernicus Marine / ERA5 wave products (planned v0.4.0). Model output = context/prior, never ground truth.
+source_id: copernicus_marine_waves
+role: context
+variables: [VHM0, VTPK, VTM02, VMDR]

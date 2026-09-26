@@ -1,0 +1,50 @@
+# --- Data: never commit bulk upstream data (see data/README.md) ---------------
+data/raw/**
+data/interim/**
+data/processed/**
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+# ML manifests may be large; commit only small, released manifests explicitly.
+data/manifests/ml/*.parquet
+
+# --- Python --------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+.python-version
+
+# --- Tooling -------------------------------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+site/
+
+# --- Notebooks -----------------------------------------------------------------
+.ipynb_checkpoints/
+
+# --- Models / experiment outputs -------------------------------------------------
+runs/
+checkpoints/
+*.pt
+*.ckpt
+wandb/
+mlruns/
+
+# --- Papers (copyrighted; see references/papers/README.md) ------------------------
+references/papers/*.pdf
+
+# --- OS / editors --------------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,17 @@
+# Imagery annotation thresholds (docs/methodology/imagery_processing.md).
+# These ANNOTATE; nothing is deleted. Task filters reference the annotations.
+metrics:
+  dark_threshold: 0.08             # luma below which a pixel counts as dark
+  saturation_threshold: 0.98
+  glare_threshold: 0.92
+  glare_max_chroma: 0.08
+illumination:                      # solar elevation categories (deg)
+  day: 6
+  low_sun: 0
+  civil_twilight: -6
+  nautical_twilight: -12
+near_duplicate:
+  hash: dhash64
+  max_hamming: 4
+masks:
+  ndbc_buoycam_caption_band_px: 30

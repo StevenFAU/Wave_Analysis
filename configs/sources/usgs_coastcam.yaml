@@ -1,0 +1,9 @@
+# USGS CoastCam (planned v0.3.0; docs/datasets/coastcam.md)
+source_id: usgs_coastcam
+sites:
+  madeira_beach_fl:
+    data_release_doi: 10.5066/P9SGRTF1
+    portal: https://cmgds.marine.usgs.gov/data/madeirabeach/
+    products: [snap, timex, var, bright, dark, timestack]
+    calibration: [intrinsic, extrinsic]
+    candidate_reference_buoys: []   # to be filled from the NDBC/CDIP inventory (distance + depth)

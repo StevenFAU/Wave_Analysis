@@ -1,0 +1,320 @@
+# Wave_Analysis dataset registry
+# ------------------------------------------------------------------------------
+# Verified catalogue of candidate public sources. Schema: src/wave_analysis/registry.py
+# Validate with:  uv run wave-analysis registry validate
+#
+# verification.status:
+#   verified    - accessed programmatically; formats confirmed on real files
+#   documented  - confirmed from provider documentation only
+#   candidate   - plausible and relevant, not yet checked (a research to-do)
+#
+# RULE: availability belongs to station + product + period, never to a provider
+# as a whole. Per-station availability lives in the inventories (e.g.
+# data/registry/ndbc_files.parquet), not here.
+# ------------------------------------------------------------------------------
+registry_version: "0.1.0"
+datasets:
+
+  - dataset_id: ndbc
+    name: NOAA National Data Buoy Center
+    provider: NOAA National Weather Service, National Data Buoy Center
+    modalities: [in_situ_wave, meteorological, wind, acoustic, current, rgb]
+    intended_roles: [reference, input, context]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints:
+        - https://www.ndbc.noaa.gov/data/realtime2/          # last 45 days
+        - https://www.ndbc.noaa.gov/data/historical/         # annual gzipped files
+        - https://www.ndbc.noaa.gov/activestations.xml
+        - https://www.ndbc.noaa.gov/data/stations/station_table.txt
+        - https://www.ndbc.noaa.gov/buoycams.php             # current camera snapshot (JSON)
+      rate_limit_guidance: "NDBC asks users to limit retrievals to a minimal level; project default 1 request/s."
+    data_types: [standard_meteorological, spectral_wave_summary, spectral_wave_density,
+                 directional_spectrum_coefficients, adcp, oceanographic, continuous_winds,
+                 water_level, solar_radiation, buoy_camera_snapshot]
+    temporal:
+      timezone: UTC
+      coverage: "Varies by station; some records begin in the 1970s."
+      wave_sampling: "20-min acquisition typical; timestamps rounded (see docs/datasets/ndbc.md)."
+    spatial:
+      platform_types: [moored_buoy, fixed_station, drifting_buoy]
+      coverage: "U.S. coastal and offshore waters, Great Lakes, partner arrays worldwide."
+    formats: [ascii, gzip, json, xml]
+    documentation:
+      - https://www.ndbc.noaa.gov/faq/rt_data_access.shtml
+      - https://www.ndbc.noaa.gov/faq/measdes.shtml
+      - https://www.ndbc.noaa.gov/faq/acq.shtml
+      - https://www.ndbc.noaa.gov/historical_data.shtml
+    citation: "National Data Buoy Center (NDBC), NOAA. Station <id> observations. https://www.ndbc.noaa.gov/ (accessed <date>)."
+    license:
+      status: public_domain_us_government
+      url: https://www.weather.gov/disclaimer
+    phase: v0.1.0
+    adapter: wave_analysis.sources.ndbc.NDBCSource
+    doc: docs/datasets/ndbc.md
+    verification:
+      status: verified
+      date: 2026-09-25
+      evidence:
+        - https://www.ndbc.noaa.gov/data/historical/stdmet/41010h2023.txt.gz
+        - https://www.ndbc.noaa.gov/data/realtime2/41010.data_spec
+        - https://www.ndbc.noaa.gov/buoycams.php
+      notes: >
+        Parsers verified on 1995, 2003, 2006, 2023 and realtime formats. 4*sqrt(m0) of the
+        published spectrum reproduces WVHT to rounding (station 41010, 2023, n = 4281).
+        No public historical buoy-camera image archive was found; camera availability is
+        a dated snapshot only.
+
+  - dataset_id: cdip
+    name: Coastal Data Information Program
+    provider: Scripps Institution of Oceanography, UC San Diego (funded by USACE and California DPR)
+    modalities: [in_situ_wave]
+    intended_roles: [reference]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS, OPeNDAP, THREDDS]
+      endpoints:
+        - https://thredds.cdip.ucsd.edu/thredds/dodsC/cdip/realtime/{stn}p1_rt.nc
+        - https://thredds.cdip.ucsd.edu/thredds/dodsC/cdip/archive/{stn}p1/{stn}p1_historic.nc
+    data_types: [bulk_wave_parameters, spectral_wave_density, directional_fourier_coefficients,
+                 surface_displacement_time_series, sea_surface_temperature]
+    temporal: {timezone: UTC, acquisition_window: "explicit (waveTimeBounds)"}
+    spatial: {platform_types: [moored_buoy], coverage: "U.S. coasts, Pacific islands; Datawell Waverider network"}
+    formats: [netcdf]
+    documentation:
+      - https://cdip.ucsd.edu/
+      - https://cdip.ucsd.edu/m/documents/
+    citation: "Coastal Data Information Program (CDIP), Scripps Institution of Oceanography. Station <stn> data. https://cdip.ucsd.edu (accessed <date>)."
+    license:
+      status: public_with_attribution
+      notes: "Confirm CDIP data-use/acknowledgement statement before publication."
+    phase: v0.2.0
+    adapter: wave_analysis.sources.cdip.CDIPSource
+    doc: docs/datasets/cdip.md
+    verification:
+      status: verified
+      date: 2026-09-25
+      evidence:
+        - https://thredds.cdip.ucsd.edu/thredds/dodsC/cdip/realtime/134p1_rt.nc.dds
+      notes: "Variable names confirmed from the OPeNDAP DDS (waveHs, waveTp, waveEnergyDensity, waveA1Value..., waveTimeBounds, waveFlagPrimary)."
+
+  - dataset_id: usgs_coastcam
+    name: USGS CoastCam (Madeira Beach, Florida; other sites)
+    provider: U.S. Geological Survey, St. Petersburg Coastal and Marine Science Center
+    modalities: [rgb]
+    intended_roles: [input]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints:
+        - https://cmgds.marine.usgs.gov/data/madeirabeach/
+        - https://doi.org/10.5066/P9SGRTF1
+    data_types: [snapshot, timex, variance, bright, dark, runup_timestack,
+                 intrinsic_calibration, extrinsic_calibration]
+    temporal: {timezone: UTC, notes: "Argus-style 17-min collections for timestacks; verify per release."}
+    spatial: {platform_types: [shore_camera]}
+    formats: [jpeg, png, mat, txt]
+    documentation:
+      - https://cmgds.marine.usgs.gov/catalog/spcmsc/MadeiraBeachFL_CoastCam_imagery_metadata.html
+    citation: "USGS (Madeira Beach, Florida CoastCam imagery and calibration data), doi:10.5066/P9SGRTF1."
+    license: {status: public_domain_us_government}
+    phase: v0.3.0
+    adapter: wave_analysis.sources.coastcam.CoastCamSource
+    doc: docs/datasets/coastcam.md
+    verification:
+      status: documented
+      date: 2026-09-25
+      evidence: [https://catalog.data.gov/dataset/imagery-from-usgs-coastcam-deployed-at-madeira-beach-florida]
+      notes: "Calibrated IO/EO data included. Pairing candidates in the eastern Gulf: to be inventoried."
+
+  - dataset_id: webcoos
+    name: WebCOOS - Webcam Coastal Observation System
+    provider: SECOORA / NOAA IOOS partners
+    modalities: [rgb]
+    intended_roles: [input]
+    access:
+      public: true
+      authentication_required: true
+      protocols: [HTTPS, API]
+      endpoints: [https://webcoos.org/]
+    data_types: [archived_imagery, video, derived_products]
+    temporal: {timezone: UTC}
+    spatial: {platform_types: [shore_camera], coverage: "U.S. Southeast and expanding"}
+    documentation: [https://webcoos.org/about/, https://ioos.noaa.gov/project/ott-webcoos/]
+    license: {status: to_be_confirmed}
+    phase: v0.2.0
+    adapter: wave_analysis.sources.webcoos.WebCOOSSource
+    doc: docs/datasets/webcoos.md
+    verification:
+      status: candidate
+      notes: >
+        API/authentication terms to be confirmed (authentication_required recorded as true
+        conservatively). Camera IDs used by the Yin et al. (2025) VWBT dataset match WebCOOS
+        naming, linking the literature test set to an instrument-pairable network.
+
+  - dataset_id: ioos_erddap
+    name: U.S. IOOS regional ERDDAP servers (SECOORA, PacIOOS, SCCOOS, GCOOS, ...)
+    provider: U.S. Integrated Ocean Observing System regional associations
+    modalities: [in_situ_wave, meteorological, current, acoustic, rgb]
+    intended_roles: [reference, input, context]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS, ERDDAP, OPeNDAP]
+      endpoints: [https://erddap.secoora.org/erddap/, https://pae-paha.pacioos.hawaii.edu/erddap/]
+    data_types: [bulk_wave_parameters, currents, meteorology, water_quality]
+    formats: [netcdf, csv, json]
+    documentation: [https://ioos.noaa.gov/data/data-standards/data-publishing/]
+    license: {status: varies_by_dataset, notes: "Read each dataset's ACDD 'license' attribute."}
+    phase: v0.2.0
+    adapter: wave_analysis.sources.erddap.ERDDAPSource
+    doc: docs/datasets/ioos.md
+    verification:
+      status: candidate
+      notes: "Endpoint URLs to be confirmed; ERDDAP datasets carry CF/ACDD metadata."
+
+  - dataset_id: usace_frf
+    name: USACE Field Research Facility, Duck NC
+    provider: U.S. Army Corps of Engineers, Coastal and Hydraulics Laboratory
+    modalities: [in_situ_wave, rgb, bathymetry, acoustic, meteorological]
+    intended_roles: [reference, input, context]
+    access: {public: true, authentication_required: false, protocols: [THREDDS, HTTPS]}
+    data_types: [waverider_spectra, nearshore_wave_gauges, argus_imagery, lidar, bathymetry_surveys]
+    documentation: [https://frfdataportal.erdc.dren.mil/]
+    license: {status: public_domain_us_government}
+    phase: v0.3.0
+    doc: docs/datasets/README.md
+    verification:
+      status: candidate
+      notes: >
+        Potentially the densest co-located camera + wave-gauge + bathymetry record in the U.S.
+        Endpoint and imagery archive access to be confirmed.
+
+  - dataset_id: yin2025_vwbt
+    name: VWBT_9000 - Video dataset for nearshore wave-breaking type classification
+    provider: Yin et al. (2025), Scientific Data 12:1722
+    modalities: [rgb]
+    intended_roles: [input]
+    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    data_types: [video_clips, breaking_type_labels]
+    temporal: {notes: "Clips from ~10-min videos at 5-20 fps."}
+    spatial: {platform_types: [shore_camera], coverage: "6 sites (USA: Currituck, Jennette's Pier, Oak Island NC; China)"}
+    formats: [mp4, jpeg]
+    documentation: [https://doi.org/10.1038/s41597-025-06005-5]
+    citation: "Yin, H. et al. (2025). A video dataset for nearshore wave breaking type classification. Sci. Data 12, 1722. doi:10.1038/s41597-025-06005-5; data doi:10.6084/m9.figshare.28814993"
+    license:
+      status: CC-BY-NC-ND-4.0
+      url: https://creativecommons.org/licenses/by-nc-nd/4.0/
+      notes: "Non-commercial, no derivatives: derived datasets may not be redistributed."
+    phase: v0.3.0
+    doc: docs/literature/papers/kamagata2026.md
+    verification:
+      status: documented
+      date: 2026-09-25
+      evidence: [https://pmc.ncbi.nlm.nih.gov/articles/PMC12575733/]
+      notes: >
+        Labels are breaking TYPE (spilling/plunging/surging), not instrument wave parameters;
+        site wave climatology in the paper is from ERA5 reanalysis. Used as the held-out test
+        set by Kamagata et al. (2026).
+
+  - dataset_id: sentinel1_ocn
+    name: Copernicus Sentinel-1 SAR Level-2 Ocean (OCN) products
+    provider: European Space Agency / Copernicus
+    modalities: [sar]
+    intended_roles: [context, reference]
+    access: {public: true, authentication_required: true, protocols: [HTTPS, API]}
+    data_types: [wave_mode_spectra, swell_parameters, ocean_surface_wind, radial_velocity]
+    documentation: [https://sentinels.copernicus.eu/]
+    license: {status: copernicus_open_access}
+    phase: v0.4.0
+    adapter: wave_analysis.sources.satellite.SentinelSource
+    doc: docs/datasets/satellite_sar.md
+    verification: {status: candidate}
+
+  - dataset_id: hls
+    name: Harmonized Landsat and Sentinel-2 (HLS)
+    provider: NASA LP DAAC
+    modalities: [multispectral]
+    intended_roles: [context]
+    access: {public: true, authentication_required: true, protocols: [HTTPS]}
+    data_types: [surface_reflectance]
+    documentation: [https://hls.gsfc.nasa.gov/]
+    license: {status: open}
+    phase: v0.4.0
+    doc: docs/datasets/multispectral.md
+    verification: {status: candidate}
+
+  - dataset_id: copernicus_marine_waves
+    name: Copernicus Marine global/regional wave analysis and reanalysis
+    provider: Copernicus Marine Service (Mercator Ocean International)
+    modalities: [numerical_model]
+    intended_roles: [context]
+    access: {public: true, authentication_required: true, protocols: [API]}
+    data_types: [hs, tp, tm, direction, swell_partitions, stokes_drift]
+    documentation: [https://marine.copernicus.eu/]
+    license: {status: copernicus_marine_licence}
+    phase: v0.4.0
+    doc: docs/datasets/README.md
+    verification:
+      status: candidate
+      notes: "Model products are priors/context, never equated with co-located physical ground truth."
+
+  - dataset_id: era5_waves
+    name: ECMWF ERA5 reanalysis (ocean-wave parameters)
+    provider: ECMWF / Copernicus Climate Change Service
+    modalities: [numerical_model]
+    intended_roles: [context]
+    access: {public: true, authentication_required: true, protocols: [API]}
+    data_types: [swh, mwp, mwd, pp1d, wind]
+    documentation: [https://cds.climate.copernicus.eu/]
+    license: {status: copernicus_licence}
+    phase: v0.4.0
+    doc: docs/datasets/README.md
+    verification: {status: candidate}
+
+  - dataset_id: noaa_ww3
+    name: NOAA WAVEWATCH III operational and hindcast products
+    provider: NOAA NCEP / EMC
+    modalities: [numerical_model]
+    intended_roles: [context]
+    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    data_types: [hs, tp, direction, partitions, spectra_at_points]
+    documentation: [https://polar.ncep.noaa.gov/waves/]
+    license: {status: public_domain_us_government}
+    phase: v0.4.0
+    doc: docs/datasets/README.md
+    verification: {status: candidate}
+
+  - dataset_id: noaa_digital_coast
+    name: NOAA Digital Coast (lidar, imagery, shoreline)
+    provider: NOAA Office for Coastal Management
+    modalities: [bathymetry, multispectral]
+    intended_roles: [context]
+    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    data_types: [topobathy_lidar, aerial_imagery, shoreline]
+    documentation: [https://coast.noaa.gov/digitalcoast/]
+    license: {status: public_domain_us_government}
+    phase: v0.4.0
+    doc: docs/datasets/README.md
+    verification: {status: candidate}
+
+  - dataset_id: wass_stereo
+    name: WASS stereo wave-video datasets
+    provider: Bergamasco, Benetazzo et al. (Ca' Foscari University of Venice / CNR-ISMAR)
+    modalities: [stereo, rgb]
+    intended_roles: [reference, input]
+    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    data_types: [stereo_video, reconstructed_surface_elevation]
+    documentation: [https://sites.google.com/unive.it/wass]
+    license: {status: to_be_confirmed}
+    phase: v0.4.0
+    doc: docs/datasets/README.md
+    verification:
+      status: candidate
+      notes: >
+        Stereo reconstruction gives space-time surface elevation - a geometric ground truth for
+        video that no point sensor can provide. High priority for spatial (Level 7) tasks.

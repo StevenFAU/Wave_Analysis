@@ -1,0 +1,83 @@
+artifact_id: ndbc_inventory_20260926
+created_at: '2026-09-26T01:12:58.597297Z'
+git:
+  commit: null
+  branch: null
+  dirty: true
+pipeline:
+  command: wave-analysis ndbc inventory
+  config:
+    historical_dirs: null
+    min_interval_s: 1.0
+  config_sha256: c46dd71bc35d0748eb923f49e91bf61f930f1a2c54957f85f7af2a24b9cc191c
+software:
+  python: 3.12.13
+  platform: Linux-7.0.0-34-generic-x86_64-with-glibc2.43
+  wave_analysis: 0.1.0.dev0
+  packages:
+    numpy: 2.5.3
+    pandas: 3.0.6
+    scipy: 1.18.1
+    pyarrow: 25.0.1
+    pydantic: 2.13.5
+    httpx: 0.28.1
+    torch: 2.14.0+cpu
+    xarray: null
+input_files:
+- path: data/raw/ndbc/index/20260926/historical_stdmet.html
+  sha256: 478067ae58883e45cdc649881bb3f04ae9ced408f934d6c95a7139f6b46d9f66
+- path: data/raw/ndbc/index/20260926/historical_swden.html
+  sha256: ee44666d62ece1ce2842a88980b32f04f6902f99c2f9b8a58a7b9ef3d687ac70
+- path: data/raw/ndbc/index/20260926/historical_swdir.html
+  sha256: 9ca0373c450e3b9676d792ec4e58112e29ace60d5b57f233254e6f0bb7b27c8b
+- path: data/raw/ndbc/index/20260926/historical_swdir2.html
+  sha256: e32ec95c39be997bc4e4ad67e027cad4b4412b7b0ea97678d7bd05808e936ce3
+- path: data/raw/ndbc/index/20260926/historical_swr1.html
+  sha256: 05ee25a50d2a4f2b1f7bf4641277f86bdadf91d25aac76b604b3539fd32010b5
+- path: data/raw/ndbc/index/20260926/historical_swr2.html
+  sha256: d9ae7bfb2f3006220f7435d28962f284d67487044605614b7f71374708d1bf2d
+- path: data/raw/ndbc/index/20260926/historical_adcp.html
+  sha256: 13df2421287100e79d2182ccfb0de99c9ec9402df9790bbd449aff54b2c8e1fe
+- path: data/raw/ndbc/index/20260926/historical_adcp2.html
+  sha256: d25f6b77d39f118b0d284004e7d4a9ac43cd411eb7ee15815c9144ddc0d90ac8
+- path: data/raw/ndbc/index/20260926/historical_cwind.html
+  sha256: a972c0571a59e479b545b1243ed9fecddbf05436e22a7d4ab9a3698005e6c654
+- path: data/raw/ndbc/index/20260926/historical_ocean.html
+  sha256: f511e1b793d9ba44908376e96b4ca0b7ca7117bf5b4a9a5566283012388fa80f
+- path: data/raw/ndbc/index/20260926/historical_srad.html
+  sha256: 322efb29a4348552b79007fb66fc6809611104ec4918786e7997ae0e4bb20faa
+- path: data/raw/ndbc/index/20260926/historical_supl.html
+  sha256: ddd549e73b7f856aaa0c2b1359e764f08152223d3629cb37fdbb2c922d2843e6
+- path: data/raw/ndbc/index/20260926/historical_wlevel.html
+  sha256: b93818b5ee62c078a2c50140dae2814c26472373de507750556c5074f32980d1
+- path: data/raw/ndbc/index/20260926/historical_dart.html
+  sha256: c575eb5785ace6bffd48a26f935e1d9e9ecce390e8f468b09226507aa9cc08f7
+- path: data/raw/ndbc/index/20260926/historical_mmbcur.html
+  sha256: 272839537df382ba5c111e37ea06898c2f9b7c1f5f152bfd36a9108d1048ade4
+- path: data/raw/ndbc/index/20260926/historical_rain.html
+  sha256: 84bfaca92d2990a8c50d21e29f8c0d725ea8e3d97604c204479103eba0d2d527
+- path: data/raw/ndbc/index/20260926/historical_rain10.html
+  sha256: abfb0e051be1466dea0428ceff09653d252e3dc1d042d8ad6415f8ef4863c3fb
+- path: data/raw/ndbc/index/20260926/historical_rain24.html
+  sha256: 248bb7da276c58d2b2b20ea5fcc0965f724b812681892be98c7970a2c3965b7c
+- path: data/raw/ndbc/index/20260926/historical_drift.html
+  sha256: 798edb176e8d727b05cd33a797d9c86e8628604002373753100b15d7236c64d3
+- path: data/raw/ndbc/index/20260926/realtime2.html
+  sha256: ff4ffc3051407d26d444225c06ed4918ad3ee9d9147680bbb8987dbbbc9c8cbf
+- path: data/raw/ndbc/index/20260926/activestations.xml
+  sha256: 0c5f4080876a8dc4bd79427e29b5860a6d96ff4ee3a31b75f7ef8f6fc755f8eb
+- path: data/raw/ndbc/index/20260926/station_table.txt
+  sha256: 7dadc002cda467342412043ea77759ca7a4a0520f3bb3f4d93b7179522aef589
+- path: data/raw/ndbc/index/20260926/buoycams.json
+  sha256: 6503ea86f1ee51494c32a6860958301ebf8412cd1ad8556b1d20f4d4a08005e5
+upstream_manifests: []
+output_files:
+- path: data/registry/ndbc_files.parquet
+  sha256: fb35fc0fbff2deae82dfffadac74cc3102c7467ebb088c58163e1a7c1f4ec5c8
+- path: data/registry/stations.parquet
+  sha256: 3b9c70b10840fcd4c54e8bfe169fe7ad8f2659e6d4e098d3512e860321ae66b6
+- path: data/registry/ndbc_station_summary.csv
+  sha256: 5a4d02cfeccc288b488bfd3e4226a66d4aea4369a71176b62e10c91931df2352
+- path: data/registry/ndbc_cameras_20260926.csv
+  sha256: bb4eb955a7031b48bd167c1b326b2e957de8b32c7ce0b224370bf99944291fe3
+notes: null

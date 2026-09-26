@@ -1,0 +1,9 @@
+# IOOS regional ERDDAP servers (planned v0.2.0; docs/datasets/ioos.md). Endpoints to be verified.
+source_id: ioos_erddap
+servers:
+  secoora: https://erddap.secoora.org/erddap/
+  pacioos: https://pae-paha.pacioos.hawaii.edu/erddap/
+standard_names:
+  - sea_surface_wave_significant_height
+  - sea_surface_wave_period_at_variance_spectral_density_maximum
+  - sea_surface_wave_from_direction

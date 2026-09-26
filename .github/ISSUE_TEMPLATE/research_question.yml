@@ -1,0 +1,17 @@
+name: Research question
+description: Track an open scientific or methodological question
+labels: [research-question]
+body:
+  - type: input
+    id: id
+    attributes: {label: Question ID, description: "From docs/literature/research_gaps.md (e.g. Q-G3), or 'new'"}
+  - type: textarea
+    id: question
+    attributes: {label: Question}
+    validations: {required: true}
+  - type: textarea
+    id: approach
+    attributes: {label: Proposed approach / data / experiment}
+  - type: textarea
+    id: evidence
+    attributes: {label: Relevant literature or evidence}

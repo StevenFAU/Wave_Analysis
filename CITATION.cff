@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use Wave_Analysis, please cite it using the metadata below. Cite upstream data providers separately (docs/CITATION_POLICY.md)."
+type: software
+title: "Wave_Analysis: a reproducible framework for multimodal ocean-wave data and vision-based wave-state estimation"
+abstract: >-
+  Research software for acquiring, cataloguing, synchronising, quality-controlling
+  (IOOS QARTOD), and modelling heterogeneous ocean-wave datasets, including NOAA NDBC
+  bulk and directional spectral wave data, buoy-camera imagery, and leakage-aware
+  machine-learning dataset construction and evaluation.
+authors:
+  - family-names: "Cohen"
+    given-names: "Steven"
+    affiliation: "Florida Atlantic University"
+repository-code: "https://github.com/StevenFAU/Wave_Analysis"
+license: MIT
+version: "0.1.0.dev0"
+keywords:
+  - oceanography
+  - ocean waves
+  - significant wave height
+  - wave spectra
+  - computer vision
+  - NDBC
+  - QARTOD
+  - reproducibility

@@ -1,0 +1,4 @@
+# Sentinel-1 SAR (planned v0.4.0; docs/datasets/satellite_sar.md)
+source_id: sentinel1_ocn
+products: [OCN_WV, OCN_IW]   # Level-2 ocean: wave-mode spectra, wind, radial velocity
+role: context

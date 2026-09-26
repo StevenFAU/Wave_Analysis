@@ -1,0 +1,37 @@
+# First benchmark (repository specification, Phase 3):
+# "How accurately can Hs be inferred from public imagery when entire stations are held out?"
+name: ndbc_buoycam_hs_cross_station_v0
+description: >
+  NDBC buoy-camera strips paired with same-station spectral Hm0. Cross-station
+  protocol; baselines (climatology, ridge on image statistics) must be reported
+  alongside any learned model.
+task:
+  id_col: sample_id
+  targets: [Hs_m]
+  target_estimator: spectral_hm0
+  filters:
+    - {column: sync_qc_flag, op: in, value: [1, 3]}          # matched within tolerance
+    - {column: time_offset_s, op: abs_le, value: 1800}       # <= 30 min (documented, not hidden)
+    - {column: provider_qc_hs, op: in, value: [1, 2]}
+    # Night/glare are NOT filtered here: they are evaluation strata. Add filters only
+    # for experiments that explicitly study daytime-only performance.
+preprocessing:
+  mask_caption_band_px: 30
+  input: panorama_strip
+split:
+  protocol: cross_station
+  group_col: station_id
+  test_groups: []        # fix explicitly once the camera archive has >= 3 months of data
+  val_groups: []
+  audit:
+    group_cols: [station_id]
+    time_col: time_utc
+    time_group_col: station_id
+    min_gap: 6h
+evaluation:
+  regression: [bias, mae, rmse, scatter_index, r2, pearson, spearman, slope]
+  agreement: bland_altman_vs_reference
+  strata: [station_id, illumination, sea_state_bin, season]
+  bootstrap: {group_col: day, n_boot: 2000}
+baselines: [mean, climatology_station_month, ridge_image_stats]
+seed: 0

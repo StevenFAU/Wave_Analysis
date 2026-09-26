@@ -1,0 +1,173 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wave-analysis"
+version = "0.1.0.dev0"
+description = "Research framework for acquiring, cataloguing, synchronising, quality-controlling, and modelling heterogeneous ocean-wave datasets, with emphasis on vision-based wave-state estimation against physical ground truth."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Steven Cohen", email = "cohens2025@fau.edu" }]
+keywords = [
+  "oceanography",
+  "ocean waves",
+  "significant wave height",
+  "wave spectra",
+  "NDBC",
+  "computer vision",
+  "remote sensing",
+  "QARTOD",
+  "reproducibility",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Atmospheric Science",
+  "Topic :: Scientific/Engineering :: Image Recognition",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Typing :: Typed",
+]
+dependencies = [
+  "numpy>=2.0",
+  "pandas>=2.2",
+  "pyarrow>=16",
+  "scipy>=1.12",
+  "pydantic>=2.7",
+  "httpx>=0.27",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# netCDF / CF output and CDIP/ERDDAP (OPeNDAP) access.
+netcdf = ["xarray>=2024.6", "h5netcdf>=1.3", "netCDF4>=1.7"]
+# Image quality annotation and video handling.
+imaging = ["pillow>=10.3", "opencv-python-headless>=4.9"]
+# Reference deep-learning architectures (see src/wave_analysis/models).
+ml = ["torch>=2.3", "torchvision>=0.18"]
+all = ["wave-analysis[netcdf,imaging,ml]"]
+
+[project.scripts]
+wave-analysis = "wave_analysis.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/StevenFAU/Wave_Analysis"
+Repository = "https://github.com/StevenFAU/Wave_Analysis"
+Issues = "https://github.com/StevenFAU/Wave_Analysis/issues"
+Documentation = "https://github.com/StevenFAU/Wave_Analysis/tree/main/docs"
+Changelog = "https://github.com/StevenFAU/Wave_Analysis/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.2",
+  "pytest-cov>=5.0",
+  "hypothesis>=6.100",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "pandas-stubs>=2.2",
+  "types-PyYAML>=6.0",
+  "pre-commit>=3.7",
+]
+docs = [
+  "mkdocs>=1.6",
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.25",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wave_analysis"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/wave_analysis", "tests", "configs", "docs", "README.md", "LICENSE", "CITATION.cff", "CHANGELOG.md"]
+
+# --------------------------------------------------------------------------- #
+# Tooling
+# --------------------------------------------------------------------------- #
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "-m", "not network"]
+markers = [
+  "network: test performs live HTTP requests against upstream providers (deselected by default; run with -m network)",
+  "slow: test takes more than a few seconds",
+  "ml: test requires the optional torch dependency",
+]
+filterwarnings = ["error::FutureWarning"]
+
+[tool.coverage.run]
+source = ["wave_analysis"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "@overload"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",   # pycodestyle
+  "F",        # pyflakes
+  "I",        # isort
+  "B",        # bugbear
+  "UP",       # pyupgrade
+  "N",        # pep8-naming
+  "SIM",      # simplify
+  "C4",       # comprehensions
+  "PT",       # pytest style
+  "NPY",      # numpy-specific
+  "PD",       # pandas-vet
+  "RUF",      # ruff-specific
+  "D",        # pydocstyle
+]
+ignore = [
+  "D105",   # magic-method docstrings
+  "D107",   # __init__ docstrings (documented on the class)
+  "D401",   # noun-phrase summaries ("Wavelength ...") read better for physics functions
+  "N812",   # `from torch.nn import functional as F` is the idiom
+  "PD010",  # unstack is clearer than pivot_table for index reshapes
+  "N803",   # allow physics-style argument names (Hs, Tp)
+  "N806",   # allow physics-style variable names
+  "N802",   # allow physics-style function names
+  "N815",   # allow mixedCase provider field names in schemas
+  "RUF001", "RUF002", "RUF003",  # allow Greek letters / unicode in docstrings
+  "E501",   # line length enforced by formatter; long URLs in docstrings are fine
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "PD", "NPY002", "PT011", "PT018"]
+"scripts/**" = ["D"]
+"examples/**" = ["D"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+packages = ["wave_analysis"]
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["scipy.*", "torch.*", "torchvision.*", "cv2.*", "PIL.*", "xarray.*", "pyarrow.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# torch's dynamic module API returns Any from many calls; keep strictness elsewhere.
+module = ["wave_analysis.models.*"]
+warn_return_any = false
+disallow_untyped_calls = false

@@ -1,0 +1,16 @@
+# Daily offsite copy of data/raw to an rclone remote (e.g. Cloudflare R2).
+# Needs WAVE_ANALYSIS_REMOTE, e.g. "r2:wave-analysis-raw", in
+# ~/.config/wave-analysis/sync.env (see docs/operations/data_collection.md).
+[Unit]
+Description=Wave_Analysis: offsite copy of the raw archive
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+EnvironmentFile=%h/.config/wave-analysis/sync.env
+ExecStart=@REPO@/scripts/sync_offsite.sh
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=6h

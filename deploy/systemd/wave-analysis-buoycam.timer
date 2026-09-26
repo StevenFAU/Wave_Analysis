@@ -1,0 +1,12 @@
+# Images are stamped at minute 10 and appear ~20 min later, so run at minute 40.
+# Persistent=true catches up after downtime; the 70 h backfill recovers the rest.
+[Unit]
+Description=Wave_Analysis: hourly NDBC buoy-camera archiver
+
+[Timer]
+OnCalendar=*-*-* *:40:00
+RandomizedDelaySec=120
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,18 @@
+# NDBC acquisition configuration (docs/datasets/ndbc.md)
+source_id: ndbc
+politeness:
+  min_interval_s: 1.0        # NDBC: "limit your retrievals to a minimal level"
+  max_retries: 4
+  backoff_s: 2.0
+products:
+  wave_core: [stdmet, swden, swdir, swdir2, swr1, swr2]   # full directional spectrum + bulk
+  currents: [adcp]                                         # adcp2 is raw-only in v0.1
+  context: [ocean, cwind, supl]
+realtime:
+  retention_days: 45          # NDBC realtime2 window; fetch at least monthly to avoid gaps
+buoycam:
+  schedule: "hourly at minute 25"   # images stamped at minute 10; allow time for upload
+  caption_band_px: 30               # burned-in caption; mask before training
+timestamps:
+  reference: nominal          # wave times are rounded to the hour/half-hour (NDBC acq.shtml)
+  wave_acquisition_s: 1200    # typical 20-min record; payload-dependent

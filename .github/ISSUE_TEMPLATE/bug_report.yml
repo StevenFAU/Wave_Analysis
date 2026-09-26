@@ -1,0 +1,17 @@
+name: Bug report
+description: Something is wrong in code, data handling, or documentation
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: {label: What happened?, description: Include the command and full error output.}
+    validations: {required: true}
+  - type: textarea
+    id: expected
+    attributes: {label: What did you expect?}
+  - type: input
+    id: data
+    attributes: {label: Affected data, description: "Source, station, product, period (e.g. ndbc 41010 swr1 2005b)"}
+  - type: input
+    id: version
+    attributes: {label: Version / commit}
