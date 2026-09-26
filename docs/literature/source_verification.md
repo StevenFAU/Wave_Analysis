@@ -143,3 +143,40 @@ levels: **S** (screened by title only, not yet evidence) and **Q** (a data
 service queried programmatically). DOIs, author lists, volumes, and pages
 of every bibliography entry it added were checked against the Crossref API on
 2026-09-26.
+
+## Verification index
+
+One row per bibliography key whose verification is recorded above or in the
+landscape review. The dashboard reads this table, and a test checks that
+every key exists in [bibliography.bib](bibliography.bib). Keys not listed
+(textbooks, standards, architecture papers) have no logged check yet.
+`V1/V2` means the review read the source but did not record which of
+the two levels applies.
+
+| Key | Level | Basis |
+|---|---|---|
+| Kamagata2026 | V1 | arXiv v1 PDF; see the section above |
+| Kamagata2026Tp | V1 | arXiv:2606.13302 PDF, read 2026-09-26 |
+| Choi2020 | V2/V3 | Crossref and Semantic Scholar abstract; details from project notes |
+| Kim2023 | V2/V3 | publisher abstract; details from project notes |
+| Yang2026 | V2/V3 | publisher abstract; details from project notes |
+| Yin2025 | V1 | *Sci. Data* article and figshare record |
+| Guimaraes2020 | V1 | landscape review, Tier 1 table |
+| Kwon2023 | V1 | landscape review, Tier 1 table |
+| Buscombe2020 | V2 | landscape review, Tier 1 table |
+| Stringari2021 | V2 | landscape review, Tier 2 table |
+| Vorkapic2024 | V2 | landscape review, Tier 2 table |
+| Nanda2024 | V2 | landscape review, Tier 2 table (KOLOMVERSE) |
+| Quach2021 | V2 | landscape review, satellite table (Sentinel-1 WV) |
+| CienfuegosZenodo2025 | V2 | Zenodo record 17192781 |
+| SalinZenodo2023 | V2 | Zenodo record 7942014 |
+| BuscombeCarini2019 | V1/V2 | landscape review §8; Crossref metadata 2026-09-26 |
+| Brumer2017 | V1/V2 | landscape review §8; Crossref metadata 2026-09-26 |
+| SchwendemanThomson2015a | V1/V2 | landscape review §8; Crossref metadata 2026-09-26 |
+| SchwendemanThomson2015b | V1/V2 | landscape review §8; Crossref metadata 2026-09-26 |
+| HolmanHaller2013 | V1/V2 | landscape review §8; Crossref metadata 2026-09-26 |
+| Holman2013cBathy | V1/V2 | landscape review §8; Crossref metadata 2026-09-26 |
+| Almar2012 | V1/V2 | landscape review §8; Crossref metadata 2026-09-26 |
+| Kudryavtsev2017 | V1/V2 | landscape review §8; Crossref metadata 2026-09-26 |
+| Bodnar2025 | V1/V2 | landscape review §8; Crossref metadata 2026-09-26 |
+| Assran2025 | V1/V2 | landscape review §8; arXiv record |

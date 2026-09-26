@@ -2,9 +2,11 @@
 
 **A reproducible framework for multimodal ocean-wave data and vision-based wave-state estimation, anchored to traceable physical measurements.**
 
+**[Dashboard](https://stevenfau.github.io/Wave_Analysis/)**: live archive status, buoy-camera images with the sea state at each image, data sources, and literature. **[Documentation](https://stevenfau.github.io/Wave_Analysis/docs/)**
+
 [![tests](https://github.com/StevenFAU/Wave_Analysis/actions/workflows/tests.yml/badge.svg)](https://github.com/StevenFAU/Wave_Analysis/actions/workflows/tests.yml)
 [![lint](https://github.com/StevenFAU/Wave_Analysis/actions/workflows/lint.yml/badge.svg)](https://github.com/StevenFAU/Wave_Analysis/actions/workflows/lint.yml)
-[![docs](https://github.com/StevenFAU/Wave_Analysis/actions/workflows/docs.yml/badge.svg)](https://github.com/StevenFAU/Wave_Analysis/actions/workflows/docs.yml)
+[![site](https://github.com/StevenFAU/Wave_Analysis/actions/workflows/site.yml/badge.svg)](https://github.com/StevenFAU/Wave_Analysis/actions/workflows/site.yml)
 ![python](https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![status](https://img.shields.io/badge/status-v0.1.0--dev-orange)
@@ -54,6 +56,7 @@ provenance for every number. Models come after.
 | **NDBC adapter** | Parsers for every standard-met header era (1990s two-digit years → modern), realtime & historical spectra, directional coefficients (with the historical **r₁/r₂ × 100** un-scaling), mid-year grid changes, ADCP; CF-named, unit-normalised output |
 | **Availability inventory** | 38,908 files · 1,797 stations · 127 with complete directional spectra · 168 with ADCP · 91 with a buoy camera, **all 91 with directional spectra** ([data/registry](data/registry)) |
 | **Camera archiver** | NDBC lists only the latest buoy-camera image and deletes superseded ones after ~72 h. `wave-analysis ndbc cameras` (hourly systemd timer, 70 h backfill) builds the archive going forward; see [data collection](docs/operations/data_collection.md) |
+| **Public dashboard** | [GitHub Pages site](https://stevenfau.github.io/Wave_Analysis/): hourly archive status and coverage, a 72 h image viewer with the buoy's sea state at each image, a map of camera sites and reference buoys, and a browsable registry and bibliography with verification levels. Everything is generated from the repository and the collector's ledger ([ADR 0009](docs/decisions/0009-public-dashboard.md), [operations](docs/operations/dashboard.md)) |
 | **Physics** | Linear dispersion, group velocity, zero-crossing statistics, Pierson–Moskowitz/JONSWAP, cos-2s spreading, virtual-buoy and short-crested sea simulation |
 | **Spectral analysis** | Moments, H_m0, T_p (discrete & Young 1995), T_m01, T_m02, T_m−10, width, peakedness, steepness, D_m/D_p/spread; **maximum-entropy** directional distribution; **energy-conserving** regridding |
 | **Quality control** | IOOS **QARTOD** wave tests 9, 15–21; steepness, spectral-consistency and directional-realisability checks; image-quality, illumination and glint annotations. **Nothing is deleted** |
@@ -161,9 +164,9 @@ Start at **[docs/index.md](docs/index.md)** (also buildable as a site with
 | Design | [Architecture](docs/ARCHITECTURE.md) · [Data model](docs/DATA_MODEL.md) · [ADRs](docs/decisions/README.md) |
 | Standards | [FAIR, CF, ACDD, IOOS, QARTOD, RO-Crate, DataCite, CFF](docs/STANDARDS.md) |
 | Method | [Wave parameters](docs/methodology/wave_parameters.md) · [Spectra](docs/methodology/spectral_analysis.md) · [Synchronisation](docs/methodology/synchronization.md) · [Splitting](docs/methodology/dataset_splitting.md) · [Evaluation](docs/methodology/evaluation.md) · [Models](docs/methodology/models.md) |
-| Data | [Dataset datasheets](docs/datasets/README.md) · [Registry](data/registry/datasets.yaml) · [QC](docs/QUALITY_CONTROL.md) · [Provenance](docs/PROVENANCE.md) |
+| Data | [Dataset datasheets](docs/datasets/README.md) · [Registry](data/registry/datasets.yaml) · [Camera sites](data/registry/camera_sites.yaml) · [QC](docs/QUALITY_CONTROL.md) · [Provenance](docs/PROVENANCE.md) |
 | Literature | [Landscape review](docs/literature/landscape_review.md) · [Matrix](docs/literature/literature_matrix.md) · [Gaps & questions](docs/literature/research_gaps.md) · [Source verification](docs/literature/source_verification.md) |
-| Process | [Reproducibility](docs/REPRODUCIBILITY.md) · [Data collection & storage](docs/operations/data_collection.md) · [Roadmap](docs/ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Citation policy](docs/CITATION_POLICY.md) |
+| Process | [Reproducibility](docs/REPRODUCIBILITY.md) · [Data collection & storage](docs/operations/data_collection.md) · [Dashboard](docs/operations/dashboard.md) · [Roadmap](docs/ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Citation policy](docs/CITATION_POLICY.md) |
 
 ## Principles
 

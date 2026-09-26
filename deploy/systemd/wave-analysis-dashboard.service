@@ -1,0 +1,14 @@
+# Publish the dashboard's live data (status and sea state) to the
+# dashboard-data branch. Needs push access to the repository remote without
+# interaction (an SSH key or credential helper usable from systemd).
+[Unit]
+Description=Wave_Analysis: publish dashboard live data
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/scripts/publish_dashboard.sh
+Nice=10
+TimeoutStartSec=30min

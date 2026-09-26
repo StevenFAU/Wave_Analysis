@@ -1,0 +1,69 @@
+name: site
+
+# Builds the public site (dashboard + MkDocs documentation) on every push and
+# pull request, and deploys it to GitHub Pages from main. The schedule refreshes
+# the copy of the live data bundled as the dashboard's offline fallback; the
+# dashboard itself reads live data from the dashboard-data branch at runtime.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "37 */6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: uv sync --group dev --group docs --python 3.12
+      - name: front-end unit tests
+        run: node --test "tests/js/*.test.mjs"
+      - name: fetch the published live data (if any)
+        run: |
+          mkdir -p _live
+          if git fetch --depth 1 origin dashboard-data; then
+            git archive FETCH_HEAD | tar -x -C _live
+          else
+            echo "no dashboard-data branch yet: building without a bundled snapshot"
+          fi
+      - name: build dashboard
+        run: |
+          if [ -f _live/status.json ]; then live="--live _live"; else live=""; fi
+          uv run wave-analysis dashboard build --out _site $live
+      - name: build documentation
+        run: uv run mkdocs build --strict -d _site/docs
+      - name: check the built site
+        run: uv run wave-analysis dashboard check --site _site --require-docs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

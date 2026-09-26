@@ -11,7 +11,8 @@ to check that it is working. The rationale is in
 |---|---|---|---|
 | `wave-analysis ndbc cameras` | hourly, minute 40 | ~72 h per image | every new buoy-camera image and the listing JSON; backfills the last 70 h |
 | `wave-analysis ndbc download --camera-stations --realtime --gzip` | 1st and 15th of each month, 03:20 | 45-day rolling file | `.txt`, `.spec`, `.data_spec`, `.swdir`, `.swdir2`, `.swr1`, `.swr2` for every camera station |
-| `scripts/sync_offsite.sh` (optional) | daily, 04:15 | n/a | append-only copy of `data/raw/` to object storage |
+| `scripts/sync_offsite.sh` (optional) | daily, 04:15 | n/a | append-only copy of `data/raw/` to object storage; writes `data/raw/.offsite_last_sync` |
+| `scripts/publish_dashboard.sh` (optional) | hourly, minute 52 | n/a | archive status and recent sea state for the [dashboard](dashboard.md) (`--dashboard` installs it) |
 
 ### Measured behaviour of the NDBC camera feed (2026-09-26)
 

@@ -7,6 +7,10 @@ separately (`docs/REPRODUCIBILITY.md`).
 
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
+### Fixed
+- Landscape review cited `Quach2020`; the bibliography key is `Quach2021`
+  (found by the new catalog consistency test).
+
 ### Added
 - Package `wave_analysis` with layered architecture: `sources`, `ingest`,
   `schemas`, `physics`, `processing`, `qc`, `datasets`, `evaluation`, `models`,
@@ -31,6 +35,20 @@ separately (`docs/REPRODUCIBILITY.md`).
   (`ndbc download --camera-stations --realtime --gzip`); an append-only offsite
   copy via rclone (`scripts/sync_offsite.sh`, Cloudflare R2 by default); a
   coverage report (`scripts/buoycam_coverage.py`); ADR 0008.
+- Public dashboard on GitHub Pages (`dashboard/`, `wave_analysis.dashboard`,
+  ADR 0009). Views: overview, cameras map, per-station image viewer with the
+  sea state at each image, archive coverage, data sources, and literature.
+  - `wave-analysis dashboard catalog|live|build|check`.
+  - Hourly live-data publication to a single-commit `dashboard-data` branch
+    (`scripts/publish_dashboard.sh`, `install_collectors.sh --dashboard`).
+  - Recent sea state from HTTP range requests on NDBC realtime files.
+  - A BibTeX reader, and a machine-readable verification index in
+    `source_verification.md`.
+  - `data/registry/camera_sites.yaml`: camera sites and their reference buoys,
+    with distances computed at build time.
+  - `site.yml` workflow: builds, checks and deploys the dashboard with the
+    MkDocs site under `/docs/`; replaces `docs.yml`.
+  - Node unit tests for the front end.
 - Byte-preserving downloader with retries, rate limiting, atomic writes,
   SHA-256, and CSV manifests with change detection.
 - Physics: linear dispersion (Guo 2002 + Newton), group velocity, steepness,

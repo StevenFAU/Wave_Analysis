@@ -301,7 +301,9 @@ verification status for each source below.
 | ESA Sea State CCI, SWOT, CFOSAT, Sentinel-1 WV | Independent offshore validation | V2 |
 
 **Nearest wave references for public camera sites** (computed 2026-09-26 from
-`data/registry/stations.parquet` and CDIP `latest_3day.nc` metadata):
+`data/registry/stations.parquet` and CDIP `latest_3day.nc` metadata). The machine-readable
+form is `data/registry/camera_sites.yaml`. The dashboard recomputes the distances from
+NDBC station-table positions, which can differ from these by 0.1–0.2 km:
 
 | Camera | Nearest CDIP (WMO), km | Nearest NDBC directional buoy, km |
 |---|---|---|
@@ -380,7 +382,7 @@ entries added by this review are keyed below. Search-result-only items (S) are
 listed separately so that they cannot be mistaken for reviewed evidence.
 
 **V1 / V2 (read):** Kamagata2026Tp (arXiv:2606.13302) · Guimaraes2020 ·
-Kwon2023 · Buscombe2020 · Quach2020 · Vorkapic2024 · Stringari2021 ·
+Kwon2023 · Buscombe2020 · Quach2021 · Vorkapic2024 · Stringari2021 ·
 BuscombeCarini2019 · Brumer2017 · SchwendemanThomson2015a/b ·
 HolmanHaller2013 · Holman2013cBathy · Almar2012 · Kudryavtsev2017 · Bodnar2025 (Aurora) ·
 Assran2025 (V-JEPA 2, arXiv) · Nanda2024 (KOLOMVERSE) · CienfuegosZenodo2025 · SalinZenodo2023.

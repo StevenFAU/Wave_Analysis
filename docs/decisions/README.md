@@ -14,3 +14,4 @@ supersedes it instead.
 | 0006 | Manifests and small registries in Git; bulk data outside Git | Accepted |
 | 0007 | Deep learning optional; statistical baselines mandatory | Accepted |
 | 0008 | Prospective collection runs continuously; raw archive outside Git with an offsite copy | Accepted |
+| 0009 | A static public dashboard, with live data published to a single-commit branch | Accepted |

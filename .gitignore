@@ -28,6 +28,7 @@ dist/
 htmlcov/
 coverage.xml
 site/
+_site/
 
 # --- Notebooks -----------------------------------------------------------------
 .ipynb_checkpoints/

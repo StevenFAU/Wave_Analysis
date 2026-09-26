@@ -1,0 +1,11 @@
+# Runs after the minute-40 camera archiver so each snapshot includes its run.
+[Unit]
+Description=Wave_Analysis: hourly dashboard data publication
+
+[Timer]
+OnCalendar=*-*-* *:52:00
+RandomizedDelaySec=120
+Persistent=true
+
+[Install]
+WantedBy=timers.target

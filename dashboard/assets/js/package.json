@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Marks the dashboard scripts as ES modules for Node-based unit tests (tests/js). Not deployed."
+}

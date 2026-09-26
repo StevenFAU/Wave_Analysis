@@ -17,6 +17,9 @@ Commands
     hourly to build an image archive that NDBC does not itself publish).
 ``registry validate``
     Validate ``data/registry/datasets.yaml`` against the registry schema.
+``dashboard catalog | live | build``
+    Build the public dashboard: the catalog from repository files, the live
+    status and sea-state data on the collector host, and the static site.
 """
 
 from __future__ import annotations
@@ -283,6 +286,71 @@ def _cmd_registry_validate(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def _cmd_dashboard_catalog(args: argparse.Namespace) -> int:
+    from wave_analysis.dashboard.catalog import build_catalog, write_json
+
+    catalog = build_catalog(repo_root())
+    path = write_json(catalog, Path(args.out) / "catalog.json")
+    print(
+        f"{path}: {len(catalog['datasets'])} datasets, {len(catalog['sites'])} sites, "
+        f"{len(catalog['references'])} references"
+    )
+    return 0
+
+
+def _cmd_dashboard_live(args: argparse.Namespace) -> int:
+    from wave_analysis.dashboard.seastate import RangeFetcher
+    from wave_analysis.dashboard.site import build_live
+    from wave_analysis.dashboard.status import StatusInputs
+
+    raw = data_dir("raw")
+    inputs = StatusInputs(
+        buoycam_root=raw / "ndbc" / "buoycam", ndbc_root=raw / "ndbc", raw_root=raw
+    )
+    cache = Path(args.cache) if args.cache else data_dir("interim") / "dashboard" / "seastate"
+    fetcher = None if args.no_fetch else RangeFetcher(min_interval_s=args.min_interval)
+    try:
+        result = build_live(repo_root(), inputs, Path(args.out), cache_dir=cache, fetch=fetcher)
+    finally:
+        if fetcher is not None:
+            fetcher.close()
+    refresh = result["refresh"]
+    stamp = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%MZ")
+    print(
+        f"{stamp} dashboard live data: {result['stations']} camera stations, "
+        f"{result['seastate_files']} sea-state files"
+        + (
+            f"; realtime heads: {refresh['requests']} requests, "
+            f"{refresh['bytes_received'] / 1e6:.1f} MB, {len(refresh['failures'])} failures"
+            if refresh
+            else ""
+        )
+    )
+    for failure in (refresh or {}).get("failures", [])[:10]:
+        print(f"  warning: {failure}")
+    return 0
+
+
+def _cmd_dashboard_check(args: argparse.Namespace) -> int:
+    from wave_analysis.dashboard.site import check_site
+
+    problems = check_site(Path(args.site), require_docs=args.require_docs)
+    for p in problems:
+        print(f"ERROR: {p}")
+    print(f"{args.site}: {'OK' if not problems else f'{len(problems)} problem(s)'}")
+    return 1 if problems else 0
+
+
+def _cmd_dashboard_build(args: argparse.Namespace) -> int:
+    from wave_analysis.dashboard.site import build_site
+
+    result = build_site(
+        repo_root(), Path(args.out), live_dir=Path(args.live) if args.live else None
+    )
+    print(f"{args.out}: {result}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Construct the argument parser."""
     parser = argparse.ArgumentParser(prog="wave-analysis", description=__doc__.split("\n")[0])
@@ -329,6 +397,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
     cams.add_argument("--min-interval", type=float, default=1.0)
     cams.set_defaults(func=_cmd_ndbc_cameras)
+
+    dash = sub.add_parser("dashboard", help="public dashboard data and site").add_subparsers(
+        dest="cmd", required=True
+    )
+    dcat = dash.add_parser("catalog", help="write catalog.json from the repository")
+    dcat.add_argument("--out", required=True, help="output directory")
+    dcat.set_defaults(func=_cmd_dashboard_catalog)
+    dlive = dash.add_parser(
+        "live", help="write live status and sea-state data (collector host, hourly)"
+    )
+    dlive.add_argument("--out", required=True, help="output directory (replaced)")
+    dlive.add_argument("--cache", help="sea-state cache (default: data/interim/dashboard/seastate)")
+    dlive.add_argument(
+        "--no-fetch", action="store_true", help="use the cache only; no network requests"
+    )
+    dlive.add_argument("--min-interval", type=float, default=1.0)
+    dlive.set_defaults(func=_cmd_dashboard_live)
+    dbuild = dash.add_parser("build", help="assemble the static site (front end + catalog)")
+    dbuild.add_argument("--out", required=True, help="site output directory")
+    dbuild.add_argument("--live", help="live data directory to bundle as the offline fallback")
+    dbuild.set_defaults(func=_cmd_dashboard_build)
+    dcheck = dash.add_parser("check", help="validate a built site (JSON, assets, doc links)")
+    dcheck.add_argument("--site", required=True, help="built site directory")
+    dcheck.add_argument(
+        "--require-docs", action="store_true", help="also require every linked docs page"
+    )
+    dcheck.set_defaults(func=_cmd_dashboard_check)
 
     reg = sub.add_parser("registry", help="dataset registry").add_subparsers(
         dest="cmd", required=True

@@ -1,5 +1,6 @@
 site_name: Wave_Analysis
 site_description: Reproducible multimodal ocean-wave data and vision-based wave-state estimation
+site_url: https://stevenfau.github.io/Wave_Analysis/docs/
 repo_url: https://github.com/StevenFAU/Wave_Analysis
 edit_uri: edit/main/docs/
 theme:
@@ -18,6 +19,7 @@ not_in_nav: |
   literature/bibliography.bib
 nav:
   - Home: index.md
+  - Dashboard ↗: https://stevenfau.github.io/Wave_Analysis/
   - Project:
       - Standards: STANDARDS.md
       - Architecture: ARCHITECTURE.md
@@ -50,6 +52,7 @@ nav:
       - Thermal IR: datasets/thermal_ir.md
   - Operations:
       - Continuous data collection: operations/data_collection.md
+      - Public dashboard: operations/dashboard.md
   - Literature:
       - Landscape review: literature/landscape_review.md
       - Matrix: literature/literature_matrix.md
@@ -71,3 +74,4 @@ nav:
       - 0006 Manifests not data: decisions/0006-manifests-not-data-in-git.md
       - 0007 Optional deep learning: decisions/0007-optional-deep-learning.md
       - 0008 Collection & storage: decisions/0008-prospective-collection-and-storage.md
+      - 0009 Public dashboard: decisions/0009-public-dashboard.md

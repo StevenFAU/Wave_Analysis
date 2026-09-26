@@ -2,8 +2,9 @@
 # Install the Wave_Analysis data collectors as systemd *user* timers.
 #
 #   scripts/install_collectors.sh            # buoycam (hourly) + NDBC realtime (1st/15th)
-#   scripts/install_collectors.sh --sync     # also the daily offsite copy (needs rclone)
-#   scripts/install_collectors.sh --remove   # stop and remove all units
+#   scripts/install_collectors.sh --sync       # also the daily offsite copy (needs rclone)
+#   scripts/install_collectors.sh --dashboard  # also hourly dashboard publication (needs push access)
+#   scripts/install_collectors.sh --remove     # stop and remove all units
 #
 # Units are rendered from deploy/systemd/*.{service,timer} with @REPO@ set to
 # this checkout. Logs: journalctl --user -u wave-analysis-buoycam
@@ -16,7 +17,8 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 TIMERS=(wave-analysis-buoycam wave-analysis-ndbc-realtime)
 
 if [[ "${1:-}" == "--remove" ]]; then
-    for u in wave-analysis-buoycam wave-analysis-ndbc-realtime wave-analysis-offsite-sync; do
+    for u in wave-analysis-buoycam wave-analysis-ndbc-realtime wave-analysis-offsite-sync \
+        wave-analysis-dashboard; do
         systemctl --user disable --now "$u.timer" 2>/dev/null || true
         rm -f "$UNIT_DIR/$u.service" "$UNIT_DIR/$u.timer"
     done
@@ -24,14 +26,26 @@ if [[ "${1:-}" == "--remove" ]]; then
     echo "removed"
     exit 0
 fi
-if [[ "${1:-}" == "--sync" ]]; then
-    command -v rclone >/dev/null || { echo "rclone not found; install it first" >&2; exit 1; }
-    [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/wave-analysis/sync.env" ]] || {
-        echo "create ~/.config/wave-analysis/sync.env with WAVE_ANALYSIS_REMOTE=<remote:bucket>" >&2
-        exit 1
-    }
-    TIMERS+=(wave-analysis-offsite-sync)
-fi
+for arg in "$@"; do
+    case "$arg" in
+        --sync)
+            command -v rclone >/dev/null || { echo "rclone not found; install it first" >&2; exit 1; }
+            [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/wave-analysis/sync.env" ]] || {
+                echo "create ~/.config/wave-analysis/sync.env with WAVE_ANALYSIS_REMOTE=<remote:bucket>" >&2
+                exit 1
+            }
+            TIMERS+=(wave-analysis-offsite-sync)
+            ;;
+        --dashboard)
+            git -C "$REPO" ls-remote --exit-code --heads origin >/dev/null || {
+                echo "cannot reach the 'origin' remote; the dashboard publisher needs push access" >&2
+                exit 1
+            }
+            TIMERS+=(wave-analysis-dashboard)
+            ;;
+        *) echo "unknown option: $arg" >&2; exit 2 ;;
+    esac
+done
 
 [[ -x "$REPO/.venv/bin/wave-analysis" ]] || { echo "run 'uv sync' in $REPO first" >&2; exit 1; }
 mkdir -p "$UNIT_DIR"

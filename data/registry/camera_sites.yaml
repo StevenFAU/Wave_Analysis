@@ -1,0 +1,172 @@
+# Wave_Analysis camera-site registry
+# ------------------------------------------------------------------------------
+# Public shore/coastal camera sites and the in-situ wave instruments proposed
+# as their references. This is the machine-readable form of the pairing table in
+# docs/literature/landscape_review.md (section 5.3). NDBC buoy cameras are not
+# listed: they are their own reference (same hull) and come from the live
+# camera listing.
+#
+# Coordinates of NDBC-listed buoys (including CDIP Waveriders, which NDBC
+# distributes under WMO ids) are looked up in data/registry/stations.parquet.
+# Instruments NDBC does not list carry explicit coordinates. Distances are
+# computed at build time (`wave-analysis dashboard catalog`), never stored.
+#
+# coordinate_source says where a camera position came from. `approximate: true`
+# marks positions that were not read from a provider's metadata.
+# Schema: src/wave_analysis/dashboard/catalog.py (CameraSite)
+# ------------------------------------------------------------------------------
+registry_version: "0.1.0"
+sites:
+
+  - site_id: pacioos_waimea
+    name: PacIOOS beach camera, Waimea Bay (Oahu)
+    provider: PacIOOS
+    dataset_id: pacioos_beachcam
+    latitude: 21.643578
+    longitude: -158.06339
+    coordinate_source: "PacIOOS ERDDAP beachcam_004 latitude/longitude (queried 2026-09-26)"
+    period: "2009-02 to 2013-10 (archive)"
+    references:
+      - {station_id: "51201", network: CDIP, cdip_id: "106", role: primary}
+      - {station_id: "51003", network: NDBC, role: offshore}
+
+  - site_id: usgs_dorado
+    name: USGS CoastCam, Dorado (Puerto Rico)
+    provider: USGS
+    dataset_id: usgs_coastcam
+    latitude: 18.471966
+    longitude: -66.284432
+    coordinate_source: "USGS NIMS camera API (queried 2026-09-26)"
+    period: "2023 to present (NIMS hourly snapshots)"
+    references:
+      - station_id: usgs_dorado_spotter
+        network: USGS
+        role: primary
+        name: USGS Spotter off Dorado
+        latitude: 18.4881
+        longitude: -66.28633
+        coordinate_source: "USGS geoport ERDDAP waves-Dorado, 2024-06 positions"
+        period: "2022-10 to 2024-12"
+      - {station_id: "41121", network: CDIP, cdip_id: "249", role: secondary}
+      - {station_id: "41043", network: NDBC, role: offshore}
+
+  - site_id: usgs_madeira
+    name: USGS CoastCam, Madeira Beach (Florida)
+    provider: USGS
+    dataset_id: usgs_coastcam
+    latitude: 27.7962
+    longitude: -82.7961
+    coordinate_source: "USGS NIMS camera API (queried 2026-09-26)"
+    period: "2017-2022 (data release); 2023 to present (NIMS)"
+    references:
+      - {station_id: "42098", network: CDIP, cdip_id: "214", role: primary}
+      - {station_id: "42036", network: NDBC, role: offshore}
+
+  - site_id: usgs_sand_key
+    name: USGS CoastCam, Sand Key (Florida)
+    provider: USGS
+    dataset_id: usgs_coastcam
+    latitude: 27.93907
+    longitude: -82.83934
+    coordinate_source: "USGS NIMS camera API (queried 2026-09-26)"
+    period: "2023 to present (NIMS)"
+    references:
+      - {station_id: "42098", network: CDIP, cdip_id: "214", role: primary}
+      - {station_id: "42036", network: NDBC, role: offshore}
+
+  - site_id: usgs_head_of_the_meadow
+    name: USGS CoastCam, Head of the Meadow (Massachusetts)
+    provider: USGS
+    dataset_id: usgs_coastcam
+    latitude: 42.05048
+    longitude: -70.07738
+    coordinate_source: "USGS NIMS camera API (queried 2026-09-26)"
+    period: "2019-2025 (data release)"
+    references:
+      - {station_id: "44090", network: CDIP, cdip_id: "221", role: primary}
+      - {station_id: "44018", network: NDBC, role: offshore}
+
+  - site_id: usgs_marconi
+    name: USGS CoastCam, Marconi Beach (Massachusetts)
+    provider: USGS
+    dataset_id: usgs_coastcam
+    latitude: 41.892648
+    longitude: -69.96318
+    coordinate_source: "USGS NIMS camera API (queried 2026-09-26)"
+    period: "2021, 2023, 2024 (data releases)"
+    references:
+      - {station_id: "44090", network: CDIP, cdip_id: "221", role: primary}
+      - {station_id: "44018", network: NDBC, role: offshore}
+
+  - site_id: usgs_santa_cruz
+    name: USGS CoastCam, Santa Cruz (California)
+    provider: USGS
+    dataset_id: usgs_coastcam
+    latitude: 36.9621
+    longitude: -122.0242
+    coordinate_source: "USGS NIMS camera API (queried 2026-09-26)"
+    period: "2023 to present (NIMS)"
+    references:
+      - {station_id: "46236", network: CDIP, cdip_id: "156", role: primary}
+      - {station_id: "46042", network: NDBC, role: offshore}
+
+  - site_id: usgs_sunset
+    name: USGS CoastCam, Sunset State Beach (California)
+    provider: USGS
+    dataset_id: usgs_coastcam
+    latitude: 36.8871
+    longitude: -121.8313
+    coordinate_source: "USGS NIMS camera API (queried 2026-09-26)"
+    period: "2023 to present (NIMS)"
+    references:
+      - {station_id: "46236", network: CDIP, cdip_id: "156", role: primary}
+      - {station_id: "46042", network: NDBC, role: offshore}
+
+  - site_id: usgs_adelup
+    name: USGS CoastCam, Adelup Point (Guam)
+    provider: USGS
+    dataset_id: usgs_coastcam
+    latitude: 13.48073628
+    longitude: 144.7289428
+    coordinate_source: "USGS NIMS camera API (queried 2026-09-26)"
+    period: "2023 to present (NIMS)"
+    references:
+      - {station_id: "52200", network: CDIP, cdip_id: "121", role: primary}
+
+  - site_id: webcoos_oak_island
+    name: WebCOOS camera, Oak Island (North Carolina)
+    provider: WebCOOS
+    dataset_id: webcoos
+    latitude: 33.914
+    longitude: -78.14
+    approximate: true
+    coordinate_source: "approximate position of the Oak Island pier"
+    period: "multi-year (API token required)"
+    references:
+      - {station_id: "41108", network: CDIP, cdip_id: "200", role: primary}
+      - {station_id: "41013", network: NDBC, role: offshore}
+
+  - site_id: webcoos_currituck
+    name: WebCOOS camera, Currituck (North Carolina)
+    provider: WebCOOS
+    dataset_id: webcoos
+    latitude: 36.37
+    longitude: -75.83
+    approximate: true
+    coordinate_source: "approximate position of the Currituck Banks site"
+    period: "multi-year (API token required)"
+    references:
+      - {station_id: "44056", network: CDIP, cdip_id: "433", role: primary}
+      - {station_id: "44014", network: NDBC, role: offshore}
+
+  - site_id: fau_harbor_branch
+    name: FAU Harbor Branch, Fort Pierce (Florida), candidate self-collected site
+    provider: FAU (proposed)
+    latitude: 27.535
+    longitude: -80.36
+    approximate: true
+    coordinate_source: "approximate position of the Fort Pierce Inlet shoreline"
+    period: "not yet collected"
+    references:
+      - {station_id: "41114", network: CDIP, cdip_id: "134", role: primary}
+      - {station_id: "41009", network: NDBC, role: offshore}

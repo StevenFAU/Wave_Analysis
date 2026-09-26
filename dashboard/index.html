@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wave_Analysis dashboard</title>
+  <meta name="description" content="Live status of the Wave_Analysis NOAA buoy-camera archive, recent sea state, public data sources, and the literature behind the project.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/vendor/leaflet-1.9.4/leaflet.css">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <script>
+    // Apply a saved theme before first paint (storage may be unavailable).
+    try {
+      const t = localStorage.getItem("wa-theme");
+      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+    } catch (e) { /* ignore */ }
+  </script>
+  <script src="assets/vendor/leaflet-1.9.4/leaflet.js" defer></script>
+  <script type="module" src="assets/js/main.js"></script>
+</head>
+<body>
+  <a class="skip" href="#view">Skip to content</a>
+  <header class="topbar">
+    <div class="brand">
+      <a href="#/">Wave_Analysis</a>
+      <span>Data &amp; research dashboard</span>
+    </div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#/" data-route="">Overview</a>
+      <a href="#/cameras" data-route="cameras">Cameras</a>
+      <a href="#/archive" data-route="archive">Archive</a>
+      <a href="#/sources" data-route="sources">Sources</a>
+      <a href="#/literature" data-route="literature">Literature</a>
+      <a href="#/about" data-route="about">About</a>
+      <a href="docs/">Docs</a>
+    </nav>
+    <div class="topbar-right">
+      <span id="freshness" class="pill" aria-live="polite">Loading…</span>
+      <button id="theme-toggle" class="icon-btn" type="button" aria-label="Colour theme">Theme: auto</button>
+    </div>
+  </header>
+
+  <main id="view" tabindex="-1">
+    <p class="loading">Loading data…</p>
+    <noscript>
+      <p>This dashboard needs JavaScript. The project documentation is at <a href="docs/">docs/</a>
+      and the code at <a href="https://github.com/StevenFAU/Wave_Analysis">GitHub</a>.</p>
+    </noscript>
+  </main>
+
+  <footer class="site" id="footer"></footer>
+  <div id="tooltip" role="tooltip" hidden></div>
+</body>
+</html>
