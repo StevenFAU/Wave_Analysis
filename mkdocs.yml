@@ -51,6 +51,7 @@ nav:
   - Operations:
       - Continuous data collection: operations/data_collection.md
   - Literature:
+      - Landscape review: literature/landscape_review.md
       - Matrix: literature/literature_matrix.md
       - Research gaps: literature/research_gaps.md
       - Source verification: literature/source_verification.md

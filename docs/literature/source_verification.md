@@ -115,6 +115,31 @@ All reported metrics are **in simulation**.
   from 15 cameras at 6 sites, including Currituck, Jennette's Pier and Oak Island,
   NC. The camera identifiers match WebCOOS naming, so these U.S. sites could be
   paired with nearby instruments. Registered as `yin2025_vwbt`.
-- **arXiv:2606.13302**, *Physics-Guided Spatiotemporal Learning for Coastal Wave
-  Peak Period Estimation from Video*: found in search results next to Kamagata
-  et al.; not yet reviewed (open question L-1 in `research_gaps.md`).
+- **arXiv:2606.13302** (Kamagata, Jat, Gamundani, Srivastava, Saravanakumar;
+  v1 2026-06-11, v2 2026-07-19), *Physics-Guided Spatiotemporal Learning for
+  Coastal Wave Peak Period Estimation from Video*. **V1** (arXiv PDF, read
+  2026-09-26):
+  - Target is T_p only (2–20 s).
+  - Gold set: 13 scenes (6,926 windows of 60 frames). Sources are a GitHub
+    wave-tracking repository, a Zenodo storm-video record
+    (doi:10.5281/zenodo.4295611), Surfline live streams, and the team's own
+    Namibian recordings.
+  - Gold labels: "expert visual assessment" combined with timestack analysis.
+    A hybrid target uses the expert value where available and otherwise the
+    FFT peak of the ROI mean intensity (0.05–0.5 Hz).
+  - Silver set: 20 scenes (10,655 windows) from stock-footage libraries
+    (Pixabay, iStock, Vecteezy, Adobe Stock) with optical-flow pseudo-labels.
+  - Synthetic pretraining: more than 1,000 Airy-wave clips.
+  - Evaluation: scene-level split, 9 train/validation scenes and 4 held-out.
+    Held-out RMSE is 0.80 s (LtViViT) and 1.41 s (PtAttnCNN), SI about 0.1.
+  - Data and code availability: "available from the corresponding author on
+    reasonable request".
+  - **No instrument ground truth**, so G-2 applies.
+
+## Landscape review sources (2026-09-26)
+
+The broader review ([landscape_review.md](landscape_review.md)) adds two
+levels: **S** (screened by title only, not yet evidence) and **Q** (a data
+service queried programmatically). DOIs, author lists, volumes, and pages
+of every bibliography entry it added were checked against the Crossref API on
+2026-09-26.

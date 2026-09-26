@@ -102,34 +102,63 @@ datasets:
       notes: "Variable names confirmed from the OPeNDAP DDS (waveHs, waveTp, waveEnergyDensity, waveA1Value..., waveTimeBounds, waveFlagPrimary)."
 
   - dataset_id: usgs_coastcam
-    name: USGS CoastCam (Madeira Beach, Florida; other sites)
-    provider: U.S. Geological Survey, St. Petersburg Coastal and Marine Science Center
-    modalities: [rgb]
-    intended_roles: [input]
+    name: USGS CoastCams (14 sites in FL, PR, MA, CA, AK, Guam)
+    provider: U.S. Geological Survey (St. Petersburg, Woods Hole and Pacific Coastal and Marine Science Centers)
+    modalities: [rgb, in_situ_wave]
+    intended_roles: [input, reference]
     access:
       public: true
       authentication_required: false
-      protocols: [HTTPS]
+      protocols: [HTTPS, S3, API]
       endpoints:
         - https://cmgds.marine.usgs.gov/data/madeirabeach/
-        - https://doi.org/10.5066/P9SGRTF1
+        - https://doi.org/10.5066/P9SGRTF1                                # Madeira Beach 2017-2022 release
+        - https://api.waterdata.usgs.gov/nims/v0/cameras                  # NIMS camera list (public)
+        - https://usgs-nims-images.s3.amazonaws.com/                      # public, listable image bucket
+        - https://geoport.usgs.esipfed.org/erddap/tabledap/waves-Dorado.html  # Spotter at Dorado, PR
     data_types: [snapshot, timex, variance, bright, dark, runup_timestack,
-                 intrinsic_calibration, extrinsic_calibration]
-    temporal: {timezone: UTC, notes: "Argus-style 17-min collections for timestacks; verify per release."}
-    spatial: {platform_types: [shore_camera]}
-    formats: [jpeg, png, mat, txt]
+                 intrinsic_calibration, extrinsic_calibration, hourly_snapshot_archive,
+                 bulk_wave_parameters]
+    temporal:
+      timezone: UTC
+      notes: >
+        Data releases: Madeira Beach 2017-2022; Head of the Meadow (CACO-01) 2019-2025;
+        Marconi (CACO-02) 2021, 2023, 2024. NIMS S3 hourly daylight snapshots since
+        2023-04 (Sand Key 11,911; Madeira 15,875; Dorado C1 7,905 objects on 2026-09-26).
+    spatial:
+      platform_types: [shore_camera]
+      coverage: >
+        Sand Key, Madeira Beach, Tyndall AFB (FL); Dorado, Isla Verde (PR); Head of the
+        Meadow, Marconi (MA); Santa Cruz, Sunset State Beach (CA); Unalakleet, Golovin,
+        Teller, Shishmaref, Point Barrow (AK); Adelup Point (Guam).
+      nearest_wave_reference: >
+        CDIP 214/42098 (26-40 km, Tampa Bay sites); CDIP 156/46236 (18-24 km, Monterey Bay);
+        CDIP 221/44090 (31 km, Cape Cod); CDIP 121/52200 (15 km, Guam); Dorado: USGS
+        Spotter ~2 km offshore (2022-10 to 2024-12) and CDIP 249/41121 (44 km).
+    formats: [jpeg, png, mat, txt, csv]
     documentation:
+      - https://www.usgs.gov/programs/cmhrp/science/usgs-coastcams
       - https://cmgds.marine.usgs.gov/catalog/spcmsc/MadeiraBeachFL_CoastCam_imagery_metadata.html
-    citation: "USGS (Madeira Beach, Florida CoastCam imagery and calibration data), doi:10.5066/P9SGRTF1."
-    license: {status: public_domain_us_government}
-    phase: v0.3.0
+      - https://api.waterdata.usgs.gov/docs/nims
+    citation: "USGS CoastCam data releases, e.g. Madeira Beach, Florida CoastCam imagery and calibration data, doi:10.5066/P9SGRTF1."
+    license:
+      status: public_domain_us_government
+      notes: "NIMS 'overlay' images carry burned-in text: mask before training."
+    phase: v0.2.0
     adapter: wave_analysis.sources.coastcam.CoastCamSource
     doc: docs/datasets/coastcam.md
     verification:
-      status: documented
-      date: 2026-09-25
-      evidence: [https://catalog.data.gov/dataset/imagery-from-usgs-coastcam-deployed-at-madeira-beach-florida]
-      notes: "Calibrated IO/EO data included. Pairing candidates in the eastern Gulf: to be inventoried."
+      status: verified
+      date: 2026-09-26
+      evidence:
+        - https://api.waterdata.usgs.gov/nims/v0/cameras
+        - https://usgs-nims-images.s3.amazonaws.com/?list-type=2&prefix=overlay/FL_Sand_Key/
+        - https://geoport.usgs.esipfed.org/erddap/tabledap/waves-Dorado.csv
+      notes: >
+        Queried programmatically: NIMS lists 29 coastal cameras; the S3 bucket is publicly
+        listable; the Dorado Spotter is on the USGS geoport ERDDAP (provisional data).
+        Calibrated IO/EO parameters come with the data releases. Pairing distances computed
+        from CDIP latest_3day.nc metadata (docs/literature/landscape_review.md section 5.3).
 
   - dataset_id: webcoos
     name: WebCOOS - Webcam Coastal Observation System
@@ -144,17 +173,25 @@ datasets:
     data_types: [archived_imagery, video, derived_products]
     temporal: {timezone: UTC}
     spatial: {platform_types: [shore_camera], coverage: "U.S. Southeast and expanding"}
-    documentation: [https://webcoos.org/about/, https://ioos.noaa.gov/project/ott-webcoos/]
-    license: {status: to_be_confirmed}
+    documentation:
+      - https://webcoos.org/about/
+      - https://webcoos.org/docs/doc/access/
+      - https://github.com/WebCOOS/py-webcoos-client
+      - https://ioos.noaa.gov/project/ott-webcoos/
+    license: {status: to_be_confirmed, notes: "Client code is NOAA open source; imagery terms not yet found."}
     phase: v0.2.0
     adapter: wave_analysis.sources.webcoos.WebCOOSSource
     doc: docs/datasets/webcoos.md
     verification:
-      status: candidate
+      status: documented
+      date: 2026-09-26
+      evidence: [https://app.webcoos.org/webcoos/api/v1/assets/]
       notes: >
-        API/authentication terms to be confirmed (authentication_required recorded as true
-        conservatively). Camera IDs used by the Yin et al. (2025) VWBT dataset match WebCOOS
-        naming, linking the literature test set to an instrument-pairable network.
+        API requires a token (HTTP 403 "Authentication credentials were not provided" without
+        one; header "Authorization: Token <key>"). Archive inventory per service at
+        /api/v1/services/<slug>/inventory/. Nearest CDIP: Oak Island -> CDIP 200/41108 (24.5 km);
+        Currituck -> CDIP 433/44056 (21.6 km). Camera IDs used by Yin et al. (2025) match
+        WebCOOS naming.
 
   - dataset_id: ioos_erddap
     name: U.S. IOOS regional ERDDAP servers (SECOORA, PacIOOS, SCCOOS, GCOOS, ...)
@@ -174,8 +211,12 @@ datasets:
     adapter: wave_analysis.sources.erddap.ERDDAPSource
     doc: docs/datasets/ioos.md
     verification:
-      status: candidate
-      notes: "Endpoint URLs to be confirmed; ERDDAP datasets carry CF/ACDD metadata."
+      status: documented
+      date: 2026-09-26
+      evidence: ["https://pae-paha.pacioos.hawaii.edu/erddap/search/index.csv?searchFor=beachcam"]
+      notes: >
+        PacIOOS ERDDAP queried (see pacioos_beachcam). SECOORA and other regional endpoints
+        still to be checked. ERDDAP datasets carry CF/ACDD metadata including 'license'.
 
   - dataset_id: usace_frf
     name: USACE Field Research Facility, Duck NC
@@ -183,16 +224,25 @@ datasets:
     modalities: [in_situ_wave, rgb, bathymetry, acoustic, meteorological]
     intended_roles: [reference, input, context]
     access: {public: true, authentication_required: false, protocols: [THREDDS, HTTPS]}
-    data_types: [waverider_spectra, nearshore_wave_gauges, argus_imagery, lidar, bathymetry_surveys]
-    documentation: [https://frfdataportal.erdc.dren.mil/]
+    data_types: [waverider_spectra, nearshore_wave_gauges, awac, pressure_arrays,
+                 lidar_wave_gauges, lidar_runup, bathymetry_surveys, dems]
+    documentation:
+      - https://frfdataportal.erdc.dren.mil/
+      - https://chldata.erdc.dren.mil/thredds/catalog/frf/catalog.html
     license: {status: public_domain_us_government}
     phase: v0.3.0
     doc: docs/datasets/README.md
     verification:
-      status: candidate
+      status: verified
+      date: 2026-09-26
+      evidence: [https://chldata.erdc.dren.mil/thredds/catalog/frf/oceanography/waves/catalog.xml]
       notes: >
-        Potentially the densest co-located camera + wave-gauge + bathymetry record in the U.S.
-        Endpoint and imagery archive access to be confirmed.
+        THREDDS (moved from chlthredds to chldata.erdc.dren.mil) lists waves/: 8m-array,
+        DWG-BB02/03, DWG-OC02/03, awac-4.5m..11m, lidarWaveGauge080-140, lidarWaveRunup
+        (2015-2026), paros, sig769/940. Argus imagery NOT found publicly: argus_temp/ is empty,
+        the legacy OSU CIL FTP host (cil-ftp.coas.oregonstate.edu) no longer resolves; only
+        North Head Argus merged products (2018) under projects/argusNorthhead. Ask FRF for
+        imagery access.
 
   - dataset_id: yin2025_vwbt
     name: VWBT_9000 - Video dataset for nearshore wave-breaking type classification
@@ -233,7 +283,13 @@ datasets:
     phase: v0.4.0
     adapter: wave_analysis.sources.satellite.SentinelSource
     doc: docs/datasets/satellite_sar.md
-    verification: {status: candidate}
+    verification:
+      status: documented
+      date: 2026-09-26
+      evidence: [https://sentinels.copernicus.eu/-/total-significant-wave-height-is-now-provided-for-the-sentinel-1-wave-mode-acquisitions]
+      notes: >
+        Since 2022-06-07 WV OCN products include a neural-network 'total' Hs (Quach et al.
+        2021, IEEE TGRS 59:1859), trained on SAR-altimeter collocations.
 
   - dataset_id: hls
     name: Harmonized Landsat and Sentinel-2 (HLS)
@@ -309,8 +365,8 @@ datasets:
     intended_roles: [reference, input]
     access: {public: true, authentication_required: false, protocols: [HTTPS]}
     data_types: [stereo_video, reconstructed_surface_elevation]
-    documentation: [https://sites.google.com/unive.it/wass]
-    license: {status: to_be_confirmed}
+    documentation: [https://sites.google.com/unive.it/wass, https://doi.org/10.1038/s41597-020-0492-9]
+    license: {status: to_be_confirmed, notes: "The Guimaraes et al. (2020) records are CC BY 4.0 (entry guimaraes2020_stereo)."}
     phase: v0.4.0
     doc: docs/datasets/README.md
     verification:
@@ -318,3 +374,300 @@ datasets:
       notes: >
         Stereo reconstruction gives space-time surface elevation - a geometric ground truth for
         video that no point sensor can provide. High priority for spatial (Level 7) tasks.
+
+  # ---------------------------------------------------------------------------
+  # Added by the landscape review, 2026-09-26 (docs/literature/landscape_review.md)
+  # ---------------------------------------------------------------------------
+
+  - dataset_id: pacioos_beachcam
+    name: PacIOOS beach cameras (Waimea Bay and Waikiki, Oahu), 2009-2013 archive
+    provider: Pacific Islands Ocean Observing System (PacIOOS), University of Hawaii
+    modalities: [rgb]
+    intended_roles: [input]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS, ERDDAP]
+      endpoints:
+        - https://pae-paha.pacioos.hawaii.edu/erddap/tabledap/beachcam_003.html   # Waimea Bay (beach)
+        - https://pae-paha.pacioos.hawaii.edu/erddap/tabledap/beachcam_004.html   # Waimea Bay (offshore)
+        - https://pae-paha.pacioos.hawaii.edu/erddap/tabledap/beachcam_001.html   # Waikiki (oblique)
+        - https://pae-paha.pacioos.hawaii.edu/erddap/tabledap/beachcam_002.html   # Waikiki (nadir)
+        - https://pae-paha.pacioos.hawaii.edu/erddap/files/beachcam_004/
+    data_types: [hourly_snapshot_archive]
+    temporal:
+      timezone: "UTC in ERDDAP 'time'; file names use local HST (e.g. ...T070000.jpg = 17:00Z)"
+      coverage: "2009-02-06 to 2013-10-15, hourly 06/07-17 HST"
+      counts: "beachcam_001: 15,564; 002: 15,590; 003: 8,935; 004: 8,919 images (queried 2026-09-26)"
+    spatial:
+      platform_types: [shore_camera]
+      coverage: "Oahu, Hawaii: Waimea Bay (North Shore) and Waikiki (South Shore)"
+      nearest_wave_reference: "Waimea: CDIP 106 / WMO 51201 at 6.3 km (record 2001-12 to 2026-05)"
+    formats: [jpeg]
+    documentation:
+      - https://www.pacioos.hawaii.edu/shoreline/beachcam-archive/
+    citation: "PacIOOS Beach Camera 00N, <site>, Oahu, Hawaii. Pacific Islands Ocean Observing System. https://pae-paha.pacioos.hawaii.edu/erddap/ (accessed <date>)."
+    license:
+      status: free_reuse_with_acknowledgement
+      notes: "ERDDAP 'license': may be used and redistributed for free, not for legal use; acknowledge PacIOOS."
+    phase: v0.2.0
+    doc: docs/literature/landscape_review.md
+    verification:
+      status: verified
+      date: 2026-09-26
+      evidence:
+        - "https://pae-paha.pacioos.hawaii.edu/erddap/tabledap/beachcam_004.csv?time,url,size&time>=2012-01-01&time<2012-01-20"
+        - https://pae-paha.pacioos.hawaii.edu/erddap/info/beachcam_004/index.csv
+        - https://thredds.cdip.ucsd.edu/thredds/dodsC/cdip/archive/106p1/106p1_historic.nc.das
+      notes: >
+        First candidate historical benchmark: ~17,900 Waimea images concurrent with a
+        directional Waverider 6 km offshore, two views of one site. North Shore winter
+        swell spans small to very large surf. Camera-to-buoy wave transformation must be
+        addressed (offshore buoy, surf-zone imagery).
+
+  - dataset_id: socib_cala_millor
+    name: SOCIB Beach Monitoring Facility, Cala Millor (SIRENA video + MOBIMS)
+    provider: Balearic Islands Coastal Observing and Forecasting System (SOCIB) / IMEDEA
+    modalities: [rgb, in_situ_wave, bathymetry]
+    intended_roles: [input, reference]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints:
+        - "https://apps.socib.es/beamon/filtering?station=clm&group=clm&cameras=c05&product=snapshot"
+    data_types: [snapshot, timex, variance, timestack, hourly_wave_and_depth, bathymetry_surveys]
+    temporal: {coverage: "2011 onward; cameras record the first 10 min of each daylight hour at 7.5 fps"}
+    spatial: {platform_types: [shore_camera, fixed_station], coverage: "Cala Millor, Mallorca, Western Mediterranean"}
+    documentation:
+      - https://doi.org/10.1038/s41597-023-02210-2
+      - https://www.socib.es/en/what-we-do/ocean-observation/fixed-stations/mobims-cala-millor
+    license: {status: to_be_confirmed}
+    phase: v0.3.0
+    doc: docs/literature/landscape_review.md
+    verification:
+      status: candidate
+      notes: >
+        Reported by the Sci. Data (2023) Cala Millor paper and SOCIB pages (search results).
+        Image archive app exists. Instrument type and depth, bulk download, and licence still
+        to be checked. A Mediterranean domain for cross-site tests.
+
+  - dataset_id: guimaraes2020_stereo
+    name: Sea-surface stereo image data set (Guimaraes et al. 2020)
+    provider: IFREMER / Ca' Foscari / CNR-ISMAR / KIOST / MHI (Guimaraes et al., Sci. Data 7:145)
+    modalities: [stereo, in_situ_wave, radar]
+    intended_roles: [reference, input]
+    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    data_types: [stereo_images, reconstructed_surface_elevation]
+    temporal: {coverage: "12 records of ~30 min, 2011-2018, 10-15 Hz"}
+    spatial:
+      platform_types: [fixed_station]
+      coverage: "Black Sea (Katsiveli, ~30 m), Adriatic (Acqua Alta, ~17 m), Yellow Sea (Socheongcho, ~50 m), Iroise Sea (La Jument)"
+    formats: [tif, png, netcdf]
+    documentation: [https://doi.org/10.1038/s41597-020-0492-9]
+    citation: "Guimaraes, P. V. et al. (2020). A data set of sea surface stereo images to resolve space-time wave fields. Sci. Data 7, 145. doi:10.1038/s41597-020-0492-9"
+    license: {status: CC-BY-4.0, url: https://creativecommons.org/licenses/by/4.0/}
+    phase: v0.4.0
+    doc: docs/literature/landscape_review.md
+    verification:
+      status: documented
+      date: 2026-09-26
+      evidence: [https://pmc.ncbi.nlm.nih.gov/articles/PMC7228941/]
+      notes: "Hs 0.30-10.03 m, Tp 2.63-13.33 s; co-located wave wires, AWAC, X-band radar. Data DOI 10.12770/af599f42-2770-4d6d-8209-13f40e2c292f."
+
+  - dataset_id: buscombe2020_owg
+    name: Optical wave gauging training data and code (Buscombe et al. 2020)
+    provider: USGS / University of Washington (Buscombe, Carini, Harrison, Chickadel, Warrick)
+    modalities: [thermal_ir, rgb]
+    intended_roles: [input]
+    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    data_types: [training_csv, image_sets, model_code]
+    spatial: {coverage: "Duck NC (close-range IR); Santa Cruz CA (RGB orthomosaic and oblique)"}
+    documentation:
+      - https://github.com/dbuscombe-usgs/OpticalWaveGauging_DNN
+      - https://doi.org/10.1016/j.coastaleng.2019.103593
+    license: {status: to_be_confirmed, notes: "Repository states 'as is'; no explicit licence found."}
+    phase: v0.3.0
+    doc: docs/literature/landscape_review.md
+    verification:
+      status: documented
+      date: 2026-09-26
+      evidence: [https://github.com/dbuscombe-usgs/OpticalWaveGauging_DNN, https://pubs.usgs.gov/publication/70208193]
+      notes: "IR RMSE 0.14 m / 0.41 s; oblique RGB 0.11 m / 0.81 s. Split protocol unverified (single-site sets)."
+
+  - dataset_id: stringari2021_deepwaves
+    name: Active wave-breaking classification data (Stringari et al. 2021)
+    provider: Stringari et al., Sci. Rep. 11:3604
+    modalities: [rgb]
+    intended_roles: [input]
+    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    data_types: [labelled_image_crops]
+    documentation: [https://github.com/caiostringari/deepwaves, https://doi.org/10.1038/s41598-021-83188-y]
+    license: {status: BSD-3-Clause, notes: "Licence of the repository (code); data hosted on Google Drive."}
+    phase: v0.4.0
+    doc: docs/literature/landscape_review.md
+    verification:
+      status: documented
+      date: 2026-09-26
+      notes: "10k and 20k training sets, 1k test set of breaking/non-breaking crops. Pretraining or auxiliary task, not wave labels."
+
+  - dataset_id: kwon2023_xband
+    name: X-band radar image sequences with buoy Hs (Kwon et al. 2023)
+    provider: Kwon, Chang and Yang, PLOS ONE 18:e0292884
+    modalities: [radar, in_situ_wave]
+    intended_roles: [input, reference]
+    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    data_types: [radar_image_sequences, buoy_hs]
+    temporal: {coverage: "2021-06-01 to 2021-08-13, ~1.43 s antenna rotation"}
+    spatial: {platform_types: [shore_radar], coverage: "Sokcho, Republic of Korea (15-25 m depth)"}
+    documentation: [https://doi.org/10.1371/journal.pone.0292884, https://doi.org/10.6084/m9.figshare.24242791]
+    license: {status: to_be_confirmed, notes: "figshare record licence to be read."}
+    phase: v0.4.0
+    doc: docs/literature/landscape_review.md
+    verification:
+      status: documented
+      date: 2026-09-26
+      notes: "72,180 radar images; 3-D CNN RMSE 0.358 m, R 0.970 (SNR method R 0.665). Radar analogue of the camera task."
+
+  - dataset_id: cienfuegos2025_soliton
+    name: Pressure sensors + fixed camera + UAV video (Cienfuegos et al. 2025)
+    provider: Pontificia Universidad Catolica de Chile et al. (Zenodo)
+    modalities: [rgb, in_situ_wave, current]
+    intended_roles: [input, reference]
+    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    data_types: [bottom_pressure, adv_velocities, rectified_video, uav_video]
+    temporal: {coverage: "2023-08-01/02"}
+    documentation: [https://doi.org/10.5281/zenodo.17192781]
+    license: {status: CC-BY-4.0, url: https://creativecommons.org/licenses/by/4.0/}
+    phase: v0.4.0
+    doc: docs/literature/landscape_review.md
+    verification:
+      status: documented
+      date: 2026-09-26
+      notes: "6.4 GB public (564.5 GB project total; uncompressed video on request). Short campaign: physics checks, not training scale."
+
+  - dataset_id: salin2023_ladoga
+    name: Wind-wave video with spar buoy, Lake Ladoga (Salin 2023)
+    provider: M. Salin, Institute of Applied Physics RAS (Zenodo)
+    modalities: [rgb, in_situ_wave]
+    intended_roles: [input, reference]
+    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    data_types: [video, brightness_series, spar_buoy_heights]
+    documentation: [https://zenodo.org/records/7942014]
+    license: {status: CC-BY-4.0, url: https://creativecommons.org/licenses/by/4.0/}
+    phase: v0.4.0
+    doc: docs/literature/landscape_review.md
+    verification:
+      status: documented
+      date: 2026-09-26
+      notes: "4.6 GB; mild wind conditions; spar buoy visible in frame as height reference."
+
+  - dataset_id: kolomverse
+    name: KOLOMVERSE maritime image dataset
+    provider: KRISO (Nanda et al. 2024, IEEE T-ITS 25:20832)
+    modalities: [rgb]
+    intended_roles: [input]
+    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    data_types: [video_frames_4k, object_labels]
+    spatial: {coverage: "21 Korean sea areas; 5,845 h of video, ~2.15 M frames"}
+    documentation: [https://arxiv.org/abs/2206.09885, https://doi.org/10.1109/TITS.2024.3449122]
+    license: {status: CC-BY-4.0}
+    phase: v0.4.0
+    doc: docs/literature/landscape_review.md
+    verification:
+      status: documented
+      date: 2026-09-26
+      notes: "No wave labels confirmed; candidate for self-supervised pretraining of marine-scene encoders."
+
+  - dataset_id: sofar_spotter_archive
+    name: Sofar Spotter Archive (Registry of Open Data on AWS)
+    provider: Sofar Ocean
+    modalities: [in_situ_wave]
+    intended_roles: [reference, context]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [S3]
+      endpoints: ["s3://sofar-spotter-archive (us-west-2, no AWS account needed)"]
+    data_types: [hourly_spectra, bulk_wave_parameters, positions]
+    temporal: {coverage: "2019 to 2022-03"}
+    spatial: {platform_types: [drifting_buoy], coverage: global}
+    documentation: [https://registry.opendata.aws/sofar-spotter-archive/]
+    license: {status: sofar_data_access_agreement, notes: "Not an open licence; cite with access date and registry URL."}
+    phase: v0.4.0
+    doc: docs/literature/landscape_review.md
+    verification: {status: documented, date: 2026-09-26}
+
+  - dataset_id: cmems_insitu_waves
+    name: Copernicus Marine In Situ TAC - global wave observations (INSITU_GLO_WAV_*_013_045)
+    provider: Copernicus Marine Service In Situ TAC (EuroGOOS ROOSs, NODCs, JCOMM)
+    modalities: [in_situ_wave]
+    intended_roles: [reference]
+    access: {public: true, authentication_required: true, protocols: [API]}
+    data_types: [bulk_wave_parameters, wave_spectra]
+    documentation:
+      - https://data.marine.copernicus.eu/product/INSITU_GLO_WAV_DISCRETE_MY_013_045/description
+      - https://www.seanoe.org/data/00591/70345/
+    license: {status: copernicus_marine_licence}
+    phase: v0.4.0
+    doc: docs/literature/landscape_review.md
+    verification: {status: candidate, notes: "Global buoy aggregation incl. spectra; updated twice a year. Useful for non-US camera sites."}
+
+  - dataset_id: usace_wis
+    name: USACE Wave Information Study (WIS) hindcast
+    provider: U.S. Army Corps of Engineers, ERDC Coastal and Hydraulics Laboratory
+    modalities: [numerical_model]
+    intended_roles: [context]
+    access: {public: true, authentication_required: false, protocols: [HTTPS, THREDDS]}
+    data_types: [hourly_bulk_parameters, spectra_2d, extremes]
+    temporal: {coverage: "1980-2024 (2024 hindcast completed Nov 2025)"}
+    spatial: {coverage: "All U.S. coasts incl. Great Lakes and territories; nearshore output points"}
+    documentation: [https://wis.erdc.dren.mil/]
+    license: {status: public_domain_us_government}
+    phase: v0.3.0
+    doc: docs/literature/landscape_review.md
+    verification:
+      status: candidate
+      notes: "Required nowcast baseline at every U.S. camera site (landscape review section 7). Endpoint to be verified."
+
+  - dataset_id: esa_cci_sea_state
+    name: ESA Sea State Climate Change Initiative (altimeter Hs L2P/L3/L4)
+    provider: ESA CCI / CEDA
+    modalities: [altimetry]
+    intended_roles: [context, reference]
+    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    data_types: [along_track_hs, gridded_monthly_hs]
+    temporal: {coverage: "v3: 2002-2021"}
+    documentation:
+      - https://climate.esa.int/en/projects/sea-state/data/
+      - https://catalogue.ceda.ac.uk/uuid/8cb46a5efaa74032bf1833438f499cc3/
+    license: {status: to_be_confirmed}
+    phase: v0.4.0
+    doc: docs/datasets/satellite_sar.md
+    verification: {status: candidate, notes: "L2P DOI 10.5285/8cb46a5efaa74032bf1833438f499cc3; L3 DOI 10.5285/e6af67fca81c40b7bb3eddaadde06909."}
+
+  - dataset_id: cfosat_swim
+    name: CFOSAT SWIM directional wave spectra (L2/L2P)
+    provider: CNES / CNSA via AVISO+
+    modalities: [radar, altimetry]
+    intended_roles: [context, reference]
+    access: {public: true, authentication_required: true, protocols: [FTP, HTTPS]}
+    data_types: [directional_spectra_70_500m, nadir_hs]
+    documentation: [https://www.aviso.altimetry.fr/en/data/products/wind/wave-products/wave-wind-cfosat-products.html]
+    license: {status: aviso_registration}
+    phase: v0.4.0
+    doc: docs/datasets/satellite_sar.md
+    verification: {status: candidate}
+
+  - dataset_id: swot_karin_wave
+    name: SWOT KaRIn wide-swath significant wave height (L2 / L3 wind-wave)
+    provider: NASA / CNES (AVISO+, PO.DAAC)
+    modalities: [altimetry]
+    intended_roles: [context]
+    access: {public: true, authentication_required: true, protocols: [HTTPS]}
+    data_types: [wide_swath_hs, swell_parameters]
+    documentation: [https://www.aviso.altimetry.fr/en/data/products/windwave-products/swot-karin-level-3-wind-wave-product.html]
+    license: {status: open_with_registration}
+    phase: v0.4.0
+    doc: docs/datasets/satellite_sar.md
+    verification: {status: candidate, notes: "Reported vs buoys: bias 0.11 m, RMSE 0.43 m (0.25-0.35 m near nadir)."}

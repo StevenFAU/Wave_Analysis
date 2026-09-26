@@ -34,6 +34,7 @@ instrument ground truth**.
 
 ## Literature
 
+[Landscape review](literature/landscape_review.md) ·
 [Literature matrix](literature/literature_matrix.md) ·
 [Research gaps](literature/research_gaps.md) ·
 [Source verification log](literature/source_verification.md) ·

@@ -40,7 +40,10 @@ explained in [source_verification.md](source_verification.md). Per-paper notes:
 5. **None release code and data together**, so none can be independently
    reproduced.
 
-## Adjacent literature (to be expanded)
+## Adjacent literature
+
+The full survey (modalities, models, industry, and open data) is in
+[landscape_review.md](landscape_review.md). The table below lists anchors only.
 
 | Topic | Key references | Relevance |
 |---|---|---|
@@ -48,4 +51,8 @@ explained in [source_verification.md](source_verification.md). Per-paper notes:
 | Stereo wave reconstruction | Benetazzo 2006; Bergamasco et al. 2017 (WASS) | geometric space–time surface ground truth from video |
 | Wave-breaking video datasets | Yin et al. 2025 (VWBT) | public multi-site coastal video; breaking-type labels only |
 | Video representation learning | Bardes et al. 2024 (V-JEPA); Feichtenhofer et al. 2019 (SlowFast) | self-supervised pretraining on unlabelled ocean video |
-| X-band radar wave inversion | (to review) | the radar reference used by Choi et al.'s regression dataset |
+| X-band radar wave inversion | WaMoS II; Kwon et al. 2023 (3-D CNN, public data) | the radar reference used by Choi et al.'s regression dataset; radar analogue of the camera task |
+| Deep learning on shore imagery | Buscombe et al. 2020 (OWG); arXiv:2606.13302 (T_p, V1) | instrument-labelled single-site (OWG) vs expert/pseudo labels (2606.13302) |
+| SAR deep learning | Quach et al. 2021 (operational S-1 WV Hs since 2022) | template: independent-sensor labels at scale + temporal hold-out |
+| Whitecaps and horizon geometry | Brumer et al. 2017; Schwendeman & Thomson 2015a,b | physical features for single-frame buoy cameras (Q-M4, Q-M5) |
+| Stereo datasets | Guimarães et al. 2020 (CC BY 4.0) | geometric ground truth for spectral validation |

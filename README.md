@@ -38,7 +38,12 @@ provenance for every number. Models come after.
   coverage*, not replacing buoys.
 - **H2:** The largest near-term limitation is data, not architecture. Kamagata et al.
   (2026) reach a held-out H_s R² of only 0.107 with a state-of-the-art model trained on
-  six scenes.
+  six scenes. The [landscape review](docs/literature/landscape_review.md) found no public
+  multi-site benchmark pairing imagery with instrument wave spectra.
+- **H3:** For single-frame buoy cameras, physically grounded image features (whitecap
+  fraction, horizon tilt) combined with the buoy's own wind measurement carry
+  sea-state information that end-to-end models should be benchmarked against
+  (Q-M4, Q-M5).
 
 ---
 
@@ -157,7 +162,7 @@ Start at **[docs/index.md](docs/index.md)** (also buildable as a site with
 | Standards | [FAIR, CF, ACDD, IOOS, QARTOD, RO-Crate, DataCite, CFF](docs/STANDARDS.md) |
 | Method | [Wave parameters](docs/methodology/wave_parameters.md) · [Spectra](docs/methodology/spectral_analysis.md) · [Synchronisation](docs/methodology/synchronization.md) · [Splitting](docs/methodology/dataset_splitting.md) · [Evaluation](docs/methodology/evaluation.md) · [Models](docs/methodology/models.md) |
 | Data | [Dataset datasheets](docs/datasets/README.md) · [Registry](data/registry/datasets.yaml) · [QC](docs/QUALITY_CONTROL.md) · [Provenance](docs/PROVENANCE.md) |
-| Literature | [Matrix](docs/literature/literature_matrix.md) · [Gaps & questions](docs/literature/research_gaps.md) · [Source verification](docs/literature/source_verification.md) |
+| Literature | [Landscape review](docs/literature/landscape_review.md) · [Matrix](docs/literature/literature_matrix.md) · [Gaps & questions](docs/literature/research_gaps.md) · [Source verification](docs/literature/source_verification.md) |
 | Process | [Reproducibility](docs/REPRODUCIBILITY.md) · [Data collection & storage](docs/operations/data_collection.md) · [Roadmap](docs/ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Citation policy](docs/CITATION_POLICY.md) |
 
 ## Principles

@@ -51,6 +51,12 @@ separately (`docs/REPRODUCIBILITY.md`).
 - Models: statistical baselines; optional torch reference implementations of
   Choi 2020, Kim 2023, Yang 2026, and the Kamagata 2026 SlowFast head; physics
   losses.
+- Landscape review (`docs/literature/landscape_review.md`): techniques by
+  modality, model trends, industry, and public training data with evidence
+  levels (V1/V2/S/Q). Includes the camera-to-buoy pairing table (CDIP and
+  NDBC), 15 new registry entries (29 total), 20 Crossref-verified bibliography
+  entries, hypothesis H3, and questions Q-D6–Q-D8, Q-M4–Q-M6, L-4, L-5.
+  arXiv:2606.13302 reviewed in full.
 - Documentation: standards, architecture, data model, QC, provenance,
   reproducibility, citation policy, methodology (9 pages), dataset datasheets,
   literature matrix, research gaps, source-verification log, ADRs 0001–0008,

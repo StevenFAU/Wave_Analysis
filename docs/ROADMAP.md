@@ -20,9 +20,19 @@ Semantic versions for the software. Dataset versions are independent
 | Baselines + optional reference architectures + physics losses | ✅ |
 | Hm0 = WVHT validation at four stations | ✅ |
 
-## v0.2.0 — Registry expansion
+## v0.2.0 — Registry expansion and first historical paired benchmark
+
+Priorities from the [landscape review](literature/landscape_review.md) §7:
 
 - CDIP adapter (OPeNDAP; bandwidths; displacement → dual labels; flag mapping).
+  CDIP is the primary label source for shore cameras.
+- **PacIOOS Waimea benchmark:** `beachcam_003/004` (2009–2013, ~17,900 images)
+  paired with CDIP 106 (6.3 km). Available now; no collection needed.
+- **USGS CoastCam adapter:** NIMS S3 snapshots and data-release IO/EO
+  calibration. Pair with CDIP 214, 156, 221, and 121, and with the Dorado Spotter
+  (five sites for leave-site-out tests).
+- **Required non-vision baselines:** WIS/WW3/ERA5 nowcast at the site,
+  persistence, and propagated offshore buoy (Q-M6).
 - ERDDAP adapter (SECOORA, PacIOOS), discovery by CF standard name.
 - WebCOOS access terms and adapter; pairing study for the NC sites used in
   Kamagata's test set.
@@ -42,10 +52,14 @@ Semantic versions for the software. Dataset versions are independent
 ## v0.4.0 — Multimodal
 
 - Wind, current, and IMU/horizon features; Sentinel-1 and HLS context;
-  bathymetry. Self-supervised pretraining with audited corpora.
+  bathymetry. Self-supervised pretraining with audited corpora (KOLOMVERSE,
+  WebCOOS, NIMS; V-JEPA 2 freeze-and-probe first).
+- Buoy-camera physics features: whitecap fraction and wind (H3/Q-M4), horizon
+  tilt (Q-M5).
 - Thermal IR: candidate self-collected dataset (Q-D5, CDIP 134 Fort Pierce).
 
 ## v0.5.0 — Spectral and spatial products
 
 - S(f) and S(f, θ) targets; spatial wave-field inference on calibrated
-  cameras; stereo (WASS) ground truth where available.
+  cameras; stereo ground truth (Guimarães et al. 2020 records, CC BY 4.0) to
+  validate the spectral pipeline.
