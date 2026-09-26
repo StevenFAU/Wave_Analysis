@@ -168,6 +168,11 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # torch's dynamic module API returns Any from many calls; keep strictness elsewhere.
+# torch is an optional extra: CI type-checks without it, when nn.Module is Any.
+# These relaxations make the result identical with and without torch installed.
 module = ["wave_analysis.models.*"]
 warn_return_any = false
 disallow_untyped_calls = false
+disallow_subclassing_any = false
+disallow_untyped_decorators = false
+warn_unused_ignores = false
