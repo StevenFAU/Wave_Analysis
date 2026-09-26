@@ -124,7 +124,9 @@ def test_mkdocs_nav_keeps_external_links(tmp_path):
     from wave_analysis.dashboard.catalog import mkdocs_nav
 
     yml = tmp_path / "mkdocs.yml"
-    yml.write_text("nav:\n  - Home: index.md\n  - Site: https://example.org/\n  - G:\n      - A: a/b.md\n")
+    yml.write_text(
+        "nav:\n  - Home: index.md\n  - Site: https://example.org/\n  - G:\n      - A: a/b.md\n"
+    )
     nav = mkdocs_nav(yml)
     assert nav[0]["url"] == "docs/"
     assert nav[1] == {"title": "Site", "url": "https://example.org/", "external": True}
