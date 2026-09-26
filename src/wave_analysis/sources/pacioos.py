@@ -34,17 +34,17 @@ images already archived with a matching size are not requested again.
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote
 
 import numpy as np
 import pandas as pd
 
+from wave_analysis.ingest import archive
+from wave_analysis.ingest.archive import ArchiveItem, ArchiveSummary, Sink
 from wave_analysis.ingest.downloader import Downloader
-from wave_analysis.ingest.manifest import EntryStatus, ManifestEntry, read_manifest
+from wave_analysis.ingest.manifest import EntryStatus, ManifestEntry
 
 DATASET_ID = "pacioos_beachcam"
 ERDDAP = "https://pae-paha.pacioos.hawaii.edu/erddap"
@@ -76,9 +76,6 @@ INDEX_VARIABLES = (
 
 INDEX_DIR = "_index"
 MANIFESTS_DIR = "_manifests"
-
-#: Receiver for manifest entries as they are produced.
-Sink = Callable[[list[ManifestEntry]], object]
 
 
 def _check_dataset(dataset: str) -> str:
@@ -201,52 +198,8 @@ def fetch_index(
 
 
 def archived(dest_root: Path, dataset: str) -> tuple[set[str], set[str]]:
-    """``(archived_urls, not_found_urls)`` from the ledger.
-
-    A URL counts as archived only if its file exists with the size the ledger
-    recorded, so a deleted or truncated file is fetched again.
-    """
-    done: set[str] = set()
-    missing: set[str] = set()
-    ledger = ledger_path(dest_root, dataset)
-    if not ledger.exists():
-        return done, missing
-    for e in read_manifest(ledger):
-        if e.product != "image":
-            continue
-        if e.status == EntryStatus.NOT_FOUND:
-            missing.add(e.url)
-        elif e.sha256 is not None and e.size_bytes is not None:
-            p = local_path(dest_root, e.url)
-            if p.exists() and p.stat().st_size == e.size_bytes:
-                done.add(e.url)
-    return done, missing - done
-
-
-@dataclass
-class ArchiveSummary:
-    """Outcome of one :func:`archive_images` run."""
-
-    dataset: str
-    indexed: int = 0
-    already_archived: int = 0
-    known_missing: int = 0
-    downloaded: int = 0
-    not_found: int = 0
-    failed: int = 0
-    size_mismatch: int = 0
-    bytes: int = 0
-    seconds: float = 0.0
-    failures: list[str] = field(default_factory=list)
-
-    def line(self) -> str:
-        """One-line report."""
-        return (
-            f"{self.dataset}: {self.indexed:,} indexed, {self.already_archived:,} already archived, "
-            f"{self.downloaded:,} downloaded ({self.bytes / 1e6:,.1f} MB), "
-            f"{self.not_found} not found, {self.failed} failed, "
-            f"{self.size_mismatch} size mismatches, {self.seconds / 60:.1f} min"
-        )
+    """``(archived_urls, not_found_urls)`` from a camera's ledger (see :func:`ingest.archive.archived`)."""
+    return archive.archived(ledger_path(dest_root, dataset), lambda url: local_path(dest_root, url))
 
 
 def archive_images(
@@ -269,48 +222,27 @@ def archive_images(
     if len(datasets) != 1:
         raise ValueError("index must hold exactly one dataset")
     dataset = str(datasets[0])
-    summary = ArchiveSummary(dataset=dataset, indexed=len(index))
-    done, missing = archived(dest_root, dataset)
-    t0 = time.monotonic()
-    todo = index[~index["url"].isin(done | missing)]
-    summary.already_archived = int(index["url"].isin(done).sum())
-    summary.known_missing = int(index["url"].isin(missing).sum())
-    if limit is not None:
-        todo = todo.head(limit)
-    rows = zip(
-        todo["url"].astype(str).tolist(),
-        pd.DatetimeIndex(todo["time_utc"]).strftime("%Y-%m-%dT%H:%M:%SZ").tolist(),
-        todo["size_bytes"].astype(int).tolist(),
-        strict=True,
-    )
-    for i, (url, stamp, expected_size) in enumerate(rows, start=1):
-        entry = downloader.fetch(
-            url,
-            local_path(dest_root, url),
-            source_id=DATASET_ID,
-            product="image",
-            station_id=dataset,
-            period=stamp,
+    items = [
+        ArchiveItem(url, local_path(dest_root, url), stamp, size)
+        for url, stamp, size in zip(
+            index["url"].astype(str).tolist(),
+            pd.DatetimeIndex(index["time_utc"]).strftime("%Y-%m-%dT%H:%M:%SZ").tolist(),
+            index["size_bytes"].astype(int).tolist(),
+            strict=True,
         )
-        if entry.status == EntryStatus.VERIFIED:
-            summary.downloaded += 1
-            summary.bytes += entry.size_bytes or 0
-            if entry.size_bytes != expected_size:
-                summary.size_mismatch += 1
-                entry = entry.model_copy(
-                    update={"note": f"size differs from index ({expected_size} bytes)"}
-                )
-        elif entry.status == EntryStatus.NOT_FOUND:
-            summary.not_found += 1
-        else:
-            summary.failed += 1
-            summary.failures.append(f"{url}: {entry.http_status or entry.note}")
-        sink([entry])
-        summary.seconds = time.monotonic() - t0
-        if progress is not None and i % progress_every == 0:
-            progress(summary)
-    summary.seconds = time.monotonic() - t0
-    return summary
+    ]
+    return archive.archive_files(
+        downloader,
+        items,
+        ledger=ledger_path(dest_root, dataset),
+        path_for=lambda url: local_path(dest_root, url),
+        source_id=DATASET_ID,
+        collection=dataset,
+        sink=sink,
+        limit=limit,
+        progress=progress,
+        progress_every=progress_every,
+    )
 
 
 def index_summary(frames: Iterable[pd.DataFrame]) -> pd.DataFrame:

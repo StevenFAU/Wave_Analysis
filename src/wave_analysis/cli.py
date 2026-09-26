@@ -22,6 +22,10 @@ Commands
 ``pacioos beachcam``
     Archive the PacIOOS beach-camera images (default: the Waimea Bay pair,
     2009-2013) from ERDDAP, with a per-request ledger; resumable.
+``webcoos cameras | inventory | download``
+    List WebCOOS cameras; show a camera's still-image inventory; archive
+    one-minute stills thinned to a time grid (token from
+    ``$WEBCOOS_API_TOKEN`` or ``~/.config/wave-analysis/webcoos_token``).
 ``registry validate``
     Validate ``data/registry/datasets.yaml`` against the registry schema.
 ``dashboard catalog | live | build``
@@ -37,6 +41,7 @@ import functools
 import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -446,6 +451,137 @@ def _cmd_pacioos_beachcam(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def _webcoos_client(args: argparse.Namespace) -> Any:
+    from wave_analysis.sources.webcoos import WebCOOSClient, load_token
+
+    return WebCOOSClient(load_token(), min_interval_s=args.min_interval)
+
+
+def _cmd_webcoos_cameras(args: argparse.Namespace) -> int:
+    from wave_analysis.sources.webcoos import camera_table
+
+    with _webcoos_client(args) as client:
+        cams = camera_table(client.assets())
+    if args.state:
+        cams = cams[cams["state"].fillna("").str.contains(args.state, case=False)]
+    if args.out:
+        cams.to_csv(args.out, index=False)
+        print(f"wrote {args.out}")
+    cols = ["camera", "latitude", "longitude", "state", "status", "access_level", "label"]
+    with pd.option_context("display.width", 200, "display.max_rows", 500):
+        print(cams[cols].to_string(index=False))
+    print(f"{len(cams)} cameras")
+    return 0
+
+
+def _cmd_webcoos_inventory(args: argparse.Namespace) -> int:
+    from wave_analysis.sources.webcoos import STILLS_PRODUCT, camera_table
+
+    with _webcoos_client(args) as client:
+        cams = camera_table(client.assets()).set_index("camera")
+        if args.camera not in cams.index:
+            print(f"unknown camera {args.camera!r}", file=sys.stderr)
+            return 2
+        service = cams.loc[args.camera, "stills_service"]
+        if not isinstance(service, str):
+            print(f"{args.camera} has no {STILLS_PRODUCT} product", file=sys.stderr)
+            return 2
+        print(f"{service}: requesting inventory (WebCOOS can take several minutes)...", flush=True)
+        inv = client.inventory(service)
+    cols = ["bin_start", "has_data", "bin_end", "count", "bytes", "data_start", "data_end"]
+    bins = pd.DataFrame(inv["results"][0]["values"], columns=cols)
+    have = bins[bins["has_data"].astype(bool)]
+    print(
+        f"{len(bins)} bins, {len(have)} with data: {int(have['count'].sum()):,} images, "
+        f"{have['bytes'].sum() / 1e9:,.1f} GB, {have['data_start'].min()} to {have['data_end'].max()}"
+    )
+    if args.out:
+        bins.to_csv(args.out, index=False)
+        print(f"wrote {args.out}")
+    return 0
+
+
+def _cmd_webcoos_download(args: argparse.Namespace) -> int:
+    from wave_analysis.ingest.downloader import Downloader
+    from wave_analysis.ingest.manifest import write_manifest
+    from wave_analysis.sources.webcoos import (
+        ACKNOWLEDGEMENT,
+        HistoricalAccessError,
+        archive_stills,
+        camera_table,
+        check_age,
+        element_table,
+        ledger_path,
+        select_on_grid,
+        write_listing,
+    )
+
+    dest = Path(args.out) if args.out else data_dir("raw") / "webcoos"
+    dest.mkdir(parents=True, exist_ok=True)
+    end = pd.Timestamp(args.end or pd.Timestamp.now(tz="UTC"))
+    start = pd.Timestamp(args.start) if args.start else end - pd.Timedelta(args.lookback)
+
+    def log(msg: str) -> None:
+        print(f"{pd.Timestamp.now(tz='UTC'):%Y-%m-%dT%H:%M:%SZ} {msg}", flush=True)
+
+    failed = 0
+    with _exclusive_lock(dest / ".archiver.lock") as acquired:
+        if not acquired:
+            print(f"another run holds {dest / '.archiver.lock'}; skipping")
+            return 0
+        with _webcoos_client(args) as client:
+            cams = camera_table(client.assets()).set_index("camera")
+            unknown = sorted(set(args.cameras) - set(cams.index))
+            if unknown:
+                print(f"unknown cameras {unknown}", file=sys.stderr)
+                return 2
+            selections = {}
+            for cam in args.cameras:
+                service = cams.loc[cam, "stills_service"]
+                if not isinstance(service, str):
+                    log(f"{cam}: no stills service; skipped")
+                    continue
+                elements = element_table(client.elements(service, start, end), cam)
+                sel = select_on_grid(
+                    elements, every=args.every, tolerance=args.tolerance, offset=args.offset
+                )
+                log(
+                    f"{cam}: {len(elements):,} stills listed, {len(sel):,} on the {args.every} grid"
+                )
+                selections[cam] = sel
+        everything = pd.concat(selections.values()) if selections else pd.DataFrame()
+        try:
+            old = check_age(
+                everything.get("time_utc", pd.Series(dtype="datetime64[ns, UTC]")),
+                historical_approved=args.historical_approved,
+            )
+        except HistoricalAccessError as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            return 3
+        if old:
+            log(f"{old} selected images are older than 90 days")
+        if args.list_only:
+            return 0
+        # Image files are public: this downloader carries no token.
+        with Downloader(min_interval_s=args.min_interval) as dl:
+            for cam, sel in selections.items():
+                write_listing(sel, dest, cam)
+                summary = archive_stills(
+                    dl,
+                    sel,
+                    dest,
+                    sink=functools.partial(write_manifest, path=ledger_path(dest, cam)),
+                    limit=args.limit,
+                    progress=lambda s: log(s.line()),
+                )
+                log(summary.line())
+                for f in summary.failures[:20]:
+                    log(f"  failed: {f}")
+                failed += summary.failed
+    log(f"acknowledge in publications: {ACKNOWLEDGEMENT}")
+    return 1 if failed else 0
+
+
 def _cmd_registry_validate(args: argparse.Namespace) -> int:
     from wave_analysis.registry import validate_registry
 
@@ -615,6 +751,38 @@ def build_parser() -> argparse.ArgumentParser:
     pbc.add_argument("--out", help="archive root (default: data/raw/pacioos/beachcam)")
     pbc.add_argument("--min-interval", type=float, default=1.0)
     pbc.set_defaults(func=_cmd_pacioos_beachcam)
+
+    wc = sub.add_parser("webcoos", help="WebCOOS coastal webcams (API token)").add_subparsers(
+        dest="cmd", required=True
+    )
+    wcam = wc.add_parser("cameras", help="list cameras with position, status and products")
+    wcam.add_argument("--state", help="filter by state or territory, e.g. 'North Carolina'")
+    wcam.add_argument("--out", help="also write the table to this CSV")
+    wcam.add_argument("--min-interval", type=float, default=1.0)
+    wcam.set_defaults(func=_cmd_webcoos_cameras)
+    winv = wc.add_parser("inventory", help="a camera's one-minute-stills inventory (slow)")
+    winv.add_argument("camera")
+    winv.add_argument("--out", help="write the bins to this CSV")
+    winv.add_argument("--min-interval", type=float, default=1.0)
+    winv.set_defaults(func=_cmd_webcoos_inventory)
+    wdl = wc.add_parser("download", help="archive one-minute stills thinned to a time grid")
+    wdl.add_argument("cameras", nargs="+", help="camera slugs, e.g. currituck_hampton_inn")
+    wdl.add_argument("--start", help="UTC start (default: --end minus --lookback)")
+    wdl.add_argument("--lookback", default="1D", help="window when --start is not given (1D)")
+    wdl.add_argument("--end", help="UTC end (default: now)")
+    wdl.add_argument("--every", default="30min", help="grid step (default 30min)")
+    wdl.add_argument("--tolerance", default="5min", help="max distance from a grid time")
+    wdl.add_argument("--offset", default="0min", help="grid offset from the hour")
+    wdl.add_argument("--limit", type=int, help="at most N new images per camera")
+    wdl.add_argument("--list-only", action="store_true", help="list and check; download nothing")
+    wdl.add_argument(
+        "--historical-approved",
+        action="store_true",
+        help="WebCOOS has agreed to a large download of data older than 90 days",
+    )
+    wdl.add_argument("--out", help="archive root (default: data/raw/webcoos)")
+    wdl.add_argument("--min-interval", type=float, default=1.0)
+    wdl.set_defaults(func=_cmd_webcoos_download)
 
     dash = sub.add_parser("dashboard", help="public dashboard data and site").add_subparsers(
         dest="cmd", required=True

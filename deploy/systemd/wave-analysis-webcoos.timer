@@ -1,0 +1,11 @@
+# Stills are one per minute in daylight; hourly collection keeps each request small.
+[Unit]
+Description=Wave_Analysis: hourly WebCOOS still-image collector
+
+[Timer]
+OnCalendar=*-*-* *:25:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

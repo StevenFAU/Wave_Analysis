@@ -186,30 +186,66 @@ datasets:
     access:
       public: true
       authentication_required: true
-      protocols: [HTTPS, API]
-      endpoints: [https://webcoos.org/]
-    data_types: [archived_imagery, video, derived_products]
-    temporal: {timezone: UTC}
-    spatial: {platform_types: [shore_camera], coverage: "U.S. Southeast and expanding"}
+      protocols: [HTTPS, API, S3]
+      endpoints:
+        - https://app.webcoos.org/webcoos/api/v1/assets/
+        - https://app.webcoos.org/webcoos/api/v1/services/{service}/inventory/
+        - https://app.webcoos.org/webcoos/api/v1/elements/?service={service}&starting_after={t}&starting_before={t}&page_size=1000
+        - https://s3.us-west-2.amazonaws.com/webcoos/media/   # image files (public; no token)
+      rate_limit_guidance: >
+        Usage guidelines: "Download only a reasonable amount of data"; contact
+        webcoos@secoora.org before downloading "a large amount of data that is greater than
+        90 days old". Project default 1 request/s, stills thinned to a 30-min grid.
+    data_types: [one_minute_stills, video_archive, annotated_image, object_detection_results,
+                 rip_detection_results, video_streams]
+    temporal:
+      timezone: UTC
+      notes: >
+        One-minute stills in daylight, with the capture time to the second
+        (extents.temporal.min). Yin et al. (2025) cameras, inventories of 2026-09-26:
+        currituck_hampton_inn 2022-01-04 to present (1.11 M stills, 692 GB);
+        jennette_south 2022-10-03 to 2026-09-16 (1.01 M, 634 GB); oakisland_east 2022-01-01
+        to present (977 k, 295 GB); oakisland_west 2021-12-03 to present (921 k, 289 GB);
+        jennette_north: inventory request timed out (HTTP 504), no stills in the last day.
+    spatial:
+      platform_types: [shore_camera]
+      coverage: "86 cameras (2026-09-26), U.S. coasts and Great Lakes; 7 in North Carolina"
+    formats: [jpeg, mp4, json]
     documentation:
-      - https://webcoos.org/about/
-      - https://webcoos.org/docs/doc/access/
+      - https://webcoos.org/usage-guidelines
       - https://github.com/WebCOOS/py-webcoos-client
       - https://ioos.noaa.gov/project/ott-webcoos/
-    license: {status: to_be_confirmed, notes: "Client code is NOAA open source; imagery terms not yet found."}
+    citation: >
+      "SECOORA is acknowledged for leading the WebCOOS program, which collected [images of
+      interest] in the WebCOOS dataset in this study," citing WebCOOS as "WebCOOS
+      [year(s) of imagery]" (usage guidelines).
+    license:
+      status: usage_guidelines
+      url: https://webcoos.org/usage-guidelines
+      notes: >
+        No licence field in the API metadata. The usage guidelines permit lawful, ethical use,
+        reserve the right to request removal or restrict use, ask for "a reasonable amount of
+        data", require contacting webcoos@secoora.org before large downloads of data older than
+        90 days, and give the acknowledgement above. Redistribution is not addressed: ask
+        before publishing images.
     phase: v0.2.0
-    adapter: wave_analysis.sources.webcoos.WebCOOSSource
+    adapter: wave_analysis.sources.webcoos
     doc: docs/datasets/webcoos.md
     verification:
-      status: documented
+      status: verified
       date: 2026-09-26
-      evidence: [https://app.webcoos.org/webcoos/api/v1/assets/]
+      evidence:
+        - https://app.webcoos.org/webcoos/api/v1/assets/
+        - https://app.webcoos.org/webcoos/api/v1/services/oakisland_west-one-minute-stills-s3/inventory/
+        - https://webcoos.org/usage-guidelines
       notes: >
-        API requires a token (HTTP 403 "Authentication credentials were not provided" without
-        one; header "Authorization: Token <key>"). Archive inventory per service at
-        /api/v1/services/<slug>/inventory/. Nearest CDIP: Oak Island -> CDIP 200/41108 (24.5 km);
-        Currituck -> CDIP 433/44056 (21.6 km). Camera IDs used by Yin et al. (2025) match
-        WebCOOS naming.
+        Accessed with a project token: HTTP 403 without it, 200 with "Authorization: Token
+        <key>". 86 camera assets; all five Yin et al. (2025) cameras are public and listed.
+        Elements carry the capture time and file size; image files are on a public S3 bucket.
+        Stills downloaded and checked (2560 x 1440 JPEG with EXIF). page_size=1000 is honoured
+        (default 100). Nearest wave buoys (km from the API positions): Currituck -> CDIP
+        433/44056 (22.2); Jennette's Pier -> CDIP 243/44086 (18.6); Oak Island -> CDIP
+        200/41108 (28.9, historic record ends 2026-07-20, no realtime file on 2026-09-26).
 
   - dataset_id: ioos_erddap
     name: U.S. IOOS regional ERDDAP servers (SECOORA, PacIOOS, SCCOOS, GCOOS, ...)

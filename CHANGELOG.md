@@ -47,6 +47,16 @@ separately (`docs/REPRODUCIBILITY.md`).
   names, duplicates, URLs), downloads the images with a per-request ledger,
   checks every size against the index, and resumes. Started on the Waimea Bay
   pair (17,854 images, 3.3 GB), the first historical benchmark with CDIP 106.
+- WebCOOS adapter (`wave_analysis.sources.webcoos`, `wave-analysis webcoos cameras |
+  inventory | download`): token from `$WEBCOOS_API_TOKEN` or a mode-600 file, sent
+  only to the API host and never logged; camera, inventory and element listings;
+  one-minute stills thinned to a time grid; archive with a ledger and resume. The
+  90-day rule of the WebCOOS usage guidelines is enforced (`--historical-approved`).
+  Optional hourly collector for the five Yin et al. (2025) cameras
+  (`install_collectors.sh --webcoos`). Camera sites updated with API positions
+  (Oak Island was 7.8 km off) and Jennette's Pier added.
+- Shared resumable archiver (`wave_analysis.ingest.archive`) used by the PacIOOS
+  and WebCOOS image collections.
 - The downloader streams bodies to disk while hashing them, so files larger
   than memory can be fetched; a connection that drops mid-body is retried.
 - Public dashboard on GitHub Pages (`dashboard/`, `wave_analysis.dashboard`,

@@ -4,6 +4,7 @@
 #   scripts/install_collectors.sh            # buoycam (hourly) + NDBC realtime (1st/15th)
 #   scripts/install_collectors.sh --sync       # also the daily offsite copy (needs rclone)
 #   scripts/install_collectors.sh --dashboard  # also hourly dashboard publication (needs push access)
+#   scripts/install_collectors.sh --webcoos    # also hourly WebCOOS stills (needs the API token)
 #   scripts/install_collectors.sh --remove     # stop and remove all units
 #
 # Units are rendered from deploy/systemd/*.{service,timer} with @REPO@ set to
@@ -18,7 +19,7 @@ TIMERS=(wave-analysis-buoycam wave-analysis-ndbc-realtime)
 
 if [[ "${1:-}" == "--remove" ]]; then
     for u in wave-analysis-buoycam wave-analysis-ndbc-realtime wave-analysis-offsite-sync \
-        wave-analysis-dashboard; do
+        wave-analysis-dashboard wave-analysis-webcoos; do
         systemctl --user disable --now "$u.timer" 2>/dev/null || true
         rm -f "$UNIT_DIR/$u.service" "$UNIT_DIR/$u.timer"
     done
@@ -42,6 +43,11 @@ for arg in "$@"; do
                 exit 1
             }
             TIMERS+=(wave-analysis-dashboard)
+            ;;
+        --webcoos)
+            tok="${XDG_CONFIG_HOME:-$HOME/.config}/wave-analysis/webcoos_token"
+            [[ -s "$tok" ]] || { echo "save the WebCOOS API token to $tok first (docs/datasets/webcoos.md)" >&2; exit 1; }
+            TIMERS+=(wave-analysis-webcoos)
             ;;
         *) echo "unknown option: $arg" >&2; exit 2 ;;
     esac

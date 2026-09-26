@@ -1,0 +1,20 @@
+# Hourly WebCOOS still-image collector (see docs/datasets/webcoos.md).
+# Rendered into ~/.config/systemd/user/ by scripts/install_collectors.sh --webcoos,
+# which replaces @REPO@ with the repository path. The API token is read from
+# ~/.config/wave-analysis/webcoos_token (mode 600).
+[Unit]
+Description=Wave_Analysis: archive WebCOOS stills of the Yin et al. (2025) cameras (30-min grid)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+# A 3-day look-back recovers short outages; archived images are skipped, so a
+# steady-state run lists ~3 days of elements (one page per camera) and fetches
+# the new images only. Recent data only: WebCOOS asks to be contacted before
+# large downloads of data older than 90 days.
+ExecStart=@REPO@/.venv/bin/wave-analysis webcoos download currituck_hampton_inn jennette_north jennette_south oakisland_east oakisland_west --lookback 3D
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=1h

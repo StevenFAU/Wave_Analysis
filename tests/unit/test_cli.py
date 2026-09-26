@@ -21,3 +21,10 @@ def test_version(capsys):
     with pytest.raises(SystemExit):
         main(["--version"])
     assert "wave-analysis" in capsys.readouterr().out
+
+
+def test_webcoos_download_defaults():
+    args = build_parser().parse_args(["webcoos", "download", "oakisland_west"])
+    assert args.cameras == ["oakisland_west"]
+    assert (args.lookback, args.every, args.tolerance) == ("1D", "30min", "5min")
+    assert not args.historical_approved and not args.list_only

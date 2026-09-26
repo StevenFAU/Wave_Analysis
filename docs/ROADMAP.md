@@ -37,8 +37,10 @@ Priorities from the [landscape review](literature/landscape_review.md) §7:
 - **Required non-vision baselines:** WIS/WW3/ERA5 nowcast at the site,
   persistence, and propagated offshore buoy (Q-M6).
 - ERDDAP adapter (SECOORA, PacIOOS), discovery by CF standard name.
-- WebCOOS access terms and adapter; pairing study for the NC sites used in
-  Kamagata's test set.
+- ✅ WebCOOS access terms and adapter; hourly collection of the Yin et al. (2025)
+  cameras. Next: request historical access (webcoos@secoora.org); pairing study for
+  the NC sites used in Kamagata's test set (CDIP 433, 243; CDIP 200 offline since
+  2026-07-20).
 - NDBC `adcp2` parser plus QARTOD current tests; NDBC deployment table.
 - CF/ACDD netCDF export of standardized tables.
 - Directional-moment regridding.

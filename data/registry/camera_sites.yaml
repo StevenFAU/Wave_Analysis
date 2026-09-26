@@ -134,30 +134,40 @@ sites:
       - {station_id: "52200", network: CDIP, cdip_id: "121", role: primary}
 
   - site_id: webcoos_oak_island
-    name: WebCOOS camera, Oak Island (North Carolina)
+    name: WebCOOS cameras oakisland_east / oakisland_west, Oak Island (North Carolina)
     provider: WebCOOS
     dataset_id: webcoos
-    latitude: 33.914
-    longitude: -78.14
-    approximate: true
-    coordinate_source: "approximate position of the Oak Island pier"
-    period: "multi-year (API token required)"
+    latitude: 33.9126
+    longitude: -78.2243
+    coordinate_source: "WebCOOS API asset location (both views), 2026-09-26"
+    period: "one-minute stills 2021-12 to present (API token required)"
     references:
       - {station_id: "41108", network: CDIP, cdip_id: "200", role: primary}
       - {station_id: "41013", network: NDBC, role: offshore}
 
   - site_id: webcoos_currituck
-    name: WebCOOS camera, Currituck (North Carolina)
+    name: WebCOOS camera currituck_hampton_inn, Corolla (North Carolina)
     provider: WebCOOS
     dataset_id: webcoos
-    latitude: 36.37
-    longitude: -75.83
-    approximate: true
-    coordinate_source: "approximate position of the Currituck Banks site"
-    period: "multi-year (API token required)"
+    latitude: 36.3779
+    longitude: -75.8258
+    coordinate_source: "WebCOOS API asset location, 2026-09-26"
+    period: "one-minute stills 2022-01 to present (API token required)"
     references:
       - {station_id: "44056", network: CDIP, cdip_id: "433", role: primary}
       - {station_id: "44014", network: NDBC, role: offshore}
+
+  - site_id: webcoos_jennettes_pier
+    name: WebCOOS cameras jennette_north / jennette_south, Jennette's Pier, Nags Head (North Carolina)
+    provider: WebCOOS
+    dataset_id: webcoos
+    latitude: 35.9123
+    longitude: -75.5965
+    coordinate_source: "WebCOOS API asset location (north view; south view 35.9063, -75.5942), 2026-09-26"
+    period: "one-minute stills 2022-10 to 2026-09-16 (south view; API token required)"
+    references:
+      - {station_id: "44086", network: CDIP, cdip_id: "243", role: primary}
+      - {station_id: "44095", network: NDBC, role: secondary}
 
   - site_id: fau_harbor_branch
     name: FAU Harbor Branch, Fort Pierce (Florida), candidate self-collected site
