@@ -22,8 +22,9 @@ separately (`docs/REPRODUCIBILITY.md`).
 - NDBC buoy-camera prospective archiver (`wave-analysis ndbc cameras`), per-view
   splitting of the six-camera strips and caption-band masking (measured on real images).
   The archiver backfills the last 70 h (NDBC keeps superseded images for about 72 h,
-  measured), writes a dated archive layout, streams a monthly ledger kept with
-  the archive, and takes a run lock.
+  measured), tries every observed minute stamp (the stamp varies per camera),
+  writes a dated archive layout, streams a monthly ledger kept with the
+  archive, and takes a run lock.
 - Continuous collection: systemd user timers (`deploy/systemd/`,
   `scripts/install_collectors.sh`) for the hourly archiver and twice-monthly
   gzip snapshots of realtime spectra for camera stations

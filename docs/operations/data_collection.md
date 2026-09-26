@@ -15,9 +15,14 @@ to check that it is working. The rationale is in
 
 ### Measured behaviour of the NDBC camera feed (2026-09-26)
 
-- **Cadence:** one image per camera per hour, **day and night**, stamped at
-  minute 10 (three cameras at minute 0). Night images are mostly dark but are
-  kept (ADR 0001).
+- **Cadence:** one image per camera per hour, **day and night**. Night images
+  are mostly dark but are kept (ADR 0001).
+- **Minute stamp is not fixed per camera.** Of 5,471 images, 5,313 are stamped
+  :10, 156 are stamped :00, and 2 are stamped :50. Some cameras (46089, 46050,
+  42056) switch from hour to hour. The backfill tries the latest listed
+  image's minute first, then :10 and :00. An earlier version that guessed a
+  single minute wrongly marked about 330 existing images as missing. They
+  were recovered on the next run.
 - **Publication lag:** about 20 minutes (`Last-Modified` 00:31 for a 00:10
   image), hence the minute-40 schedule.
 - **Retention:** superseded images stay downloadable at their own URL for
@@ -25,17 +30,21 @@ to check that it is working. The rationale is in
   requests return 404. The image directory is not listable (HTTP 403), so the
   backfill builds candidate file names from each camera's code and minute
   stamp.
-- **Gaps:** some hours inside the retention window return 404 (the image was
-  never published). The first probe records them in the ledger as
-  `not_found`, and they are not requested again.
-- **Size:** about 44 KB per image on average (night images about 20 KB,
-  daylight 50–75 KB).
+- **Gaps:** about **1 %** of camera-hours are never published. In the first
+  70 h backfill, 59 of about 5,530 camera-hours had no image at any minute
+  stamp, 27 of them at one camera (44014). Each 404 is recorded in the ledger
+  as `not_found` and not requested again.
+- **Size:** about 43 KB per image on average. Median by hour is about 21 KB
+  at night and 55–65 KB in daylight (Atlantic/Pacific daytime, UTC
+  14–23 h).
+- **First run (2026-09-26):** 5,392 images archived, covering 2026-09-23
+  05:10 to 2026-09-26 03:10 UTC across 79 cameras.
 
 ### Volume and cost
 
 | Stream | Per day | Per year |
 |---|---|---|
-| Camera images (79 cameras × 24 h × ~44 KB) | ~80 MB, ~1,900 files | **~30 GB**, ~690 k files |
+| Camera images (79 cameras × 24 h × ~43 KB) | ~80 MB, ~1,900 files | **~30 GB**, ~690 k files |
 | Listing snapshots (24 × 14 KB) | 0.3 MB | 0.1 GB |
 | Realtime wave files (91 stations × 7 files, ~7.5 MB per station, gzip) | n/a | **~3 GB** (24 snapshots) |
 | Ledger (CSV) | ~0.6 MB | ~0.2 GB |

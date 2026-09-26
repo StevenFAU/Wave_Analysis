@@ -5,7 +5,7 @@
 ## Context
 NDBC publishes buoy-camera images for about 72 hours and realtime spectra for
 45 days. Nobody else archives the images, so anything not collected is lost
-for good. The measured rates are about 1,900 images a day (about 35 GB a year) plus
+for good. The measured rates are about 1,900 images a day (about 30 GB a year) plus
 twice-monthly realtime spectral snapshots (about 3 GB a year compressed). The
 per-request ledger grows by about 2,000 rows a day. That is too much for Git
 (ADR 0006), and it has to survive disk loss.

@@ -217,8 +217,8 @@ from NDBC station pages is future work (v0.2).
 ## Buoy-camera archiving
 
 Images are JPEG strips of **six camera views** facing different headings, named
-`{CAM}_{YYYY}_{MM}_{DD}_{HHMM}.jpg` and stamped at minute 10 of the hour (three
-cameras at minute 0). In the first archive run (2026-09-26 00:10 UTC, 79
+`{CAM}_{YYYY}_{MM}_{DD}_{HHMM}.jpg`. They are usually stamped at minute 10 of the hour
+(97 %; also :00, rarely :50, varying per camera from hour to hour). In the first archive run (2026-09-26 00:10 UTC, 79
 images), 78 strips were 2880 × 300 px (6 × 480 px views) and one (44008) was
 2304 × 246 px, so geometry is read per image. The views show independent
 horizon tilt (buoy roll and pitch), sun glint, distant land, hull structure at

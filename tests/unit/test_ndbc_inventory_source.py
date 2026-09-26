@@ -260,44 +260,48 @@ def test_buoycam_backfill_candidates(tmp_path: Path):
     now = pd.Timestamp("2026-09-26 02:05", tz="UTC")
     cams = _camera_table("Z24A_2026_09_26_0110.jpg", "W04A_2026_09_26_0100.jpg")
     todo = backfill_candidates(cams, tmp_path, now=now, hours=5)
-    # hours strictly before the latest image, newer than now - 5 h, same minute stamp
+    # hours strictly before the latest image whose :10 stamp is newer than now - 5 h
+    # (21:05); both minute stamps are candidates, the latest image's minute first
+    z, w = "Z24A_2026_09_", "W04A_2026_09_"
     assert todo == [
-        ("41010", "Z24A_2026_09_26_0010.jpg"),
-        ("41010", "Z24A_2026_09_25_2310.jpg"),
-        ("41010", "Z24A_2026_09_25_2210.jpg"),
-        ("41010", "Z24A_2026_09_25_2110.jpg"),  # 21:10 >= now - 5 h = 21:05
-        ("46026", "W04A_2026_09_26_0000.jpg"),
-        ("46026", "W04A_2026_09_25_2300.jpg"),
-        ("46026", "W04A_2026_09_25_2200.jpg"),  # 21:00 < 21:05 is outside the window
+        ("41010", (f"{z}26_0010.jpg", f"{z}26_0000.jpg")),
+        ("41010", (f"{z}25_2310.jpg", f"{z}25_2300.jpg")),
+        ("41010", (f"{z}25_2210.jpg", f"{z}25_2200.jpg")),
+        ("41010", (f"{z}25_2110.jpg", f"{z}25_2100.jpg")),
+        ("46026", (f"{w}26_0000.jpg", f"{w}26_0010.jpg")),
+        ("46026", (f"{w}25_2300.jpg", f"{w}25_2310.jpg")),
+        ("46026", (f"{w}25_2200.jpg", f"{w}25_2210.jpg")),
+        ("46026", (f"{w}25_2100.jpg", f"{w}25_2110.jpg")),
     ]
-    # files on disk and known-missing URLs are skipped
-    have = image_path(tmp_path, "41010", "Z24A_2026_09_26_0010.jpg")
+    # an hour with any stamp on disk is skipped; known-missing names are dropped
+    have = image_path(tmp_path, "41010", f"{z}26_0000.jpg")
     have.parent.mkdir(parents=True)
     have.write_bytes(b"x")
-    missing = "https://www.ndbc.noaa.gov/images/buoycam/W04A_2026_09_25_2300.jpg"
+    missing = f"https://www.ndbc.noaa.gov/images/buoycam/{w}25_2300.jpg"
     todo2 = backfill_candidates(cams, tmp_path, now=now, hours=5, skip_urls=[missing])
-    assert ("41010", "Z24A_2026_09_26_0010.jpg") not in todo2
-    assert ("46026", "W04A_2026_09_25_2300.jpg") not in todo2
-    assert len(todo2) == 5
+    assert all(names[0] != f"{z}26_0010.jpg" for _, names in todo2)
+    assert ("46026", (f"{w}25_2310.jpg",)) in todo2
+    assert len(todo2) == 7
     with pytest.raises(ValueError):
         backfill_candidates(cams, tmp_path, now=now, hours=72)
 
 
 def test_buoycam_archive_run_records_gaps(tmp_path: Path):
-    """A full run fetches latest + backfill; a 404 hour is recorded and not re-requested."""
+    """Latest + backfill; the other minute stamp is tried; 404s are recorded, not re-requested."""
     import json
 
     from wave_analysis.ingest.manifest import write_manifest
     from wave_analysis.sources.ndbc.buoycam import archive_cameras, manifest_path, summarize
 
     listing = json.dumps([{"id": "41010", "img": "Z24A_2026_09_26_0110.jpg"}]).encode()
+    absent = ("2026_09_25_2310", "2026_09_25_2300", "2026_09_25_2210")
     requested: list[str] = []
 
     def handler(req: httpx.Request) -> httpx.Response:
         requested.append(req.url.path.rsplit("/", 1)[-1])
         if req.url.path.endswith("buoycams.php"):
             return httpx.Response(200, content=listing)
-        if req.url.path.endswith("Z24A_2026_09_25_2310.jpg"):
+        if any(a in req.url.path for a in absent):
             return httpx.Response(404)
         return httpx.Response(200, content=b"\xff\xd8jpeg")
 
@@ -309,8 +313,9 @@ def test_buoycam_archive_run_records_gaps(tmp_path: Path):
     )
     assert sum(1 for _ in ledger.open()) == len(entries) + 1  # streamed to the ledger
     counts = summarize(entries)
-    # latest 0110 + backfilled 0010 and 2210; 2310 is the 404
-    assert counts["new_images"] == 3 and counts["not_found"] == 1
+    # latest 0110; hour 00 found at :10; hour 23 absent at both stamps; hour 22 found at :00
+    assert counts["new_images"] == 3 and counts["not_found"] == 3
+    assert "Z24A_2026_09_25_2200.jpg" in requested
     requested.clear()
     again = archive_cameras(dl, tmp_path, backfill_hours=4, now=now)
     assert summarize(again)["new_images"] == 0

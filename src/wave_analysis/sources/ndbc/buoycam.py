@@ -19,7 +19,7 @@ Image format (observed on 79 images, 2026-09-26 00:10 UTC)
   each image**, never from the listing alone.
 * File name ``{CAM}_{YYYY}_{MM}_{DD}_{HHMM}.jpg`` (e.g. ``W04A_2026_09_26_0010.jpg``);
   the time matches the caption burned into the image ("09/26/2026 0010 UTC").
-  Images are stamped at minute 10 of the hour.
+  Images are stamped at minute 10 of the hour (occasionally minute 0).
 * **A caption is burned into the bottom of every image** (station ID, UTC
   time, heading label). Models can read it, which leaks station identity and
   invalidates cross-station evaluation. On all 47 daylight 2880 x 300 images
@@ -33,15 +33,18 @@ Image format (observed on 79 images, 2026-09-26 00:10 UTC)
 Cadence and retention (measured 2026-09-26)
 -------------------------------------------
 * One image per camera per hour, **day and night**, stamped at minute 10
-  (three cameras at minute 0). Images appear on the server about 20 minutes
-  after the stamp (``Last-Modified`` 00:31 for a 00:10 image).
+  (99.7 %) or occasionally minute 0. The minute is **not** fixed per camera:
+  46089, 46050 and 42056 switch between :10 and :00 from hour to hour.
+  Images appear on the server about 20 minutes after the stamp
+  (``Last-Modified`` 00:31 for a 00:10 image).
 * Superseded images stay downloadable at their own URL for about **72 hours**
   (oldest available image = now - 72 h; older requests return 404). The
   directory itself is not listable (403), so older images are recovered by
   constructing their file names: :func:`backfill_cameras`. An archiver that
   is down for less than ~3 days therefore loses nothing.
-* Some hours are simply absent (404 inside the retention window); those gaps
-  are recorded in the manifest as ``not_found`` and not re-requested.
+* Some hours are simply absent (404 for every candidate minute inside the
+  retention window); those gaps are recorded in the manifest as
+  ``not_found`` and not re-requested.
 
 Archive layout
 --------------
@@ -81,6 +84,11 @@ RETENTION_HOURS = 72
 
 #: Default backfill window: inside the retention window with a safety margin.
 DEFAULT_BACKFILL_HOURS = 70
+
+#: Minute stamps tried for each missing hour. Observed 2026-09-23..26: 5,313
+#: images at :10, 156 at :00, 2 at :50. The minute is not fixed per camera, so
+#: the latest listed image's minute is tried first, then these.
+CANDIDATE_MINUTES = (10, 0)
 
 #: Receiver for manifest entries as they are produced.
 Sink = Callable[[list[ManifestEntry]], object]
@@ -197,33 +205,37 @@ def backfill_candidates(
     now: pd.Timestamp,
     hours: int = DEFAULT_BACKFILL_HOURS,
     skip_urls: Iterable[str] = (),
-) -> list[tuple[str, str]]:
-    """``(station_id, file_name)`` pairs to request to fill gaps in the archive.
+) -> list[tuple[str, tuple[str, ...]]]:
+    """Hours to recover: ``(station_id, candidate_file_names)`` per missing hour.
 
-    For each camera in the listing, candidates are the hourly file names
-    *before* its latest image (same minute stamp) that are newer than
-    ``now - hours``, not on disk, and not already known to be missing.
-    ``hours`` must stay below :data:`RETENTION_HOURS`.
+    For each camera in the listing, every hour *before* its latest image and
+    newer than ``now - hours`` is considered. The minute stamp is not fixed
+    per camera (mostly :10, occasionally :00), so each hour gets one
+    candidate name per minute in :data:`CANDIDATE_MINUTES`, with the latest
+    image's minute first. An hour is skipped if any candidate is already on
+    disk; candidates already known to be missing are dropped. ``hours`` must
+    stay below :data:`RETENTION_HOURS`.
     """
     if hours >= RETENTION_HOURS:
         raise ValueError(f"backfill window must be < {RETENTION_HOURS} h retention, got {hours}")
     skip = set(skip_urls)
     oldest = now - pd.Timedelta(hours=hours)
-    out: list[tuple[str, str]] = []
+    out: list[tuple[str, tuple[str, ...]]] = []
     for row in cameras.itertuples(index=False):
         name = str(row.latest_image or "")
         if not _NAME.match(name):
             continue
+        sid = str(row.station_id)
         cam, latest = parse_buoycam_filename(name)
-        t = latest - pd.Timedelta(hours=1)
-        while t >= oldest:
-            fname = image_file_name(cam, t)
-            if (
-                f"{BUOYCAM_IMAGE_URL}/{fname}" not in skip
-                and not image_path(dest_root, str(row.station_id), fname).exists()
-            ):
-                out.append((str(row.station_id), fname))
-            t -= pd.Timedelta(hours=1)
+        minutes = tuple(dict.fromkeys((latest.minute, *CANDIDATE_MINUTES)))
+        hour = latest.floor("h") - pd.Timedelta(hours=1)
+        while hour + pd.Timedelta(minutes=max(minutes)) >= oldest:
+            names = [image_file_name(cam, hour + pd.Timedelta(minutes=m)) for m in minutes]
+            if not any(image_path(dest_root, sid, n).exists() for n in names):
+                todo = tuple(n for n in names if f"{BUOYCAM_IMAGE_URL}/{n}" not in skip)
+                if todo:
+                    out.append((sid, todo))
+            hour -= pd.Timedelta(hours=1)
     return out
 
 
@@ -240,10 +252,11 @@ def backfill_cameras(
     """Recover images from the last ``hours`` that the archive does not hold.
 
     NDBC keeps superseded images for ~72 h (see module notes), so this closes
-    gaps left by downtime or missed runs. Hours that return 404 are recorded
-    and skipped on later runs (:func:`known_missing_urls`). If ``sink`` is
-    given it receives entries in batches as they complete, so a long backfill
-    that is interrupted still leaves a manifest row for every file written.
+    gaps left by downtime or missed runs. For each missing hour the candidate
+    minute stamps are tried in order until one exists. Every 404 is recorded
+    and not requested again (:func:`known_missing_urls`). If ``sink`` is given
+    it receives entries in batches as they complete, so a long backfill that
+    is interrupted still leaves a manifest row for every file written.
     """
     now = pd.Timestamp(utcnow()) if now is None else now
     todo = backfill_candidates(
@@ -251,10 +264,13 @@ def backfill_cameras(
     )
     entries: list[ManifestEntry] = []
     pending: list[ManifestEntry] = []
-    for sid, fname in todo:
-        e = _fetch_image(downloader, dest_root, sid, fname)
-        entries.append(e)
-        pending.append(e)
+    for sid, names in todo:
+        for fname in names:
+            e = _fetch_image(downloader, dest_root, sid, fname)
+            entries.append(e)
+            pending.append(e)
+            if e.status != EntryStatus.NOT_FOUND:
+                break  # found it (or a transport failure: move on to the next hour)
         if sink is not None and len(pending) >= batch_size:
             sink(pending)
             pending = []
