@@ -1,0 +1,2 @@
+source_id,product,station_id,period,url,local_path,sha256,size_bytes,http_status,http_last_modified,http_etag,retrieved_at,status,software_version,note
+cdip,historic,106,historic,https://thredds.cdip.ucsd.edu/thredds/fileServer/cdip/archive/106p1/106p1_historic.nc,data/raw/cdip/106/106p1_historic.nc,778df3357fd964bb69b7bc6f73433058d77991df109114984380386dcbadf802,1048703572,200,"Tue, 09 Jun 2026 21:13:59 GMT",,2026-09-26T16:45:25.302746Z,verified,0.1.0.dev0,

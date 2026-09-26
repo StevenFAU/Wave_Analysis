@@ -24,10 +24,13 @@ Semantic versions for the software. Dataset versions are independent
 
 Priorities from the [landscape review](literature/landscape_review.md) §7:
 
-- CDIP adapter (OPeNDAP; bandwidths; displacement → dual labels; flag mapping).
-  CDIP is the primary label source for shore cameras.
-- **PacIOOS Waimea benchmark:** `beachcam_003/004` (2009–2013, ~17,900 images)
-  paired with CDIP 106 (6.3 km). Available now; no collection needed.
+- ✅ CDIP adapter: catalog, whole-file downloads, bulk and directional spectra with
+  CDIP's bandwidths, flags, deployment positions (verified on CDIP 106). Still to
+  do: displacement → zero-crossing labels. CDIP is the primary label source for
+  shore cameras.
+- **PacIOOS Waimea benchmark:** `beachcam_003/004` (2009–2013, 17,854 images)
+  paired with CDIP 106 (6.3 km). ✅ Archiver and CDIP 106 2009–2013 standardized;
+  image download started 2026-09-26. Next: pairing by hour window, splits, baselines.
 - **USGS CoastCam adapter:** NIMS S3 snapshots and data-release IO/EO
   calibration. Pair with CDIP 214, 156, 221, and 121, and with the Dorado Spotter
   (five sites for leave-site-out tests).

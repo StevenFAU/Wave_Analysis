@@ -18,9 +18,11 @@ directories.
 | `manifests/processed/` | ✅ | Provenance of standardized tables (small) |
 | `manifests/ml/<name>/` | CSV/YAML ✅, Parquet ❌ | ML manifests, exclusion ledgers, provenance |
 | `raw/` | ❌ | Upstream bytes, unchanged (offsite copy: `scripts/sync_offsite.sh`) |
+| `raw/cdip/<stn>/` | ❌ | CDIP netCDF files as served (`wave-analysis cdip download`); requests in `manifests/raw/cdip.csv` |
+| `raw/pacioos/beachcam/` | ❌ | PacIOOS beach-camera images mirroring ERDDAP's `files/` tree, `_index/` snapshots and `_manifests/<dataset>.csv` ledgers (kept with the archive) |
 | `raw/ndbc/buoycam/` | ❌ | Camera archive: `<station>/<YYYY>/<MM>/*.jpg`, `_listings/`, `_manifests/<YYYY-MM>.csv` (ledger kept with the archive, ADR 0008) |
 | `interim/` | ❌ | Scratch; also the dashboard's rolling sea-state cache (`interim/dashboard/seastate/`) |
-| `processed/` | ❌ | Standardized Parquet tables |
+| `processed/` | ❌ | Standardized Parquet tables (`processed/<source>/<station>/`, each with a provenance record) |
 
 Paths can be relocated with `WAVE_ANALYSIS_DATA=/big/disk/wave_data`.
 

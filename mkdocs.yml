@@ -44,6 +44,7 @@ nav:
       - NDBC: datasets/ndbc.md
       - NDBC ADCP: datasets/ndbc_adcp.md
       - CDIP: datasets/cdip.md
+      - PacIOOS beach cameras: datasets/pacioos_beachcam.md
       - IOOS / ERDDAP: datasets/ioos.md
       - WebCOOS: datasets/webcoos.md
       - USGS CoastCam: datasets/coastcam.md

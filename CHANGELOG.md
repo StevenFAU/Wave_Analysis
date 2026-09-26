@@ -35,6 +35,20 @@ separately (`docs/REPRODUCIBILITY.md`).
   (`ndbc download --camera-stations --realtime --gzip`); an append-only offsite
   copy via rclone (`scripts/sync_offsite.sh`, Cloudflare R2 by default); a
   coverage report (`scripts/buoycam_coverage.py`); ADR 0008.
+- CDIP adapter (`wave_analysis.sources.cdip`, `wave-analysis cdip discover |
+  download | standardize`): THREDDS catalog listing, whole-file downloads of
+  historic, deployment and realtime netCDF files, bulk and directional-spectrum
+  normalisation with sample-start times, per-deployment positions and CDIP's
+  flags, and QC including CDIP's primary flag. Conventions verified on CDIP 106
+  (docs/datasets/cdip.md): H_s = 4√m₀ of the published spectrum, α₁ equal to
+  CDIP's band mean direction, 1600 s samples, 1-based deployment index.
+- PacIOOS beach-camera archiver (`wave_analysis.sources.pacioos`,
+  `wave-analysis pacioos beachcam`): checks each ERDDAP index (UTC vs HST file
+  names, duplicates, URLs), downloads the images with a per-request ledger,
+  checks every size against the index, and resumes. Started on the Waimea Bay
+  pair (17,854 images, 3.3 GB), the first historical benchmark with CDIP 106.
+- The downloader streams bodies to disk while hashing them, so files larger
+  than memory can be fetched; a connection that drops mid-body is retried.
 - Public dashboard on GitHub Pages (`dashboard/`, `wave_analysis.dashboard`,
   ADR 0009). Views: overview, cameras map, per-station image viewer with the
   sea state at each image, archive coverage, data sources, and literature.

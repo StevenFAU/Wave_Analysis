@@ -19,6 +19,7 @@ Guarantees
 from __future__ import annotations
 
 import gzip
+import hashlib
 import os
 import tempfile
 import time
@@ -28,11 +29,11 @@ from pathlib import Path
 import httpx
 
 from wave_analysis import __version__
-from wave_analysis.ingest.checksum import sha256_bytes
 from wave_analysis.ingest.manifest import EntryStatus, ManifestEntry, utcnow
 
 USER_AGENT = f"wave-analysis/{__version__} (research data pipeline; +https://github.com/StevenFAU/Wave_Analysis)"
 _RETRY_STATUS = {429, 500, 502, 503, 504}
+_CHUNK_BYTES = 1 << 20
 
 
 @dataclass
@@ -104,6 +105,60 @@ class Downloader:
         assert last_exc is not None
         raise last_exc
 
+    def _stream_to_temp(
+        self, url: str, directory: Path, *, compress: bool
+    ) -> tuple[httpx.Response, Path | None, str | None, int]:
+        """GET ``url`` like :meth:`get`, streaming a 200 body into a temporary file.
+
+        Returns ``(response, temp_path, sha256, size)``; ``temp_path`` is
+        ``None`` for any other status. The body is hashed as it arrives, so
+        files larger than memory can be fetched. A connection that drops
+        mid-body is retried from the start like any other transport error.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            self._throttle()
+            tmp: Path | None = None
+            try:
+                with self._client.stream("GET", url) as resp:
+                    if resp.status_code == 200:
+                        directory.mkdir(parents=True, exist_ok=True)
+                        fd, name = tempfile.mkstemp(dir=directory, prefix=".partial-")
+                        tmp = Path(name)
+                        digest = hashlib.sha256()
+                        size = 0
+                        with os.fdopen(fd, "wb") as fh:
+                            gz = (
+                                gzip.GzipFile(filename="", fileobj=fh, mode="wb", mtime=0)
+                                if compress
+                                else None
+                            )
+                            write = fh.write if gz is None else gz.write
+                            for chunk in resp.iter_bytes(_CHUNK_BYTES):
+                                digest.update(chunk)
+                                size += len(chunk)
+                                write(chunk)
+                            if gz is not None:
+                                gz.close()
+                        return resp, tmp, digest.hexdigest(), size
+                    if resp.status_code not in _RETRY_STATUS:
+                        return resp, None, None, 0
+                    last_exc = httpx.HTTPStatusError(
+                        f"HTTP {resp.status_code}", request=resp.request, response=resp
+                    )
+            except httpx.TransportError as exc:
+                last_exc = exc
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
+            except BaseException:
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
+                raise
+            if attempt < self.max_retries:
+                time.sleep(self.backoff_s * 2**attempt)
+        assert last_exc is not None
+        raise last_exc
+
     def fetch(
         self,
         url: str,
@@ -140,7 +195,7 @@ class Downloader:
         if dest.exists() and not overwrite:
             raise FileExistsError(dest)
         try:
-            resp = self.get(url)
+            resp, tmp, digest, size = self._stream_to_temp(url, dest.parent, compress=compress)
         except (httpx.TransportError, httpx.HTTPStatusError) as exc:
             return ManifestEntry(
                 **base, retrieved_at=utcnow(), status=EntryStatus.FAILED, note=str(exc)[:500]
@@ -149,23 +204,17 @@ class Downloader:
             return ManifestEntry(
                 **base, retrieved_at=utcnow(), status=EntryStatus.NOT_FOUND, http_status=404
             )
-        if resp.status_code != 200:
+        if tmp is None:
             return ManifestEntry(
                 **base,
                 retrieved_at=utcnow(),
                 status=EntryStatus.FAILED,
                 http_status=resp.status_code,
             )
-        data = resp.content
-        digest = sha256_bytes(data)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=dest.parent, prefix=".partial-")
         try:
-            with os.fdopen(fd, "wb") as fh:
-                fh.write(gzip.compress(data, mtime=0) if compress else data)
             os.replace(tmp, dest)
         except BaseException:
-            Path(tmp).unlink(missing_ok=True)
+            tmp.unlink(missing_ok=True)
             raise
         if previous_sha256 is None:
             status = EntryStatus.VERIFIED
@@ -177,7 +226,7 @@ class Downloader:
             **base,
             local_path=str(dest),
             sha256=digest,
-            size_bytes=len(data),
+            size_bytes=size,
             http_status=200,
             http_last_modified=resp.headers.get("last-modified"),
             http_etag=resp.headers.get("etag"),

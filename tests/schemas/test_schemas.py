@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -115,6 +116,19 @@ def test_repository_registry_is_valid():
     assert validate_registry(data) == []
     ids = {d["dataset_id"] for d in data["datasets"]}
     assert {"ndbc", "cdip", "usgs_coastcam"} <= ids
+
+
+def test_registry_adapters_resolve():
+    """Every ``adapter`` in the registry names an importable module or attribute."""
+    reg = yaml.safe_load((ROOT / "data" / "registry" / "datasets.yaml").read_text())
+    adapters = [d["adapter"] for d in reg["datasets"] if d.get("adapter")]
+    assert adapters
+    for path in adapters:
+        module, _, attr = path.rpartition(".")
+        try:
+            importlib.import_module(path)
+        except ModuleNotFoundError:
+            assert hasattr(importlib.import_module(module), attr), path
 
 
 def test_registry_validation_catches_problems():

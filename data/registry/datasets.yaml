@@ -77,11 +77,17 @@ datasets:
       authentication_required: false
       protocols: [HTTPS, OPeNDAP, THREDDS]
       endpoints:
-        - https://thredds.cdip.ucsd.edu/thredds/dodsC/cdip/realtime/{stn}p1_rt.nc
+        - https://thredds.cdip.ucsd.edu/thredds/fileServer/cdip/archive/{stn}p1/{stn}p1_historic.nc
+        - https://thredds.cdip.ucsd.edu/thredds/fileServer/cdip/archive/{stn}p1/{stn}p1_d{NN}.nc
+        - https://thredds.cdip.ucsd.edu/thredds/fileServer/cdip/realtime/{stn}p1_rt.nc
         - https://thredds.cdip.ucsd.edu/thredds/dodsC/cdip/archive/{stn}p1/{stn}p1_historic.nc
+        - https://thredds.cdip.ucsd.edu/thredds/catalog/cdip/archive/{stn}p1/catalog.xml
     data_types: [bulk_wave_parameters, spectral_wave_density, directional_fourier_coefficients,
                  surface_displacement_time_series, sea_surface_temperature]
-    temporal: {timezone: UTC, acquisition_window: "explicit (waveTimeBounds)"}
+    temporal:
+      timezone: UTC
+      acquisition_window: "explicit: waveTime = sample start, waveTimeBounds = 1600 s sample"
+      interval: "30 min (time_coverage_resolution PT30M)"
     spatial: {platform_types: [moored_buoy], coverage: "U.S. coasts, Pacific islands; Datawell Waverider network"}
     formats: [netcdf]
     documentation:
@@ -89,17 +95,29 @@ datasets:
       - https://cdip.ucsd.edu/m/documents/
     citation: "Coastal Data Information Program (CDIP), Scripps Institution of Oceanography. Station <stn> data. https://cdip.ucsd.edu (accessed <date>)."
     license:
-      status: public_with_attribution
-      notes: "Confirm CDIP data-use/acknowledgement statement before publication."
+      status: unrestricted
+      notes: >
+        File 'license' attribute: "These data may be redistributed and used without restriction."
+        'acknowledgment' attribute (106p1): "CDIP is primarily supported by the U.S. Army Corps
+        of Engineers (USACE). Station partner: PACIOOS ; Field operator: PACIOOS/UH". Partners
+        differ by station: copy the acknowledgment of each file used.
     phase: v0.2.0
     adapter: wave_analysis.sources.cdip.CDIPSource
     doc: docs/datasets/cdip.md
     verification:
       status: verified
-      date: 2026-09-25
+      date: 2026-09-26
       evidence:
         - https://thredds.cdip.ucsd.edu/thredds/dodsC/cdip/realtime/134p1_rt.nc.dds
-      notes: "Variable names confirmed from the OPeNDAP DDS (waveHs, waveTp, waveEnergyDensity, waveA1Value..., waveTimeBounds, waveFlagPrimary)."
+        - https://thredds.cdip.ucsd.edu/thredds/dodsC/cdip/archive/106p1/106p1_historic.nc.das
+        - https://thredds.cdip.ucsd.edu/thredds/fileServer/cdip/archive/106p1/106p1_historic.nc
+      notes: >
+        106p1_historic.nc (1,048,703,572 bytes, sha256 778df335..., 388,533 records 2001-12-16
+        to 2026-02-25) downloaded and standardized. On the 84,893 records of 2009-2013: waveHs
+        equals 4*sqrt(sum(S*bandwidth)) (99th percentile difference 0.0075 m, max 0.046 m);
+        atan2(b1, a1) reproduces waveMeanDirection exactly; every sample is 1600 s and starts
+        at waveTime; all primary flags are 1 (historic files exclude records flagged bad);
+        waveSourceIndex is 1-based (index 27 holds the 18,356 records of 106p1_d27.nc).
 
   - dataset_id: usgs_coastcam
     name: USGS CoastCams (14 sites in FL, PR, MA, CA, AK, Guam)
@@ -411,19 +429,24 @@ datasets:
       status: free_reuse_with_acknowledgement
       notes: "ERDDAP 'license': may be used and redistributed for free, not for legal use; acknowledge PacIOOS."
     phase: v0.2.0
-    doc: docs/literature/landscape_review.md
+    adapter: wave_analysis.sources.pacioos
+    doc: docs/datasets/pacioos_beachcam.md
     verification:
       status: verified
       date: 2026-09-26
       evidence:
+        - "https://pae-paha.pacioos.hawaii.edu/erddap/tabledap/beachcam_003.csv?time,latitude,longitude,altitude,aboveGround,url,name,size"
         - "https://pae-paha.pacioos.hawaii.edu/erddap/tabledap/beachcam_004.csv?time,url,size&time>=2012-01-01&time<2012-01-20"
         - https://pae-paha.pacioos.hawaii.edu/erddap/info/beachcam_004/index.csv
         - https://thredds.cdip.ucsd.edu/thredds/dodsC/cdip/archive/106p1/106p1_historic.nc.das
       notes: >
-        First candidate historical benchmark: ~17,900 Waimea images concurrent with a
-        directional Waverider 6 km offshore, two views of one site. North Shore winter
-        swell spans small to very large surf. Camera-to-buoy wave transformation must be
-        addressed (offshore buoy, surf-zone imagery).
+        First historical benchmark: 17,854 Waimea images (beachcam_003: 8,935, 1.85 GB;
+        beachcam_004: 8,919, 1.42 GB) concurrent with a directional Waverider 6 km offshore,
+        two views of one site. Full indexes checked 2026-09-26: every file name is the UTC
+        time minus 10 h (HST), no duplicate times. Per the metadata the photo may be taken
+        anywhere within the named hour. 96.4% of image hours have a CDIP 106 sample starting
+        within [t - 30 min, t + 1 h). Archive: wave-analysis pacioos beachcam. Camera-to-buoy
+        wave transformation must be addressed (offshore buoy, surf-zone imagery).
 
   - dataset_id: socib_cala_millor
     name: SOCIB Beach Monitoring Facility, Cala Millor (SIRENA video + MOBIMS)

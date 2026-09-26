@@ -133,3 +133,50 @@ def test_manifest_roundtrip_and_latest(tmp_path: Path):
     assert latest_by_url(m)["u"].sha256 == "b" * 64
     assert "v" not in latest_by_url(m)
     assert m.read_text().count("source_id,") == 1
+
+
+class _DroppedStream(httpx.SyncByteStream):
+    """A body that breaks off after the first chunk."""
+
+    def __iter__(self):  # type: ignore[no-untyped-def]
+        yield b"partial"
+        raise httpx.ReadError("connection dropped")
+
+
+def test_body_larger_than_a_chunk_is_streamed_and_hashed(tmp_path: Path):
+    payload = bytes(range(256)) * 20_000  # ~5 MB, several 1 MB chunks
+    dl = Downloader(
+        min_interval_s=0,
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, content=payload)),
+    )
+    e = dl.fetch("https://x/big", tmp_path / "big", source_id="t", product="p")
+    assert e.size_bytes == len(payload) and e.sha256 == sha256_bytes(payload)
+    assert (tmp_path / "big").read_bytes() == payload
+
+
+def test_connection_dropped_mid_body_is_retried_without_leftovers(tmp_path: Path):
+    calls = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(200, stream=_DroppedStream())
+        return httpx.Response(200, content=b"complete")
+
+    dl = Downloader(min_interval_s=0, backoff_s=0, transport=httpx.MockTransport(handler))
+    e = dl.fetch("https://x/y", tmp_path / "y", source_id="t", product="p")
+    assert e.status == EntryStatus.VERIFIED and calls["n"] == 2
+    assert (tmp_path / "y").read_bytes() == b"complete"
+    assert not list(tmp_path.glob(".partial-*"))
+
+
+def test_body_dropped_on_every_attempt_is_a_recorded_failure(tmp_path: Path):
+    dl = Downloader(
+        min_interval_s=0,
+        backoff_s=0,
+        max_retries=1,
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, stream=_DroppedStream())),
+    )
+    e = dl.fetch("https://x/y", tmp_path / "y", source_id="t", product="p")
+    assert e.status == EntryStatus.FAILED and "connection dropped" in (e.note or "")
+    assert not (tmp_path / "y").exists() and not list(tmp_path.glob(".partial-*"))

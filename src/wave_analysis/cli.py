@@ -15,6 +15,13 @@ Commands
 ``ndbc cameras``
     Archive any new NDBC buoy-camera images and backfill the last ~70 h (run
     hourly to build an image archive that NDBC does not itself publish).
+``cdip discover | download | standardize``
+    List a CDIP station's archive files; download historic, deployment or
+    realtime netCDF files (``data/manifests/raw/cdip.csv``); write standardized
+    bulk, spectral and derived tables for a time range.
+``pacioos beachcam``
+    Archive the PacIOOS beach-camera images (default: the Waimea Bay pair,
+    2009-2013) from ERDDAP, with a per-request ledger; resumable.
 ``registry validate``
     Validate ``data/registry/datasets.yaml`` against the registry schema.
 ``dashboard catalog | live | build``
@@ -26,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import functools
 import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -275,6 +283,169 @@ def _exclusive_lock(path: Path) -> Iterator[bool]:
             fcntl.flock(fh, fcntl.LOCK_UN)
 
 
+def _cmd_cdip_discover(args: argparse.Namespace) -> int:
+    from wave_analysis.ingest.downloader import Downloader
+    from wave_analysis.sources.cdip import CDIPSource
+
+    with Downloader(min_interval_s=args.min_interval) as dl:
+        files = CDIPSource(dl).discover(args.stations)
+    if args.out:
+        files.to_csv(args.out, index=False)
+        print(f"wrote {args.out}")
+    with pd.option_context("display.width", 200, "display.max_rows", 200):
+        cols = ["station_id", "product", "deployment", "file_name", "approx_size_bytes"]
+        print(files[[*cols, "modified_utc"]].to_string(index=False))
+    total = files["approx_size_bytes"].sum() / 1e9
+    print(f"{len(files)} files, about {total:.1f} GB")
+    return 0
+
+
+def _cmd_cdip_download(args: argparse.Namespace) -> int:
+    from wave_analysis.ingest.downloader import Downloader
+    from wave_analysis.ingest.manifest import EntryStatus, latest_by_url, write_manifest
+    from wave_analysis.sources.cdip import CDIPSource
+
+    manifest_path = (
+        Path(args.manifest) if args.manifest else data_dir("manifests") / "raw" / "cdip.csv"
+    )
+    previous = {u: e.sha256 for u, e in latest_by_url(manifest_path).items() if e.sha256}
+    dest = data_dir("raw") / "cdip"
+    deployments = _parse_years(args.deployments) or []
+    failed = 0
+    with Downloader(min_interval_s=args.min_interval, timeout_s=args.timeout) as dl:
+        src = CDIPSource(dl)
+        for st in dict.fromkeys(args.stations):
+            # One station at a time, so a long run records what it has done so far.
+            entries = src.fetch(
+                st, args.products, dest_root=dest, deployments=deployments, previous=previous
+            )
+            write_manifest(entries, manifest_path)
+            for e in entries:
+                size = f"{e.size_bytes / 1e6:,.1f} MB" if e.size_bytes is not None else "-"
+                print(f"{e.station_id} {e.period}: {e.status.value} ({size}) {e.url}")
+            failed += sum(e.status == EntryStatus.FAILED for e in entries)
+    return 1 if failed else 0
+
+
+def _cmd_cdip_standardize(args: argparse.Namespace) -> int:
+    from wave_analysis.datasets.provenance import build_provenance, write_provenance
+    from wave_analysis.ingest.checksum import sha256_file
+    from wave_analysis.schemas.observation import validate_observation_frame
+    from wave_analysis.sources.cdip import CDIPSource, file_path, file_url, station_code
+
+    src = CDIPSource()
+    raw = data_dir("raw") / "cdip"
+    out_root = data_dir("processed") / "cdip"
+    tag = f"{args.start or 'start'}_{args.end or 'end'}".replace(":", "")
+    for st in args.stations:
+        stn = station_code(st)
+        path = raw / stn / file_path(stn, "historic").rsplit("/", 1)[-1]
+        if not path.exists():
+            print(f"{stn}: {path} not found; run 'wave-analysis cdip download {stn}'")
+            return 1
+        checksum = sha256_file(path)
+        ds = src.parse(path, start=args.start, end=args.end)
+        url = file_url(file_path(stn, "historic"))
+        obs = src.normalize(
+            ds, station_id=stn, source_file=path.name, source_url=url, source_checksum=checksum
+        )
+        validate_observation_frame(obs)
+        spec_long, derived = src.normalize_spectrum(
+            src.spectrum(ds, station_id=stn),
+            station_id=stn,
+            source_file=path.name,
+            source_url=url,
+            source_checksum=checksum,
+        )
+        validate_observation_frame(derived)
+        out = out_root / stn
+        out.mkdir(parents=True, exist_ok=True)
+        written = [
+            out / f"bulk_{tag}.parquet",
+            out / f"spectrum_{tag}.parquet",
+            out / f"spectral_bulk_{tag}.parquet",
+        ]
+        obs.to_parquet(written[0], index=False)
+        spec_long.to_parquet(written[1], index=False)
+        derived.to_parquet(written[2], index=False)
+        write_provenance(
+            build_provenance(
+                artifact_id=f"cdip_standardized_{stn}_{tag}",
+                inputs=[path],
+                outputs=written,
+                config={"start": args.start, "end": args.end},
+            ),
+            out / f"provenance_{tag}.yaml",
+        )
+        n = int(ds.sizes["waveTime"])
+        print(
+            f"{stn}: {n:,} wave records -> {len(obs):,} bulk rows, {len(spec_long):,} spectral rows"
+        )
+    return 0
+
+
+def _cmd_pacioos_beachcam(args: argparse.Namespace) -> int:
+    from wave_analysis.ingest.downloader import Downloader
+    from wave_analysis.ingest.manifest import write_manifest
+    from wave_analysis.sources.pacioos import (
+        BEACHCAMS,
+        archive_images,
+        fetch_index,
+        index_summary,
+        ledger_path,
+    )
+
+    unknown = sorted(set(args.datasets) - set(BEACHCAMS))
+    if unknown:
+        print(f"unknown datasets {unknown}; expected {sorted(BEACHCAMS)}", file=sys.stderr)
+        return 2
+    dest = Path(args.out) if args.out else data_dir("raw") / "pacioos" / "beachcam"
+    dest.mkdir(parents=True, exist_ok=True)
+
+    def log(msg: str) -> None:
+        print(f"{pd.Timestamp.now(tz='UTC'):%Y-%m-%dT%H:%M:%SZ} {msg}", flush=True)
+
+    failed = 0
+    with _exclusive_lock(dest / ".archiver.lock") as acquired:
+        if not acquired:
+            print(f"another run holds {dest / '.archiver.lock'}; skipping")
+            return 0
+        with Downloader(min_interval_s=args.min_interval) as dl:
+            indexes = []
+            for ds in args.datasets:
+                ledger = ledger_path(dest, ds)
+                entry, index = fetch_index(dl, ds, dest, start=args.start, end=args.end)
+                write_manifest([entry], ledger)
+                if index is None:
+                    log(
+                        f"{ds}: index request {entry.status.value} ({entry.http_status or entry.note})"
+                    )
+                    failed += 1
+                    continue
+                indexes.append(index)
+            if indexes:
+                with pd.option_context("display.width", 160):
+                    log("index:\n" + index_summary(indexes).to_string(index=False))
+            if args.index_only:
+                return 1 if failed else 0
+            for index in indexes:
+                ds = str(index["dataset"].iloc[0])
+                ledger = ledger_path(dest, ds)
+                summary = archive_images(
+                    dl,
+                    index,
+                    dest,
+                    sink=functools.partial(write_manifest, path=ledger),
+                    limit=args.limit,
+                    progress=lambda s: log(s.line()),
+                )
+                log(summary.line())
+                for f in summary.failures[:20]:
+                    log(f"  failed: {f}")
+                failed += summary.failed
+    return 1 if failed else 0
+
+
 def _cmd_registry_validate(args: argparse.Namespace) -> int:
     from wave_analysis.registry import validate_registry
 
@@ -397,6 +568,53 @@ def build_parser() -> argparse.ArgumentParser:
     )
     cams.add_argument("--min-interval", type=float, default=1.0)
     cams.set_defaults(func=_cmd_ndbc_cameras)
+
+    cdip = sub.add_parser("cdip", help="CDIP Waverider buoys (Scripps)").add_subparsers(
+        dest="cmd", required=True
+    )
+    cdisc = cdip.add_parser("discover", help="list a station's archive files (THREDDS catalog)")
+    cdisc.add_argument("stations", nargs="+", help="CDIP station codes, e.g. 106")
+    cdisc.add_argument("--out", help="also write the table to this CSV")
+    cdisc.add_argument("--min-interval", type=float, default=1.0)
+    cdisc.set_defaults(func=_cmd_cdip_discover)
+    cdl = cdip.add_parser("download", help="download whole netCDF files for stations")
+    cdl.add_argument("stations", nargs="+", help="CDIP station codes, e.g. 106")
+    cdl.add_argument(
+        "--products",
+        nargs="+",
+        default=["historic"],
+        choices=["historic", "realtime", "deployment"],
+        help="historic: all released records; deployment: per-deployment files with raw "
+        "displacement (large); realtime: current deployment",
+    )
+    cdl.add_argument("--deployments", help="deployment numbers for 'deployment', e.g. 10-14")
+    cdl.add_argument("--manifest", help="manifest CSV (default: data/manifests/raw/cdip.csv)")
+    cdl.add_argument("--min-interval", type=float, default=1.0)
+    cdl.add_argument("--timeout", type=float, default=120.0, help="per-request timeout [s]")
+    cdl.set_defaults(func=_cmd_cdip_download)
+    cstd = cdip.add_parser("standardize", help="write standardized tables from the historic file")
+    cstd.add_argument("stations", nargs="+")
+    cstd.add_argument("--start", help="first sample start (UTC), e.g. 2009-01-01")
+    cstd.add_argument("--end", help="end of the range (UTC, exclusive), e.g. 2014-01-01")
+    cstd.set_defaults(func=_cmd_cdip_standardize)
+
+    pac = sub.add_parser("pacioos", help="PacIOOS beach cameras (Oahu)").add_subparsers(
+        dest="cmd", required=True
+    )
+    pbc = pac.add_parser("beachcam", help="archive beach-camera images from ERDDAP (resumable)")
+    pbc.add_argument(
+        "datasets",
+        nargs="*",
+        default=["beachcam_003", "beachcam_004"],
+        help="ERDDAP datasets beachcam_001..004 (default: the Waimea Bay pair, 003 and 004)",
+    )
+    pbc.add_argument("--start", help="first image time (UTC)")
+    pbc.add_argument("--end", help="end of the range (UTC, exclusive)")
+    pbc.add_argument("--limit", type=int, help="at most N new images per camera")
+    pbc.add_argument("--index-only", action="store_true", help="fetch and check the index only")
+    pbc.add_argument("--out", help="archive root (default: data/raw/pacioos/beachcam)")
+    pbc.add_argument("--min-interval", type=float, default=1.0)
+    pbc.set_defaults(func=_cmd_pacioos_beachcam)
 
     dash = sub.add_parser("dashboard", help="public dashboard data and site").add_subparsers(
         dest="cmd", required=True

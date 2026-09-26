@@ -16,7 +16,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - run: uv sync --group dev --python 3.12
+      - run: uv sync --group dev --extra netcdf --python 3.12
       - name: ruff
         run: |
           uv run ruff check .
