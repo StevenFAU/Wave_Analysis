@@ -42,7 +42,7 @@ from __future__ import annotations
 import os
 import stat
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -71,6 +71,9 @@ HISTORICAL_SAMPLE_LIMIT = 500
 
 #: Elements per page requested (``page_size``; verified to work, default 100).
 ELEMENTS_PAGE_SIZE = 1000
+
+#: Length of each listing query (see :meth:`WebCOOSClient.elements`).
+ELEMENTS_WINDOW = "1D"
 
 #: Product whose service holds the one-minute stills.
 STILLS_PRODUCT = "one-minute-stills"
@@ -218,17 +221,40 @@ class WebCOOSClient:
         return dict(self.get_json(f"services/{service}/inventory/"))
 
     def elements(
-        self, service: str, start: pd.Timestamp | str, end: pd.Timestamp | str
+        self,
+        service: str,
+        start: pd.Timestamp | str,
+        end: pd.Timestamp | str,
+        *,
+        window: str | pd.Timedelta = ELEMENTS_WINDOW,
+        progress: Callable[[pd.Timestamp, int], object] | None = None,
     ) -> list[dict[str, Any]]:
-        """Image elements of a service with capture times in ``(start, end)``."""
-        params = {
-            "service": service,
-            "starting_after": _iso(start),
-            "starting_before": _iso(end),
-            # 1000 per page (the default is 100): a tenth of the requests.
-            "page_size": str(ELEMENTS_PAGE_SIZE),
-        }
-        return list(self.paginate("elements/", params))
+        """Image elements of a service with capture times in ``(start, end)``.
+
+        The range is listed in ``window``-long pieces: one long query is slow
+        on the server (an 85-day listing had not finished after 10 minutes),
+        while a day comes back in seconds. Pieces overlap by one second so
+        that no element on a boundary is missed; :func:`element_table` drops
+        the duplicates. ``progress(window_end, n_so_far)`` is called per piece.
+        """
+        t0, t1 = _utc(start), _utc(end)
+        step = pd.Timedelta(window)
+        out: list[dict[str, Any]] = []
+        a = t0
+        while a < t1:
+            b = min(a + step, t1)
+            params = {
+                "service": service,
+                "starting_after": _iso(a - pd.Timedelta(seconds=1) if a > t0 else a),
+                "starting_before": _iso(b + pd.Timedelta(seconds=1) if b < t1 else b),
+                # 1000 per page (the default is 100): a tenth of the requests.
+                "page_size": str(ELEMENTS_PAGE_SIZE),
+            }
+            out.extend(self.paginate("elements/", params))
+            if progress is not None:
+                progress(b, len(out))
+            a = b
+        return out
 
 
 # --------------------------------------------------------------------------- #
@@ -456,7 +482,10 @@ def _ns(t: pd.DatetimeIndex) -> np.ndarray[Any, np.dtype[np.int64]]:
     return np.asarray(naive.as_unit("ns").to_numpy(dtype="datetime64[ns]").astype(np.int64))
 
 
-def _iso(t: pd.Timestamp | str) -> str:
+def _utc(t: pd.Timestamp | str) -> pd.Timestamp:
     ts = pd.Timestamp(t)
-    ts = ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
-    return f"{ts:%Y-%m-%dT%H:%M:%SZ}"
+    return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+
+
+def _iso(t: pd.Timestamp | str) -> str:
+    return f"{_utc(t):%Y-%m-%dT%H:%M:%SZ}"

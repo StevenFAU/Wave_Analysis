@@ -541,7 +541,24 @@ def _cmd_webcoos_download(args: argparse.Namespace) -> int:
                 if not isinstance(service, str):
                     log(f"{cam}: no stills service; skipped")
                     continue
-                elements = element_table(client.elements(service, start, end), cam)
+                days = max(1, int((end - start) / pd.Timedelta(days=1)))
+                elements = element_table(
+                    client.elements(
+                        service,
+                        start,
+                        end,
+                        progress=(
+                            (
+                                lambda t, n, cam=cam: log(
+                                    f"{cam}: listed to {t:%Y-%m-%d}, {n:,} stills"
+                                )
+                            )
+                            if days > 7
+                            else None
+                        ),
+                    ),
+                    cam,
+                )
                 sel = select_on_grid(
                     elements, every=args.every, tolerance=args.tolerance, offset=args.offset
                 )

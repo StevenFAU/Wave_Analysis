@@ -144,6 +144,35 @@ def test_elements_request_uses_large_pages():
     }
 
 
+def test_elements_are_listed_in_overlapping_daily_windows():
+    windows: list[tuple[str, str]] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        p = req.url.params
+        windows.append((p["starting_after"], p["starting_before"]))
+        # The same boundary element is returned by both windows that touch it.
+        return httpx.Response(
+            200,
+            json={"results": [element("cam", "2026-09-25T00:00:00Z")], "pagination": {}},
+        )
+
+    seen: list[int] = []
+    with WebCOOSClient(TOKEN, min_interval_s=0, transport=httpx.MockTransport(handler)) as c:
+        els = c.elements(
+            "svc",
+            "2026-09-24T00:00:00Z",
+            "2026-09-26T12:00:00Z",
+            progress=lambda t, n: seen.append(n),
+        )
+    assert windows == [
+        ("2026-09-24T00:00:00Z", "2026-09-25T00:00:01Z"),
+        ("2026-09-24T23:59:59Z", "2026-09-26T00:00:01Z"),
+        ("2026-09-25T23:59:59Z", "2026-09-26T12:00:00Z"),
+    ]
+    assert seen == [1, 2, 3]
+    assert len(element_table(els, "cam")) == 1
+
+
 # --------------------------------------------------------------------------- #
 def test_camera_table():
     cams = camera_table([ASSET])
