@@ -12,12 +12,15 @@ records (~40 min past the hour), a 30-minute offset. That is tolerable for coars
 sea-state classes but not for regression, spectra, or event detection - and
 it is invisible unless recorded per sample.
 
-Two pairing modes are provided:
+Three pairing modes are provided:
 
 * :func:`pair_nearest` - nearest reference record within a tolerance.
 * :func:`pair_interval_overlap` - pair when acquisition *windows* overlap
   (preferred when both sources report windows, e.g. CDIP ``waveTimeBounds``,
   video clip start/end).
+* :func:`pair_window` - *every* reference record near each target, with its
+  offset, so that the rule choosing the label is applied later and can be
+  changed (e.g. when the target's clock is only known to some minutes).
 
 and one physical correction:
 
@@ -147,6 +150,66 @@ def pair_interval_overlap(
     tc = ts[ii] + (te[ii] - ts[ii]) / 2
     rc = rs[jj] + (re_[jj] - rs[jj]) / 2
     out["center_offset_s"] = (tc - rc) / np.timedelta64(1, "s")
+    return out
+
+
+def pair_window(
+    targets: pd.DataFrame,
+    references: pd.DataFrame,
+    *,
+    window: str | pd.Timedelta,
+    target_time: str = "time_utc",
+    reference_start: str = "start_utc",
+    reference_end: str = "end_utc",
+) -> pd.DataFrame:
+    """Every reference record whose centre lies within ``window`` of each target time.
+
+    Returns one row per (target, reference) pair with ``target_index`` and
+    ``reference_index`` (index labels of the inputs), ``offset_s`` (target time
+    minus reference centre, so positive when the target is later),
+    ``in_record`` (the target time lies in ``[start, end)``) and ``rank``
+    (0 for the nearest centre of each target; ties go to the earlier record).
+    Targets without a time or without any reference in the window have no
+    rows; count them from ``targets``.
+    """
+
+    def ns(s: pd.Series) -> np.ndarray:
+        utc = pd.to_datetime(s, utc=True).dt.tz_convert(None)
+        return utc.to_numpy(dtype="datetime64[ns]").view(np.int64)
+
+    w = pd.Timedelta(window).value
+    s_ns, e_ns = ns(references[reference_start]), ns(references[reference_end])
+    if references[[reference_start, reference_end]].isna().any().any():
+        raise ValueError("reference records need both start and end times")
+    if (e_ns < s_ns).any():
+        raise ValueError("a reference record ends before it starts")
+    c_ns = s_ns + (e_ns - s_ns) // 2
+    order = np.argsort(c_ns, kind="stable")
+    c_sorted = c_ns[order]
+
+    has_time = targets[target_time].notna().to_numpy()
+    t_ns = np.where(has_time, ns(targets[target_time]), 0)
+    lo = np.searchsorted(c_sorted, t_ns - w, side="left")
+    hi = np.searchsorted(c_sorted, t_ns + w, side="right")
+    n = np.where(has_time, hi - lo, 0)
+    ti = np.repeat(np.arange(len(t_ns)), n)
+    pos = np.arange(n.sum()) - np.repeat(np.cumsum(n) - n, n) + np.repeat(lo, n)
+    ri = order[pos]
+    offset = t_ns[ti] - c_ns[ri]
+    out = pd.DataFrame(
+        {
+            "target_index": targets.index.to_numpy()[ti],
+            "reference_index": references.index.to_numpy()[ri],
+            "offset_s": offset / 1e9,
+            "in_record": (t_ns[ti] >= s_ns[ri]) & (t_ns[ti] < e_ns[ri]),
+        }
+    )
+    key = np.lexsort((c_ns[ri], np.abs(offset), ti))
+    rank = np.empty(len(out), dtype=np.int64)
+    first = np.r_[0, np.flatnonzero(np.diff(ti[key])) + 1] if len(out) else np.array([], int)
+    within = np.arange(len(out)) - np.repeat(first, np.diff(np.r_[first, len(out)]))
+    rank[key] = within
+    out["rank"] = rank
     return out
 
 

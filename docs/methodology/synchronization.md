@@ -46,6 +46,14 @@ It reports the overlap duration, the overlap fraction of the target window, and
 the centre offset. A 3-min clip fully inside a 20-min buoy record has
 fraction 1.0.
 
+**Every record in a window** (`pair_window`): each target gets all reference
+records whose centre is within the window, one row per pair, with the offset
+from the record centre, whether the target time falls inside the record, and a
+rank by distance in time. Use it when the label rule is not yet decided or the
+target clock is uncertain: the rule (nearest, interpolated, averaged, lagged) is
+applied afterwards and its effect can be measured. The Waimea Bay–CDIP 106 table
+is built this way (`docs/datasets/pacioos_beachcam.md`).
+
 ## Spatial separation and propagation lag
 
 The great-circle distance to the reference (`haversine_m`) is stored per sample.

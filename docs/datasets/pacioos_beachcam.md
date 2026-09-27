@@ -105,6 +105,15 @@ PacIOOS: `beachcam_003` 2010-01-12 to 01-22 (112) and `beachcam_004`
 stable: monthly median views move by at most about 7 px (of 1624) with no
 re-aiming.
 
+**Overlays.** Pixel variance over 250 daytime images per camera, sampled from
+all years:
+- Both cameras have the caption band at rows 1232-1253.
+- `beachcam_004` also has a fixed black polygon over the shore: rows 985-1231,
+  full width below row 1110. It has the same shape in every quarter from 2009
+  to 2013, so it carries no date cue.
+- `beachcam_003` has no mask. Its lower third shows the highway with passing
+  vehicles and a fixture in the foreground; the water is in the upper part.
+
 **Caption.** Every image carries `YYYY.MM.DD HH:MM:SS   F: YYYYMMDDTHHMMSS`
 (bottom-left, 10 px monospaced text, followed by "C.Kontoes, T.Hilmer and
 D.Young, UH"). All 17,689 captions were read by template matching; the two
@@ -142,12 +151,78 @@ is usually 25-55 min early and the caption is the capture time. Not trusted
 - Visual: the images at the highest buoy Hs (5-6 m) show the bay full of
   breaking waves; those at the lowest (0.7-0.8 m) a glassy bay; also in 2011.
 
+**The two cameras are not simultaneous.** In 1,367 of the 8,257 hours with a
+trusted image from both, the captions differ by more than 2 min (up to 22 min;
+e.g. `beachcam_004` at hh:17 and `beachcam_003` at hh:23-25). The pattern
+changes from hour to hour within a day, which clock drift would not do, so the
+captions record real capture times. Each image is paired on its own caption.
+
+## Pairing with CDIP 106 (2026-09-27)
+
+`scripts/waimea_pairs.py` (after the two audit scripts) writes
+`data/processed/pairs/waimea_cdip106/`; its summary and provenance are also in
+`data/manifests/processed/`. **No label rule is applied.** For each image with a
+trusted time, every CDIP 106 record centred within ±3 h is kept
+(`candidates.parquet`: offset from the record centre, whether the capture falls
+inside the 1600-s sample, rank by distance in time, the record's values, flags
+and deployment). `samples.parquet` has one row per indexed image, with the
+reason it cannot be paired, sun position, the offset to the other camera's
+image of the same hour, and label diagnostics.
+
+| Images | Count |
+|---|---:|
+| Indexed | 17,854 |
+| Paired: a CDIP record centred within 30 min | 16,404 (003: 8,174; 004: 8,230) on 800 days |
+| `no_buoy_within_30min` | 647: the buoy changeovers 2010-01-30 to 02-23 and 2013-01-29 to 02-10, and single-day gaps |
+| `time_uncertain` | 638 |
+| `image_missing` (HTTP 404 at PacIOOS) | 165 |
+
+**CDIP 106 in 2009-2013.**
+- 84,893 records: 1600-s samples every 30 min, no duplicates, 68 gaps over 1 h.
+- CDIP's Hs matches the Hm0 recomputed from the spectrum within 1.2 cm on every
+  paired record. One unpaired record (2009-05-12) differs by 5 %.
+- 683 records carry secondary flag 10, `hf_transmission_errors_fixed`, with a
+  good primary flag; 55 of them are paired.
+- Deployments d09-d12 report the same position, and d13 moved 280 m. The
+  distance to the cameras is 6.31 km throughout.
+
+**Timing.**
+- The nearest record centre is a median 10.6 min and at most 29 min from the
+  capture. 73 % of captures fall inside that record's sample.
+- Travel time from the buoy to the bay: at the peak-period deep-water group
+  velocity it is a median 12 min (90 %: 19 min), and shoaling makes it longer.
+- The travel time is of the same order as the clock bound (-26 to +4 min) and
+  the 27-min sample, so no lag correction is applied yet.
+
+**Label noise.**
+- Consecutive CDIP records, 30 min apart, differ by a median 4 % of Hs (90 %:
+  10 %). That puts the sampling noise of one record at σ ≤ 4 %.
+- Around each image, the records centred within ±1 h spread by a median 0.13 m
+  (9 %; 90 %: 0.33 m, 16 %). That is what this noise alone predicts for about
+  four records, so the spread is mostly sampling noise, not timing.
+- Nearest record or interpolation in time: the label changes by a median 1 cm
+  (90 %: 6 cm; 99 %: 19 cm).
+- Example: the largest-wave image (2009-03-14 02:28 UTC) has records of 5.46,
+  6.44, 6.05 and 5.41 m within the hour. The nearest record gives 6.44 m and
+  the interpolation 6.18 m. Taking one record inflates extremes, so an averaging
+  rule is preferable.
+
+**Label range.**
+- Hs runs from 0.73 to 4.5 m (1st to 99th percentile), with a maximum of 6.44 m.
+- 1,065 images are at 3 m or more.
+- 299 images are at 4 m or more, on only 27 days. Results at high sea states
+  rest on few independent events, so splits and confidence intervals must be by
+  day or event.
+- Illumination: 15,540 day, 653 low sun (0-6°), 211 civil twilight; 17 are dark.
+
 ## Next steps
 
-- Pairing table: for each trusted image, every CDIP 106 record overlapping
-  its capture time, with offsets; label rules chosen later.
-- Record exclusion reasons (uncertain time, no buoy sample, twilight, fog,
-  lens drops) in the manifest builder's ledger. Mask the caption band before
-  training.
-- Near-duplicate and blocked-time splits: consecutive hours of one swell are
-  strongly correlated, so splits must be by time block (`datasets.splits`).
+- Label rule, to be chosen with the evidence above. Proposed: the mean Hs of
+  the records centred within ±30 min of the capture (2 records), recording
+  their spread. It halves the noise variance, and ±30 min covers the clock
+  bound.
+- Splits by day or swell event, never by image (`datasets.splits`).
+  Consecutive hours of one swell, and the two cameras, are strongly correlated.
+- Mask the caption band (rows 1232-1253) before training.
+- Image-quality features for strata or exclusion (fog, rain drops on the lens,
+  glare), recorded in the manifest builder's ledger.

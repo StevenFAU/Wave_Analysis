@@ -33,6 +33,7 @@ from wave_analysis.processing.geospatial import haversine_m, initial_bearing_deg
 from wave_analysis.processing.synchronize import (
     pair_interval_overlap,
     pair_nearest,
+    pair_window,
     propagation_lag,
 )
 from wave_analysis.qc.flags import QCFlag
@@ -105,6 +106,55 @@ def test_pair_interval_overlap():
     )
     assert len(out) == 1 and out["overlap_fraction"].iloc[0] == pytest.approx(1.0)
     assert out["center_offset_s"].iloc[0] == pytest.approx((6.5 - 10) * 60)
+
+
+def _cdip_like_records(starts, index=None):
+    s = pd.to_datetime(starts, utc=True)
+    return pd.DataFrame({"start_utc": s, "end_utc": s + pd.Timedelta(seconds=1600)}, index=index)
+
+
+def test_pair_window_keeps_every_record_with_offsets():
+    # CDIP-like 1600-s samples every 30 min, one missing (01:30).
+    recs = _cdip_like_records(
+        ["2024-01-01 00:00", "2024-01-01 00:30", "2024-01-01 01:00", "2024-01-01 02:00"],
+        index=[10, 11, 12, 13],
+    )
+    imgs = pd.DataFrame(
+        {
+            "time_utc": pd.to_datetime(
+                ["2024-01-01 00:55:00", None, "2024-01-01 06:00:00", "2024-01-01 00:28:20"],
+                utc=True,
+            )
+        },
+        index=["a", "no_time", "far", "tie"],
+    )
+    out = pair_window(imgs, recs, window="1h")
+    assert set(out["target_index"]) == {"a", "tie"}  # no rows without a time or a record
+    a = out[out["target_index"] == "a"].set_index("reference_index")
+    # centres 00:13:20, 00:43:20, 01:13:20; 02:13:20 is 78 min away
+    assert a["offset_s"].to_dict() == {10: 2500.0, 11: 700.0, 12: -1100.0}
+    assert a["in_record"].to_dict() == {10: False, 11: True, 12: False}
+    assert a["rank"].to_dict() == {11: 0, 12: 1, 10: 2}
+    tie = out[out["target_index"] == "tie"].set_index("reference_index")
+    # 00:28:20 is 15 min from two centres and inside neither sample (the 200-s gap)
+    assert tie.loc[10, "offset_s"] == 900.0 and tie.loc[11, "offset_s"] == -900.0
+    assert tie.loc[10, "rank"] == 0 and tie.loc[11, "rank"] == 1  # earlier record wins
+    assert not tie["in_record"].any()
+
+
+def test_pair_window_validates_and_handles_empty():
+    recs = _cdip_like_records(["2024-01-01 00:00"])
+    empty = pair_window(pd.DataFrame({"time_utc": pd.to_datetime([], utc=True)}), recs, window="1h")
+    assert empty.empty and list(empty.columns) == [
+        "target_index",
+        "reference_index",
+        "offset_s",
+        "in_record",
+        "rank",
+    ]
+    bad = recs.assign(end_utc=recs["start_utc"] - pd.Timedelta(seconds=1))
+    with pytest.raises(ValueError, match="ends before"):
+        pair_window(pd.DataFrame({"time_utc": recs["start_utc"]}), bad, window="1h")
 
 
 def test_propagation_lag_deep_water():

@@ -63,6 +63,14 @@ separately (`docs/REPRODUCIBILITY.md`).
   `~/.cdsapirc` (mode 600), goes only to the CDS host and is never logged. New
   variables `wave_energy_period`, `wind_wave_energy_period`, `swell_energy_period`
   (ERA5's `mwp` is m-1/m0, not Tm01). Optional extra `cds`. Real CDS fixture.
+- Waimea Bay audit (`scripts/waimea_extract.py`, `scripts/waimea_timing_audit.py`):
+  archive integrity, the capture time read from each image's burned-in caption
+  (the file name is up to an hour early; the camera clock was wrong in
+  May–July 2013), checked against the sun and CDIP 106.
+- Waimea Bay–CDIP 106 pairing table (`scripts/waimea_pairs.py`): every CDIP
+  record within 3 h of each trusted capture time, with offsets, and one row per
+  indexed image with its exclusion reason; no label rule applied yet. New
+  `processing.synchronize.pair_window`.
 - Shared resumable archiver (`wave_analysis.ingest.archive`) used by the PacIOOS
   and WebCOOS image collections.
 - The downloader streams bodies to disk while hashing them, so files larger
