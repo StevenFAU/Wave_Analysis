@@ -47,8 +47,9 @@ From `erddap/info/beachcam_003/index.csv`, and checked on the full indexes:
   rounded to 00:00 in filename. Actual time of photo may occur anytime within
   the specified hour. See timestamp on photo image for more precise time." An
   image labelled 17:00 was taken between 17:00 and 18:00. Pairing must use the
-  whole hour, or read the timestamp burned into the image. The burned-in text
-  must also be masked before training.
+  whole hour, or read the timestamp burned into the image (done: see *Audit and
+  capture times*, which also found a period when neither holds). The burned-in
+  text must also be masked before training.
 - **Sizes.** Each index row has the file size in bytes; the archiver checks
   every download against it.
 - **Licence.** "The data may be used and redistributed for free but is not
@@ -86,11 +87,67 @@ systemd-run --user --unit=wave-analysis-pacioos-waimea \
   --working-directory="$PWD" .venv/bin/wave-analysis pacioos beachcam   # resume after a reboot
 ```
 
+## Audit and capture times (2026-09-27)
+
+`scripts/waimea_extract.py` then `scripts/waimea_timing_audit.py` (outputs in
+`data/interim/waimea_audit/`; `image_times.parquet` has one row per image with
+its trusted UTC capture time or none).
+
+**Archive.** 17,689 of the 17,854 indexed images are archived. Each matches its
+ledger SHA-256 and the index size, ends with a JPEG EOI marker, and decodes at
+1624 × 1254 RGB; no two are identical. The other 165 return HTTP 404 from
+PacIOOS: `beachcam_003` 2010-01-12 to 01-22 (112) and `beachcam_004`
+2009-12-29 to 2010-01-03 (53).
+
+**Coverage.** The period 2009-02 to 2013-10 has long gaps in both cameras:
+2009-04-14 to 09-23 (162 days), 2010-08-12 to 11-03 (83), 2011-02-18 to 10-25
+(249), 2013-02-09 to 05-23 (103), and several of 1-6 weeks. The views are
+stable: monthly median views move by at most about 7 px (of 1624) with no
+re-aiming.
+
+**Caption.** Every image carries `YYYY.MM.DD HH:MM:SS   F: YYYYMMDDTHHMMSS`
+(bottom-left, 10 px monospaced text, followed by "C.Kontoes, T.Hilmer and
+D.Young, UH"). All 17,689 captions were read by template matching; the two
+copies of the time agree within 1 s on every image. There is no EXIF.
+
+**Which time to use.** Normally the caption falls inside the hour named in the
+file name: photos at hh:55 (60 %) or, in 2010-2011, hh:23-24. So the file name
+is usually 25-55 min early and the caption is the capture time. Not trusted
+(638 images, `time_source = uncertain`):
+
+- 23 May - 27 July 2013 (636 images): captions often 1-10 h after the named
+  hour, and some daylight images are stamped 19:33-23:37 HST, so the camera
+  clock was wrong. The file name is plausible but not verified; excluded.
+- 27 Feb 2010, 08:00 files (2 images): stamped about 18:00 (the day of the
+  Chile tsunami warning).
+
+**Checks of the caption time** (17,051 trusted images):
+
+- Time zone: read as HST, no image is taken with the sun more than 6 deg below
+  the horizon; read as UTC, 13,752 would be. The captions are HST.
+- Clock offset: images without any bright region occur only with the sun below
+  -3 deg (5 of 1,147 twilight images). Clock shifts from -26 to +4 min explain
+  the dark and bright twilight images equally well; larger shifts do not. This
+  bound is coarse: auto-exposure keeps images bright to about -3 deg, so few
+  images are dark.
+- Date: the white-water fraction in the water blocks (chosen from the view)
+  correlates with CDIP 106 Hs (Spearman 0.56 for `beachcam_003`, 0.19 for
+  `beachcam_004`). Over all years the peak is at +6 h (003) and 0 h (004), and
+  the correlation falls within a day; year by year it peaks within half a day
+  of zero in 2009, 2010, 2012 and 2013. 2011 (800 images) is inconclusive with
+  this crude index (peaks of 0.18 and 0.08). The index resolves dates, not
+  hours.
+- Hour scale: hour-to-hour changes of the index do not correlate with buoy
+  changes (rho about 0.01), so it cannot test timing within hours.
+- Visual: the images at the highest buoy Hs (5-6 m) show the bay full of
+  breaking waves; those at the lowest (0.7-0.8 m) a glassy bay; also in 2011.
+
 ## Next steps
 
-- Pair images with CDIP 106 records by hour window; record the exclusion
-  reasons (no buoy sample, night, fog, lens) in the manifest builder's ledger.
-- Measure the burned-in timestamp and caption band, and decide whether to read
-  capture times from it.
+- Pairing table: for each trusted image, every CDIP 106 record overlapping
+  its capture time, with offsets; label rules chosen later.
+- Record exclusion reasons (uncertain time, no buoy sample, twilight, fog,
+  lens drops) in the manifest builder's ledger. Mask the caption band before
+  training.
 - Near-duplicate and blocked-time splits: consecutive hours of one swell are
   strongly correlated, so splits must be by time block (`datasets.splits`).
