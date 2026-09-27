@@ -213,6 +213,10 @@ def test_select_on_grid_picks_nearest_within_tolerance():
     shifted = select_on_grid(df, every="1h", tolerance="5min", offset="20min")
     assert shifted["time_utc"].dt.strftime("%H:%M:%S").tolist() == ["16:20:00"]
     assert select_on_grid(df.iloc[:0]).empty
+    # Images, but none within tolerance of a grid time: empty, with UTC grid times.
+    far = element_table([element("cam", "2026-09-25T15:15:00Z")], "cam")
+    none = select_on_grid(far, every="30min", tolerance="5min")
+    assert none.empty and str(none["grid_time"].dt.tz) == "UTC"
 
 
 def test_select_on_grid_is_independent_of_time_resolution():
@@ -259,3 +263,65 @@ def test_archive_stills_downloads_resumes_and_uses_utc_dates(tmp_path: Path):
     assert {r.source_id for r in rows} == {"webcoos"} and rows[0].station_id == "cam"
     with pytest.raises(ValueError):
         local_path(tmp_path, "../cam", "x.jpg", pd.Timestamp("2026-01-01", tz="UTC"))
+
+
+def test_download_command_skips_a_camera_without_stills(tmp_path: Path, monkeypatch, capsys):
+    """An offline camera (no stills in the window) must not stop the others."""
+    import wave_analysis.cli as cli
+    import wave_analysis.ingest.downloader as downloader_module
+
+    offline = {**ASSET, "data": {**ASSET["data"], "common": {"slug": "offline_cam"}}}
+    offline["feeds"] = [
+        {
+            "products": [
+                {
+                    "data": {"common": {"slug": "one-minute-stills"}},
+                    "services": [
+                        {"data": {"common": {"slug": "offline_cam-one-minute-stills-s3"}}}
+                    ],
+                }
+            ]
+        }
+    ]
+    now = pd.Timestamp.now(tz="UTC").floor("min")
+
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def assets(self):
+            return [offline, ASSET]
+
+        def elements(self, service, start, end, **kwargs):
+            if service.startswith("offline_cam"):
+                return []
+            return [element("oakisland_west", now.floor("30min"))]
+
+    monkeypatch.setattr(cli, "_webcoos_client", lambda args: FakeClient())
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, content=b"jpeg"))
+    real = downloader_module.Downloader
+    monkeypatch.setattr(
+        downloader_module,
+        "Downloader",
+        lambda **kw: real(**{**kw, "min_interval_s": 0, "transport": transport}),
+    )
+    rc = cli.main(
+        [
+            "webcoos",
+            "download",
+            "offline_cam",
+            "oakisland_west",
+            "--lookback",
+            "2h",
+            "--out",
+            str(tmp_path),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "offline_cam: 0 stills listed" in out
+    assert "oakisland_west: 1 indexed, 0 already archived, 1 downloaded" in out
+    assert len(list((tmp_path / "oakisland_west").rglob("*.jpg"))) == 1

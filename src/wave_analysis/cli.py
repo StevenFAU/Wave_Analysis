@@ -570,6 +570,9 @@ def _cmd_webcoos_download(args: argparse.Namespace) -> int:
                 log(
                     f"{cam}: {len(elements):,} stills listed, {len(sel):,} on the {args.every} grid"
                 )
+                if sel.empty:
+                    # A camera can be offline for days (Jennette's Pier, 2026-09).
+                    continue
                 selections[cam] = sel
         everything = pd.concat(selections.values()) if selections else pd.DataFrame()
         try:

@@ -364,7 +364,7 @@ def select_on_grid(
             chosen[best] = grid[k]
     idx = sorted(chosen)
     out = elements.iloc[idx].copy()
-    out["grid_time"] = pd.DatetimeIndex([chosen[i] for i in idx])
+    out["grid_time"] = pd.DatetimeIndex([chosen[i] for i in idx], dtype=grid.dtype)
     out["offset_s"] = (out["time_utc"] - out["grid_time"]).dt.total_seconds()
     return out.reset_index(drop=True)
 
