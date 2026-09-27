@@ -33,7 +33,11 @@ _TRACKED_PACKAGES = ("numpy", "pandas", "scipy", "pyarrow", "pydantic", "httpx",
 
 
 def git_state(repo: Path | None = None) -> dict[str, Any]:
-    """Current commit, branch and dirty flag (``None`` values outside a Git checkout)."""
+    """Current commit, branch and dirty flag (``None`` values outside a Git checkout).
+
+    ``dirty`` means a tracked file differs from the commit; untracked files
+    (local tool settings, fresh outputs) do not count.
+    """
 
     def run(*args: str) -> str | None:
         try:
@@ -45,7 +49,7 @@ def git_state(repo: Path | None = None) -> dict[str, Any]:
         return out.stdout.strip()
 
     commit = run("rev-parse", "HEAD")
-    status = run("status", "--porcelain")
+    status = run("status", "--porcelain", "--untracked-files=no")
     return {
         "commit": commit,
         "branch": run("rev-parse", "--abbrev-ref", "HEAD"),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +15,7 @@ from wave_analysis.datasets.builder import FilterRule, build_manifest
 from wave_analysis.datasets.provenance import (
     build_provenance,
     config_hash,
+    git_state,
     write_provenance,
     write_ro_crate,
 )
@@ -298,3 +300,28 @@ def test_provenance_and_ro_crate(tmp_path: Path):
     )
     graph = json.loads(crate.read_text())["@graph"]
     assert any(e.get("@id") == "out.txt" and e.get("sha256") for e in graph)
+
+
+def test_git_state_ignores_untracked_files(tmp_path):
+    def git(*args):
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q")
+    git(
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.org",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "x",
+    )
+    (tmp_path / "untracked.txt").write_text("local")
+    assert git_state(tmp_path)["dirty"] is False
+    (tmp_path / "tracked.txt").write_text("a")
+    git("add", "tracked.txt")
+    assert git_state(tmp_path)["dirty"] is True
