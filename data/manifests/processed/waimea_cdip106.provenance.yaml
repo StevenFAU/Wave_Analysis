@@ -1,0 +1,49 @@
+artifact_id: waimea_cdip106
+created_at: '2026-09-27T13:43:38.236982Z'
+git:
+  commit: 6dc45c2bf7097a0ea4abbf6ed85f2c8c2bbd496c
+  branch: main
+  dirty: true
+pipeline:
+  command: python scripts/waimea_pairs.py
+  config:
+    reference: CDIP 106 (NDBC 51201), historic file, 2009-2013
+    window: 3h
+    nearest_max: 30min
+    interp_max_gap: 40min
+    range_window: 1h
+    caption_mask_rows:
+    - 1232
+    - 1254
+  config_sha256: 3d4349e590150dc39e580929389910ab86a73e1ae73209a11810eb08c5492a9c
+software:
+  python: 3.12.13
+  platform: Linux-7.0.0-34-generic-x86_64-with-glibc2.43
+  wave_analysis: 0.1.0.dev0
+  packages:
+    numpy: 2.5.3
+    pandas: 3.0.6
+    scipy: 1.18.1
+    pyarrow: 25.0.1
+    pydantic: 2.13.5
+    httpx: 0.28.1
+    torch: 2.14.0+cpu
+    xarray: 2026.7.0
+input_files:
+- path: data/interim/waimea_audit/images.parquet
+  sha256: 738af27079cde0464fa6f5d46e6dfb9e5eefb1ab14655881bb2d312f139c2968
+- path: data/interim/waimea_audit/image_times.parquet
+  sha256: f25c596c0987d15623087dfe01ccd5a701241329b982aebe3abc18701ec29213
+- path: data/processed/cdip/106/bulk_2009-01-01_2014-01-01.parquet
+  sha256: 5e6010a684c30e6a181b45d9aa3b7747631c1dc2217162d39e3eaa33e843e24f
+- path: data/processed/cdip/106/spectral_bulk_2009-01-01_2014-01-01.parquet
+  sha256: f1333efd54c2fcc22c3d47b23e52e1daccc22758f6750caad460b5192469ca1e
+upstream_manifests: []
+output_files:
+- path: data/processed/pairs/waimea_cdip106/samples.parquet
+  sha256: 1b4a646d557513eb5a07780ccb82a6d08f1079ea6c15c624636de79f7d2b5b0c
+- path: data/processed/pairs/waimea_cdip106/candidates.parquet
+  sha256: 8d906cffe2feb2725b507251226d6df9ce7354219bf15c27f88668d7ef4d71ad
+- path: data/processed/pairs/waimea_cdip106/summary.json
+  sha256: 3d56387e194861e593e01fa4178e008dbe1bf266d2e3d98aaaf0cbc483e987ea
+notes: No label rule applied; see docs/datasets/pacioos_beachcam.md.

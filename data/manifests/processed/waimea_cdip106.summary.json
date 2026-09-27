@@ -1,0 +1,169 @@
+{
+ "config": {
+  "reference": "CDIP 106 (NDBC 51201), historic file, 2009-2013",
+  "window": "3h",
+  "nearest_max": "30min",
+  "interp_max_gap": "40min",
+  "range_window": "1h",
+  "caption_mask_rows": [
+   1232,
+   1254
+  ]
+ },
+ "cdip": {
+  "records": 84893,
+  "sample_seconds": [
+   1600.0
+  ],
+  "record_spacing_s_top": {
+   "1800": 79119,
+   "1801": 2757,
+   "1799": 2658
+  },
+  "gaps_over_1h": 68,
+  "abs_Hs_minus_Hm0_m_quantiles": {
+   "0.5": 0.0025,
+   "0.9": 0.0047,
+   "0.99": 0.0075,
+   "1.0": 0.0455
+  },
+  "consecutive_relative_dHs_quantiles": {
+   "0.5": 0.04,
+   "0.9": 0.103,
+   "0.99": 0.183
+  },
+  "record_noise_relative_sigma_at_most": 0.042,
+  "source_qc_flag": {
+   "1/0": 84210,
+   "1/10": 683
+  },
+  "deployments": {
+   "106p1_d09": {
+    "first": "2009-01-01 00:22:28+00:00",
+    "last": "2010-01-30 07:54:17+00:00",
+    "latitude": 21.672733,
+    "longitude": -158.115814,
+    "distance_to_camera_m": 6314
+   },
+   "106p1_d10": {
+    "first": "2010-02-23 00:13:07+00:00",
+    "last": "2012-01-06 18:43:07+00:00",
+    "latitude": 21.672733,
+    "longitude": -158.115814,
+    "distance_to_camera_m": 6314
+   },
+   "106p1_d11": {
+    "first": "2012-01-06 22:26:07+00:00",
+    "last": "2013-01-29 08:55:07+00:00",
+    "latitude": 21.672733,
+    "longitude": -158.115814,
+    "distance_to_camera_m": 6314
+   },
+   "106p1_d12": {
+    "first": "2013-02-10 00:23:07+00:00",
+    "last": "2013-04-26 19:53:07+00:00",
+    "latitude": 21.672733,
+    "longitude": -158.115814,
+    "distance_to_camera_m": 6314
+   },
+   "106p1_d13": {
+    "first": "2013-05-08 23:23:07+00:00",
+    "last": "2013-12-31 23:53:07+00:00",
+    "latitude": 21.670549,
+    "longitude": -158.117111,
+    "distance_to_camera_m": 6310
+   }
+  }
+ },
+ "images": {
+  "indexed": 17854,
+  "exclusion": {
+   "paired": 16404,
+   "no_buoy_within_30min": 647,
+   "time_uncertain": 638,
+   "image_missing": 165
+  },
+  "paired_by_camera": {
+   "beachcam_003": 8174,
+   "beachcam_004": 8230
+  },
+  "paired_by_year": {
+   "2009": 2333,
+   "2010": 5356,
+   "2011": 1597,
+   "2012": 5188,
+   "2013": 1930
+  },
+  "paired_days": 800
+ },
+ "timing": {
+  "nearest_centre_offset_min_quantiles": {
+   "0.5": 10.6,
+   "0.9": 14.3,
+   "0.99": 14.4
+  },
+  "nearest_centre_offset_min_max": 28.9,
+  "image_inside_nearest_sample_fraction": 0.731,
+  "n_records_30min": {
+   "1": 31,
+   "2": 16370,
+   "3": 3
+  },
+  "propagation_lag_deep_min_quantiles": {
+   "0.5": 12.1,
+   "0.9": 18.9,
+   "0.99": 24.3
+  },
+  "other_camera_offset_s_abs_quantiles": {
+   "0.5": 19.0,
+   "0.9": 411.0,
+   "0.99": 1040.0
+  },
+  "other_camera_offset_over_2min_hours": 1367,
+  "hours_with_both_cameras_trusted": 8257
+ },
+ "label_sensitivity": {
+  "Hs_range_1h_m_quantiles": {
+   "0.5": 0.13,
+   "0.9": 0.33,
+   "0.99": 0.73
+  },
+  "Hs_range_1h_relative_quantiles": {
+   "0.5": 0.087,
+   "0.9": 0.159,
+   "0.99": 0.248
+  },
+  "abs_nearest_minus_interp_m_quantiles": {
+   "0.5": 0.011,
+   "0.9": 0.064,
+   "0.99": 0.186
+  },
+  "interp_available_fraction": 0.998
+ },
+ "labels": {
+  "Hs_m_quantiles": {
+   "0.01": 0.73,
+   "0.5": 1.54,
+   "0.99": 4.5
+  },
+  "Hs_m_max": 6.44,
+  "Hs_m_counts": {
+   "<1": 1574,
+   "1-2": 10670,
+   "2-3": 3095,
+   "3-4": 766,
+   ">=4": 299
+  },
+  "days_with_Hs_ge_4m": 27,
+  "source_qc_flag": {
+   "1/0": 16349,
+   "1/10": 55
+  },
+  "illumination": {
+   "day": 15540,
+   "low_sun": 653,
+   "civil_twilight": 211
+  },
+  "dark": 17
+ }
+}
