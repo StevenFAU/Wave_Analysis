@@ -26,6 +26,7 @@ from wave_analysis.dashboard.catalog import (
     to_json,
     verification_index,
 )
+from wave_analysis.dashboard.collections import CollectionInputs, build_collections
 from wave_analysis.dashboard.site import build_live, build_site, check_site
 from wave_analysis.dashboard.status import (
     StatusInputs,
@@ -302,6 +303,112 @@ def test_status_coverage_encoding(archive):
     assert st["offsite"] == {"last_sync": None}
     assert sum(st["daily"]["images"]) == 3
     assert str(archive.raw_root) not in to_json(st)
+
+
+def test_status_lists_the_buoycam_collection(archive):
+    st = build_status(archive, now=T0 + pd.Timedelta(minutes=45), window_hours=6)
+    ids = [c["id"] for c in st["collections"]]
+    assert ids == ["ndbc_buoycam", "ndbc_realtime"]  # no manifests_root: nothing else
+    cam = st["collections"][0]
+    assert cam["count"] == 3 and cam["not_found"] == 1 and cam["parts_count"] == 1
+    # The fixture's ledger URLs are not image names, so every file is unledgered.
+    assert cam["check"] == {"on_disk": 3, "ledger": 1, "missing_files": 1, "unledgered_files": 3}
+
+
+def _ledger_rows(path: Path, rows: list[dict[str, object]]) -> None:
+    at = T0.to_pydatetime()
+    write_manifest(
+        [ManifestEntry(retrieved_at=r.pop("at", at), **r) for r in rows],
+        path,
+    )
+
+
+def test_collections_count_files_and_check_ledgers(tmp_path):
+    raw, man = tmp_path / "raw", tmp_path / "manifests"
+    pac = raw / "pacioos" / "beachcam"
+    base = "https://pae-paha.pacioos.hawaii.edu/erddap/files/beachcam_003/2009/02/05"
+    img = [
+        ("beachcam_003.20090205T170000.jpg", "2009-02-06T03:00:00Z", "verified"),
+        ("beachcam_003.20090205T180000.jpg", "2009-02-06T04:00:00Z", "verified"),  # not on disk
+        ("beachcam_003.20090205T190000.jpg", "2009-02-06T05:00:00Z", "not_found"),
+    ]
+    _ledger_rows(
+        pac / "_manifests" / "beachcam_003.csv",
+        [
+            {"source_id": "pacioos_beachcam", "product": "index", "station_id": "beachcam_003",
+             "period": "all", "url": "https://pae-paha.pacioos.hawaii.edu/erddap/tabledap/x.csv",
+             "status": EntryStatus.VERIFIED},
+            *[
+                {"source_id": "pacioos_beachcam", "product": "image", "station_id": "beachcam_003",
+                 "period": period, "url": f"{base}/{name}", "size_bytes": 5, "status": EntryStatus(s)}
+                for name, period, s in img
+            ],
+        ],
+    )  # fmt: skip
+    for name in ("beachcam_003.20090205T170000.jpg", "stray.jpg"):
+        f = pac / "beachcam_003" / "2009" / "02" / "05" / name
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(b"x" * 5)
+    (pac / "_index").mkdir()
+    (pac / "_index" / "ignored.jpg").write_bytes(b"x")  # under a "_" directory
+    (man / "processed").mkdir(parents=True)
+    (man / "processed" / "waimea_cdip106.summary.json").write_text(
+        json.dumps(
+            {
+                "images": {
+                    "exclusion": {"paired": 7, "no_buoy_within_30min": 2, "time_uncertain": 1},
+                    "paired_days": 3,
+                }
+            }
+        )
+    )
+
+    wc = raw / "webcoos"
+    url = "https://s3.example.invalid/cam/2026/09/26/cam-2026-09-26-120000Z.jpg"
+    _ledger_rows(
+        wc / "_manifests" / "cam.csv",
+        [
+            {"source_id": "webcoos", "product": "image", "station_id": "cam",
+             "period": "2026-09-26T12:00:00Z", "url": url, "status": EntryStatus.FAILED},
+            {"source_id": "webcoos", "product": "image", "station_id": "cam",
+             "period": "2026-09-26T12:00:00Z", "url": url, "size_bytes": 3,
+             "status": EntryStatus.VERIFIED, "at": (T0 + pd.Timedelta("1h")).to_pydatetime()},
+        ],
+    )  # fmt: skip
+    (wc / "cam" / "2026" / "09" / "26").mkdir(parents=True)
+    (wc / "cam" / "2026" / "09" / "26" / "cam-2026-09-26-120000Z.jpg").write_bytes(b"x" * 3)
+
+    era = "https://cds.climate.copernicus.eu/api/retrieve/v1/processes/x"
+    _ledger_rows(
+        man / "raw" / "era5.csv",
+        [
+            {"source_id": "era5_waves", "product": "wave_single_levels", "station_id": "site",
+             "period": "2026-07", "url": era, "status": EntryStatus.VERIFIED,
+             "note": "request ab; CDS request 1; preliminary (was missing)"},
+            {"source_id": "era5_waves", "product": "wave_single_levels", "station_id": "site",
+             "period": "2026-07", "url": era, "status": EntryStatus.CHANGED,
+             "note": "request ab; CDS request 2; final (was preliminary)",
+             "at": (T0 + pd.Timedelta("1h")).to_pydatetime()},
+        ],
+    )  # fmt: skip
+    (raw / "era5" / "site").mkdir(parents=True)
+    (raw / "era5" / "site" / "era5_waves_site_2026-07.nc").write_bytes(b"x" * 7)
+
+    out = build_collections(CollectionInputs(raw, man))
+    by = {c["id"]: c for c in out}
+    assert list(by) == ["pacioos_waimea", "webcoos", "era5_waves"]  # no CDIP ledger: skipped
+    w = by["pacioos_waimea"]
+    assert (w["count"], w["bytes"], w["not_found"]) == (2, 10, 1)
+    assert w["check"] == {"on_disk": 2, "ledger": 2, "missing_files": 1, "unledgered_files": 1}
+    assert (w["first"], w["last"]) == ("2009-02-06T03:00:00Z", "2009-02-06T04:00:00Z")
+    assert w["pairing"]["trusted_time"] == 9 and w["pairing"]["paired"] == 7
+    c = by["webcoos"]
+    assert c["count"] == 1 and c["failed"] == 0  # the retry succeeded
+    assert c["check"]["missing_files"] == c["check"]["unledgered_files"] == 0
+    e = by["era5_waves"]
+    assert e["count"] == 1 and e["states"] == {"final": 1}
+    assert e["check"] == {"on_disk": 1, "ledger": 1, "missing_files": 0, "unledgered_files": 0}
+    assert str(tmp_path) not in to_json(out)
 
 
 def test_status_offsite_stamp(archive):

@@ -71,6 +71,11 @@ separately (`docs/REPRODUCIBILITY.md`).
   record within 3 h of each trusted capture time, with offsets, and one row per
   indexed image with its exclusion reason; no label rule applied yet. New
   `processing.synchronize.pair_window`.
+- Dashboard: a "Data held" panel on the overview with every collection on the
+  collector host (NDBC buoy cameras and realtime snapshots, PacIOOS Waimea Bay,
+  WebCOOS, ERA5, CDIP): counts and sizes from the files on disk, the period of
+  data, freshness, and a check of files against verified ledger rows. Counts
+  only; no images are republished. `status.json` gains `collections[]`.
 - Shared resumable archiver (`wave_analysis.ingest.archive`) used by the PacIOOS
   and WebCOOS image collections.
 - The downloader streams bodies to disk while hashing them, so files larger

@@ -128,6 +128,7 @@ function renderFooter() {
       "p",
       null,
       "Buoy-camera images and observations: NOAA National Data Buoy Center (U.S. Government work, public domain); sea-state values are provisional realtime data. ",
+      "Collection totals also count data from PacIOOS, WebCOOS (SECOORA), CDIP and ERA5 (Copernicus Climate Change Service); their images and files are not republished here. ",
       "Map data © OpenStreetMap contributors; bathymetry © GEBCO Compilation Group. Code: MIT licence.",
     ),
   );

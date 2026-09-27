@@ -40,7 +40,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from wave_analysis.config import data_dir, repo_root
+from wave_analysis.config import data_dir
 from wave_analysis.datasets.provenance import build_provenance, write_provenance
 from wave_analysis.physics.dispersion import group_velocity
 from wave_analysis.processing.geospatial import haversine_m
@@ -337,7 +337,7 @@ def main() -> int:
         notes="No label rule applied; see docs/datasets/pacioos_beachcam.md.",
     )
     write_provenance(prov, out / "provenance.yaml")
-    keep = repo_root() / "data" / "manifests" / "processed"
+    keep = data_dir("manifests") / "processed"
     shutil.copyfile(out / "provenance.yaml", keep / f"{NAME}.provenance.yaml")
     shutil.copyfile(paths["summary"], keep / f"{NAME}.summary.json")
     print(json.dumps(s, indent=1, default=str))

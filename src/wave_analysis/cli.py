@@ -792,7 +792,10 @@ def _cmd_dashboard_live(args: argparse.Namespace) -> int:
 
     raw = data_dir("raw")
     inputs = StatusInputs(
-        buoycam_root=raw / "ndbc" / "buoycam", ndbc_root=raw / "ndbc", raw_root=raw
+        buoycam_root=raw / "ndbc" / "buoycam",
+        ndbc_root=raw / "ndbc",
+        raw_root=raw,
+        manifests_root=data_dir("manifests"),
     )
     cache = Path(args.cache) if args.cache else data_dir("interim") / "dashboard" / "seastate"
     fetcher = None if args.no_fetch else RangeFetcher(min_interval_s=args.min_interval)

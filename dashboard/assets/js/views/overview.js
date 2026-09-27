@@ -1,4 +1,5 @@
 import { columnChart } from "../lib/charts.js";
+import { checkStatus, collectionNotes, countLabel, freshness, MODES, periodLabel, totals } from "../lib/collections.js";
 import { collectorHealth, HOUR_MS, hourlyTotals, ILLUMINATION, imageUrl, windowHours } from "../lib/coverage.js";
 import { card, dataTable, h, legend, statusLabel, tableView, tile } from "../lib/dom.js";
 import {
@@ -58,6 +59,7 @@ function collectedTable(st) {
       schedule: "hourly, minute 40 (70 h backfill)",
       last: [statusLabel(health.level, health.label), h("div", { class: "small muted" }, `last run ${fmtAgo(last)}`)],
     },
+    webcoosRow(st),
     {
       stream: "Realtime wave files (stdmet, spec, 5 spectral)",
       schedule: "1st and 15th of each month",
@@ -86,7 +88,124 @@ function collectedTable(st) {
       { key: "schedule", label: "Schedule", sortable: false },
       { key: "last", label: "Latest", sortable: false, render: (r) => h("div", null, r.last) },
     ],
-    rows,
+    rows.filter(Boolean),
+  );
+}
+
+function webcoosRow(st) {
+  const c = (st.collections || []).find((x) => x.id === "webcoos");
+  if (!c) return null;
+  const f = freshness(c);
+  const t = parseTime(c.updated);
+  return {
+    stream: `WebCOOS camera stills (${fmtInt(c.parts.length)} cameras, 30-min grid)`,
+    schedule: "hourly, minute 25 (3-day lookback)",
+    last: [statusLabel(f.level, f.label), h("div", { class: "small muted" }, `last run ${fmtAgo(t)}`)],
+  };
+}
+
+const nowrap = (text) => h("span", { style: { whiteSpace: "nowrap" } }, text);
+
+function period(first, last) {
+  const label = periodLabel(first, last);
+  const [a, b] = label.split(" – ");
+  return b ? [nowrap(a), " – ", nowrap(b)] : nowrap(label);
+}
+
+function collectionsCard(st) {
+  const cols = st.collections || [];
+  if (!cols.length) return null;
+  const tot = totals(cols);
+  const checked = cols.filter((c) => c.check);
+  const mismatched = checked.filter((c) => checkStatus(c).level !== "good");
+  const rows = cols.map((c) => ({ ...c, t_first: c.first, notes: collectionNotes(c) }));
+  const parts = cols.flatMap((c) => (c.parts || []).map((p) => ({ ...p, collection: c.name, unit: c.unit })));
+  return card(
+    "Data held",
+    h(
+      "p",
+      { class: "card-sub" },
+      "Every collection on the collector host, counted from the files on disk and checked against the collection's request ledger. Counts only: PacIOOS and WebCOOS images are not republished here.",
+    ),
+    h(
+      "div",
+      { class: "tiles" },
+      tile("Images held", fmtInt(tot.images), `in ${fmtInt(tot.imageCollections)} image collections`, { hero: true }),
+      tile("Total size", fmtBytes(tot.bytes), `${fmtInt(tot.collections)} collections`),
+      h(
+        "div",
+        { class: "tile" },
+        h("div", { class: "tile-label" }, "Files against ledgers"),
+        h(
+          "div",
+          { class: "tile-value", style: { fontSize: "1.15rem", marginTop: "8px" } },
+          mismatched.length
+            ? statusLabel("critical", `${mismatched.length} mismatch${mismatched.length > 1 ? "es" : ""}`)
+            : statusLabel("good", "All match"),
+        ),
+        h("div", { class: "tile-sub" }, `${fmtInt(checked.length)} collections with a per-file ledger`),
+      ),
+    ),
+    dataTable(
+      [
+        {
+          key: "name",
+          label: "Collection",
+          render: (c) =>
+            h(
+              "div",
+              null,
+              h("a", { href: `#/sources/${c.dataset_id}` }, c.name),
+              h("div", { class: "small muted" }, `${c.provider} · ${MODES[c.mode] || c.mode}`),
+              c.notes.map((n) => h("div", { class: "small muted" }, n)),
+            ),
+        },
+        { key: "count", label: "Held", num: true, render: (c) => nowrap(countLabel(c.count, c.unit)) },
+        { key: "bytes", label: "Size", num: true, render: (c) => nowrap(fmtBytes(c.bytes)) },
+        { key: "t_first", label: "Data period (UTC)", render: (c) => period(c.first, c.last) },
+        {
+          key: "updated",
+          label: "Status",
+          sortable: false,
+          render: (c) => {
+            const f = freshness(c);
+            const t = parseTime(c.updated);
+            return h(
+              "div",
+              null,
+              f ? statusLabel(f.level, f.label) : null,
+              h(
+                "div",
+                { class: "small muted" },
+                !t ? "–" : String(c.updated).length === 10 ? `latest ${c.updated}` : `updated ${fmtAgo(t)}`,
+              ),
+            );
+          },
+        },
+        {
+          key: "check",
+          label: "Files vs ledger",
+          sortable: false,
+          render: (c) => {
+            const s = checkStatus(c);
+            return s.level ? h("span", { title: s.detail }, statusLabel(s.level, s.label)) : h("span", { class: "muted", title: s.detail }, s.label);
+          },
+        },
+      ],
+      rows,
+      { caption: "Data collections held" },
+    ),
+    tableView(
+      [
+        { key: "collection", label: "Collection" },
+        { key: "id", label: "Camera / site / station" },
+        { key: "count", label: "Held", num: true, render: (p) => fmtInt(p.count) },
+        { key: "bytes", label: "Size", num: true, render: (p) => nowrap(fmtBytes(p.bytes)) },
+        { key: "first", label: "Data period (UTC)", render: (p) => period(p.first, p.last) },
+      ],
+      parts,
+      `Per camera, site and station (${fmtInt(parts.length)})`,
+    ),
   );
 }
 
@@ -186,7 +305,7 @@ export async function render(root, ctx) {
     h(
       "p",
       { class: "lede" },
-      "This project continuously archives NOAA buoy-camera images (NDBC keeps them only about 72 hours) and pairs them with wave measurements from the same buoys, to train and evaluate vision-based sea-state estimation against instrument ground truth. The live panels update hourly from the collector.",
+      "This project continuously archives NOAA buoy-camera images (NDBC keeps them only about 72 hours) and pairs them with wave measurements from the same buoys, to train and evaluate vision-based sea-state estimation against instrument ground truth. It also holds shore-camera, buoy and reanalysis collections (Data held, below). The live panels update hourly from the collector.",
     ),
   );
   const st = live?.status;
@@ -222,7 +341,7 @@ export async function render(root, ctx) {
     h(
       "div",
       { class: "tiles" },
-      tile("Images archived", fmtInt(a.images), `since ${fmtUtc(parseTime(a.first_image))}`, { hero: true }),
+      tile("Buoy-camera images archived", fmtInt(a.images), `since ${fmtUtc(parseTime(a.first_image))}`, { hero: true }),
       tile(
         "Cameras with images",
         `${fmtInt(a.stations_with_images)} of ${fmtInt(a.stations_listed)}`,
@@ -247,6 +366,9 @@ export async function render(root, ctx) {
       ),
     ),
   );
+
+  const held = collectionsCard(st);
+  if (held) root.append(held);
 
   // Images per hour by illumination, from the first archived hour in the window.
   const hours = windowHours(st.window);

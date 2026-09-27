@@ -11,7 +11,7 @@ behind the project's claims. This documentation is served under
 
 | View | Content | Built from |
 |---|---|---|
-| **Overview** | Collector health, images archived, 7-day coverage, archive size and projected growth, images per hour by illumination, collector runs, latest daylight images | live status |
+| **Overview** | Collector health, images archived, 7-day coverage, archive size and projected growth; **data held**: every collection on the collector host (counts, sizes, data periods, files checked against ledgers); images per hour by illumination, collector runs, latest daylight images | live status |
 | **Cameras** | Map of NDBC buoy cameras (coloured by current H_s), shore-camera sites and their reference buoys, with base layers for streets and GEBCO bathymetry. Sortable station table with 7-day coverage strips | live status, catalog |
 | **Station** (`#/station/<id>`) | Image viewer for the last ~72 h, including a six-view split. For each image, the nearest buoy observation: H_s, periods, direction, swell and wind-sea, wind, water temperature. Linked sea-state charts, an hour-by-day coverage grid, NDBC archive years per product, and the camera sites that use the buoy as a reference | live status, sea state, catalog |
 | **Archive** | Coverage heatmap (station × hour) with window, region and gap filters; images per day; storage; minute-stamp distribution; integrity checks; realtime-spectra snapshots; the run log | live status |
@@ -102,6 +102,7 @@ releases go to Zenodo (ADR 0008).
 | `stations[].latest_obs` | Latest realtime values: waves, wind, temperature and spectral summary, each from its own newest row, and only if under 3 h old |
 | `realtime[]`, `offsite` | Realtime-spectra snapshots on disk by date; time of the last successful offsite copy (`data/raw/.offsite_last_sync`) |
 | `seastate` | Which stations have `seastate/<id>.json`, and the refresh summary (requests, bytes, failures) |
+| `collections[]` | One entry per collection on the host (`wave_analysis.dashboard.collections`): NDBC buoy cameras and realtime snapshots, PacIOOS Waimea Bay, WebCOOS, ERA5, CDIP. `count` and `bytes` are from the files on disk; `first`/`last` the period of data; `updated` the last ledger activity; `check` compares files with verified ledger rows (`missing_files`, `unledgered_files`); `parts[]` per camera, site or station. Counts and dates only, no images |
 
 An hour becomes *due* 50 minutes after it starts. NDBC posts images ~20–30
 minutes after their :10 stamp, and the collector runs at :40.

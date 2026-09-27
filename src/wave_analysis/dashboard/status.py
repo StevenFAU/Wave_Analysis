@@ -21,6 +21,10 @@ An hour is *due* once ``DUE_AFTER`` has passed since its start, as of the
 newest listing snapshot (the last collector run). A parallel string gives the
 illumination at minute 10 of each hour (``d`` day, ``l`` low sun, ``t``
 twilight, ``n`` night) from :mod:`wave_analysis.processing.solar`.
+
+``collections`` lists every data collection on the host with its totals and a
+check of files against ledger (:mod:`wave_analysis.dashboard.collections`),
+starting with this archive and the realtime-spectra snapshots.
 """
 
 from __future__ import annotations
@@ -38,6 +42,7 @@ import numpy as np
 import pandas as pd
 
 from wave_analysis import __version__
+from wave_analysis.dashboard.collections import CollectionInputs, build_collections, disk_check
 from wave_analysis.processing.solar import illumination_category, solar_position
 from wave_analysis.sources.ndbc.buoycam import LISTINGS_DIR, MANIFESTS_DIR, parse_buoycam_filename
 from wave_analysis.sources.ndbc.inventory import parse_buoycams
@@ -278,6 +283,7 @@ class StatusInputs:
     buoycam_root: Path
     ndbc_root: Path
     raw_root: Path
+    manifests_root: Path | None = None  # data/manifests: ERA5 and CDIP ledgers
 
 
 def build_status(
@@ -381,6 +387,10 @@ def build_status(
     img_rows = ledger[ledger["product"] == "buoycam:image"]
     verified_urls = int((img_rows["status"] == "verified").sum())
     by_day_bytes = images.groupby(images["time_utc"].dt.floor("D"))["size_bytes"].sum()
+    realtime = realtime_snapshots(inputs.ndbc_root)
+    collections = _ndbc_collections(images, img_rows, nf_only, listed_at, realtime)
+    if inputs.manifests_root is not None:
+        collections += build_collections(CollectionInputs(inputs.raw_root, inputs.manifests_root))
     return {
         "schema": SCHEMA,
         "generated_at": _iso(now),
@@ -410,6 +420,63 @@ def build_status(
             "bytes": by_day_bytes.reindex(dates, fill_value=0).astype(int).tolist(),
         },
         "stations": stations,
-        "realtime": realtime_snapshots(inputs.ndbc_root),
+        "realtime": realtime,
+        "collections": collections,
         "offsite": offsite_status(inputs.raw_root),
     }
+
+
+def _ndbc_collections(
+    images: pd.DataFrame,
+    img_rows: pd.DataFrame,
+    never_published: pd.DataFrame,
+    listed_at: pd.Timestamp | None,
+    realtime: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Collection entries for the buoy-camera archive and the realtime snapshots."""
+    verified = img_rows[img_rows["status"] == "verified"]
+    ledgered = set(
+        zip(verified["station_id"], verified["url"].str.rsplit("/", n=1).str[-1], strict=True)
+    )
+    names = [
+        f"{cam}_{t:%Y_%m_%d_%H%M}.jpg"
+        for cam, t in zip(images["camera"], images["time_utc"], strict=True)
+    ]
+    on_disk = set(zip(images["station_id"], names, strict=True))
+    out: list[dict[str, Any]] = [
+        {
+            "id": "ndbc_buoycam",
+            "dataset_id": "ndbc",
+            "name": "NDBC buoy cameras",
+            "provider": "NOAA NDBC",
+            "mode": "hourly",
+            "unit": "images",
+            "count": len(images),
+            "bytes": int(images["size_bytes"].sum()),
+            "first": _iso(images["time_utc"].min()) if not images.empty else None,
+            "last": _iso(images["time_utc"].max()) if not images.empty else None,
+            "updated": _iso(listed_at),
+            "not_found": len(never_published),
+            "failed": int((img_rows["status"] == "failed").sum()),
+            "check": disk_check(ledgered, on_disk),
+            "parts_count": int(images["station_id"].nunique()),
+        }
+    ]
+    if realtime:
+        out.append(
+            {
+                "id": "ndbc_realtime",
+                "dataset_id": "ndbc",
+                "name": "NDBC realtime wave files (snapshots)",
+                "provider": "NOAA NDBC",
+                "mode": "twice_monthly",
+                "unit": "files",
+                "count": sum(r["files"] for r in realtime),
+                "bytes": sum(r["bytes"] for r in realtime),
+                "first": realtime[0]["date"],
+                "last": realtime[-1]["date"],
+                "updated": realtime[-1]["date"],
+                "parts_count": max(r["stations"] for r in realtime),
+            }
+        )
+    return out
