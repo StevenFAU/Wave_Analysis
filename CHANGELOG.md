@@ -26,6 +26,11 @@ separately (`docs/REPRODUCIBILITY.md`).
   the nearest record, with their window range and a `peak_records_disagree`
   flag) and a `label` block to its summary. Run on the full archive: earlier
   counts unchanged; the two-record H_s spread is a median 3.9 %.
+- `scripts/buoy_pair_agreement.py`: hourly H_s agreement of every NDBC/CDIP
+  buoy pair within 100 km, split into systematic and random parts. Result for
+  2023 (211 pairs) in `data/manifests/processed/`: about 6 % mismatch under
+  10 km, a median 15 % at 10–30 km ranging from 4 % on open coasts to 60 %
+  across Oahu, and lags that barely matter at hourly resolution.
 
 ### Added
 - Package `wave_analysis` with layered architecture: `sources`, `ingest`,

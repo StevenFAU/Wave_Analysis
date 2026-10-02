@@ -93,6 +93,12 @@ scripts in the linked docs.
 5. Wave timestamps are rounded and payload-dependent, and NDBC's `.spec` and
    `.data_spec` stamp the same record 10 minutes apart. Exact-time joins are unsafe
    ([synchronisation](docs/methodology/synchronization.md)).
+6. **For a reference buoy, exposure matters more than distance.** Across 211
+   NDBC/CDIP buoy pairs in 2023, hourly H_s differs by about 6 % under 10 km. At
+   10–30 km the median is 15 %, ranging from 4 % on open coasts to 60 % across
+   Oahu, and allowing a time lag barely helps. A camera label from a buoy can
+   only be worse ([synchronisation](docs/methodology/synchronization.md#how-far-can-a-reference-be-measured),
+   `scripts/buoy_pair_agreement.py`).
 
 ---
 
