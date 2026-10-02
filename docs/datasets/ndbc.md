@@ -71,7 +71,22 @@ not assume past years used the same hull or payload (`schemas/station.py`).
 Wave measurements come from hull motion (accelerometers or motion packages)
 processed onboard into spectra. Directional stations derive the directional
 Fourier coefficients from pitch-roll-heave or equivalent measurements.
-Processing is described in NDBC Technical Document 96-01 (Earle 1996).
+Processing is described in NDBC Technical Document 03-01 (Earle 2003), which
+supersedes TD 96-01 (Earle 1996); NDBC says the 1996 edition should no longer
+be used. Key points (read in full, `docs/literature/source_verification.md`):
+
+- **Sensors** by payload: fixed accelerometers, Datawell HIPPY 40 (heave,
+  pitch, roll), 3-axis magnetometers, angular-rate and tilt sensors.
+- **Records** of 20 min (40 min on one system), sampled at 1.5–2.56 Hz;
+  spectra cut off at 0.35–0.50 Hz depending on the system.
+- **Spectra are computed on the buoy.** Raw heave, pitch and roll series are
+  not transmitted (satellite messages are too short); further processing and
+  QC happen on shore. So no published NDBC product gives the hull's attitude
+  at the moment a camera image was taken (see *Open research questions*).
+- **Uncertainty of one record:** 90 % confidence intervals for H_m0 are about
+  −10 % to +15 %. This is the noise floor of a single-record label.
+- Payloads deployed after 2003 are not covered; check conventions against
+  data, as done for WVHT below.
 
 ## Available variables
 
@@ -158,7 +173,7 @@ None.
 
 ## Quality control
 
-NDBC applies automated and manual QC before release (Earle 1996 and NDBC QC
+NDBC applies automated and manual QC before release (Earle 2003 and NDBC QC
 documentation). Values that fail QC are generally removed (replaced by missing
 codes) rather than flagged, so **public files carry no per-value provider
 flags**. The project applies QARTOD bulk-wave tests and physical checks on top
@@ -245,7 +260,7 @@ historical files once NDBC publishes them (preferred, because they are quality-c
 - Measurement descriptions and units: <https://www.ndbc.noaa.gov/faq/measdes.shtml>
 - Acquisition times: <https://www.ndbc.noaa.gov/faq/acq.shtml>
 - Historical data: <https://www.ndbc.noaa.gov/historical_data.shtml>
-- Earle, M. D. (1996). *Nondirectional and Directional Wave Data Analysis Procedures*, NDBC TD 96-01.
+- Earle, M. D. (2003). *Nondirectional and Directional Wave Data Analysis Procedures*, NDBC TD 03-01: <https://www.ndbc.noaa.gov/wavemeas.pdf>. Supersedes TD 96-01 (1996).
 
 ## Original citation
 

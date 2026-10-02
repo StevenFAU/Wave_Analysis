@@ -10,6 +10,9 @@ separately (`docs/REPRODUCIBILITY.md`).
 ### Fixed
 - Landscape review cited `Quach2020`; the bibliography key is `Quach2021`
   (found by the new catalog consistency test).
+- NDBC wave processing is cited as TD 03-01 (Earle 2003). The previously cited
+  TD 96-01 (Earle 1996) is superseded, and NDBC says it should no longer be
+  used. Bibliography key `Earle1996` is now `Earle2003` (verified V1).
 
 ### Added (2026-10-01)
 - `processing.synchronize.label_from_candidates`: one label per image from

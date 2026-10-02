@@ -47,8 +47,12 @@ inequality); the property test in `tests/unit/test_spectra.py` checks it.
 ### They differ, systematically
 
 For a Gaussian sea, $H_{1/3} \approx 0.95\,H_{m0}$ in deep water (Goda 2010).
-`tests/unit/test_physics.py` reproduces this on simulated records. Labels mixing
-the two estimators carry a ~5 % systematic bias. **Every $H_s$ in this project
+NDBC's processing document puts $H_{m0}$ "typically" 5–10 % above $H_{1/3}$
+(Earle 2003, citing Longuet-Higgins 1980). `tests/unit/test_physics.py`
+reproduces the deep-water ratio on simulated records. In shallow water, where
+waves are no longer Gaussian, the ratio changes and can approach or pass 1, so
+it must be measured rather than assumed near a surf zone. Labels mixing the
+two estimators carry a 5–10 % systematic bias. **Every $H_s$ in this project
 records its estimator** (`method` / `hs_estimator`).
 
 NDBC's published `WVHT` equals $H_{m0}$ of its own spectrum to reporting
@@ -96,3 +100,20 @@ uses circular statistics (`evaluation/circular.py`).
 | $H_{\max}$ | Only from a displacement time series (CDIP, virtual buoys); it has large sampling variability for a 20–30-min record |
 | Direction | Predict $(\sin, \cos)$ and evaluate with circular metrics |
 | Spectrum | $S(f)$ on a fixed grid after energy-conserving regridding (see `spectral_analysis.md`) |
+
+## 5. One common baseline for labels
+
+Instruments, models and papers all report "significant wave height", but not
+the same quantity. Before labels from different sources enter one dataset they
+are put on a common baseline:
+
+| Source of difference | Size | Policy |
+|---|---|---|
+| Estimator: $H_{m0}$ (spectral) vs $H_{1/3}$ (wave by wave) | 5–10 % (deep water); varies near breaking | **$H_{m0}$ is the canonical label.** NDBC WVHT and CDIP `waveHs` are both verified to be $H_{m0}$; ERA5 `swh` and Spotter $H_s$ are $H_{m0}$ by definition. $H_{1/3}$, $H_{\max}$ and $T_z$ are secondary labels, computed only from a displacement record (CDIP deployment files), which also measures the real ratio per site |
+| Frequency band | Small for swell, larger for short wind seas | NDBC spectra stop at 0.35–0.50 Hz depending on the payload (Earle 2003); CDIP's reach higher. When labels from several instruments are combined, recompute $H_{m0}$ over a shared band (e.g. 0.03–0.40 Hz) from the preserved spectra and record the band in `method` |
+| Sampling variability of one record | 90 % interval about −10 % to +15 % (Earle 2003); consecutive CDIP 106 records differ by a median 4 % | Average records around the image time (ADR 0010) and carry the spread as label uncertainty |
+| Point vs area | ERA5 is a grid-cell mean (0.5°) | Model output is a baseline or prior, never a label |
+| Unknown estimator in papers | Kamagata 2026 unstated; Kim 2023 (AWAC) not verified | Flag comparisons; do not mix with project labels |
+
+Results quoted against another study must state whether that study used
+$H_{m0}$ or $H_{1/3}$, and convert or caveat the comparison.

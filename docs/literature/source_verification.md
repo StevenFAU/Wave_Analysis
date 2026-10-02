@@ -136,6 +136,24 @@ All reported metrics are **in simulation**.
     reasonable request".
   - **No instrument ground truth**, so G-2 applies.
 
+## NDBC wave processing (Earle 2003) — NDBC TD 03-01 · **V1**
+
+Read in full on 2026-10-01 from <https://www.ndbc.noaa.gov/wavemeas.pdf> (55
+pages). The repository previously cited TD 96-01 (Earle 1996). TD 03-01
+(January 2003) is its update. It describes the 1996 edition as now out of
+date and says it should no longer be used, so the citation is now `Earle2003`.
+
+| Fact used by the project | Finding |
+|---|---|
+| Spectra are computed on board | "Transmission of raw time series data is not feasible" over satellite links, so "much of the data analysis is performed onboard" and key parameters are relayed to shore, where further processing and QC are done. **No raw heave, pitch or roll series is published.** This is why no NDBC record gives a camera's attitude at the moment of an image. |
+| Sensors | Fixed accelerometers, Datawell HIPPY 40 (heave, pitch, roll), 3-axis magnetometers, angular-rate and tilt sensors, mast-axis inclinometers, depending on the payload (GSBP, DACT, VEEP, WPM, DWPM, NDWPM; Table 1) |
+| Record length and sampling | 20 min (1200 s) for most systems, 40 min for one; sampling 1.50, 2.00, 2.56 or 1.7066 Hz by system; non-directional spectra cut off at 0.40–0.50 Hz and directional spectra at 0.35 Hz on some systems |
+| H_m0 | 4√m₀ with m₀ summed over the bands of the non-directional spectrum, consistent with the WVHT = H_m0 check (`docs/datasets/ndbc.md`) |
+| H_m0 vs H₁/₃ | H_m0 values "typically being about 5% to 10% greater" than H₁/₃ (citing Longuet-Higgins 1980) |
+| Uncertainty of one record | 90 % confidence intervals for H_m0 are "generally about −10% to +15%". NDBC does not publish per-record intervals |
+| Peak period, direction | T_p is the centre of the band with the most energy. NDBC's "mean wave direction" is the mean direction of that band, which others call the dominant direction |
+| Scope | Payloads up to 2003. Systems deployed later are not covered, so conventions must still be checked against data (as done for WVHT) |
+
 ## Landscape review sources (2026-09-26)
 
 The broader review ([landscape_review.md](landscape_review.md)) adds two
@@ -180,3 +198,4 @@ the two levels applies.
 | Kudryavtsev2017 | V1/V2 | landscape review §8; Crossref metadata 2026-09-26 |
 | Bodnar2025 | V1/V2 | landscape review §8; Crossref metadata 2026-09-26 |
 | Assran2025 | V1/V2 | landscape review §8; arXiv record |
+| Earle2003 | V1 | NDBC wavemeas.pdf (TD 03-01), read 2026-10-01; see the section above |
