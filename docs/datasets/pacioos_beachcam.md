@@ -215,14 +215,48 @@ image of the same hour, and label diagnostics.
   day or event.
 - Illumination: 15,540 day, 653 low sun (0-6°), 211 civil twilight; 17 are dark.
 
+## Label rule (decided 2026-10-01, ADR 0010)
+
+The options, for an image taken at 10:55 with records starting at 10:23 and
+10:53 (centres 10:36 and 11:06):
+
+| Rule | Uses | For | Against |
+|---|---|---|---|
+| `nearest` | the 10:53 record | simple; one real measurement | about 4 % noise; inflates extremes (6.44 m vs about 6.0 m at the largest swell) |
+| `interpolate` | 10:36 and 11:06, weighted by time | follows trends | same noise; differs from nearest by a median 1 cm |
+| **`window_mean`** | every record centred within ±30 min (normally both) | **halves the noise variance; covers the clock bound (−26 to +4 min)** | smooths a swell arriving within the hour |
+| lagged | any of the above after moving the image ~12 min earlier | physically right direction | the lag is smaller than the clock bound and the record, so no gain yet |
+| `in_record` | the record containing the capture (73 % of images) | cleanest subset | fewer samples |
+
+The primary label is the **window mean**, with the spread of its records as
+the label's uncertainty. `nearest` and `interpolate` labels are kept beside it,
+and every result is reported under both window mean and nearest. All rules
+are implemented in `processing.synchronize.label_from_candidates` and apply
+directly to `candidates.parquet`.
+
+Peak period and direction are the exception: they come from the **nearest**
+record. A record's peak is the band with the most energy, and it jumps when
+two swells carry similar energy, so a mean of two peaks may match neither. On
+the 16,404 paired images the two window records' T_p differ by 3 s or more for
+808 (4.9 %) and their D_p by 60° or more for 401 (2.4 %). The 929 images with
+either (5.7 %) carry `peak_records_disagree`. CDIP T_p is the centre of a
+frequency band (37 distinct values in 2009–2013, adjacent ones 0.6–1.3 s apart
+between 9 and 17 s), so 3 s is at least two bands there.
+
+Result on the real archive (2026-10-01): 16,370 labels use two records, 31 use
+one and 3 use three. The window mean differs from the nearest record by a
+median 3 cm (90 %: 10 cm; 99 %: 25 cm), and the two records spread by a median
+3.9 % of H_s (90 %: 10 %), matching the record noise above. Every count outside
+the summary's `label` block is unchanged from 2026-09-27.
+
 ## Next steps
 
-- Label rule, to be chosen with the evidence above. Proposed: the mean Hs of
-  the records centred within ±30 min of the capture (2 records), recording
-  their spread. It halves the noise variance, and ±30 min covers the clock
-  bound.
-- Splits by day or swell event, never by image (`datasets.splits`).
-  Consecutive hours of one swell, and the two cameras, are strongly correlated.
+- Splits by **HST day across both cameras**, never by image
+  (`datasets.splits`). Consecutive hours of one swell are strongly correlated,
+  and the two cameras at the same hour share a label: putting `beachcam_003`
+  in training and `beachcam_004` in test on the same day is leakage. A
+  cross-camera test (train on one view, test on the other) must also hold out
+  the days.
 - Mask the caption band (rows 1232-1253) before training.
 - Image-quality features for strata or exclusion (fog, rain drops on the lens,
   glare), recorded in the manifest builder's ledger.

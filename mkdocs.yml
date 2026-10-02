@@ -77,3 +77,4 @@ nav:
       - 0007 Optional deep learning: decisions/0007-optional-deep-learning.md
       - 0008 Collection & storage: decisions/0008-prospective-collection-and-storage.md
       - 0009 Public dashboard: decisions/0009-public-dashboard.md
+      - 0010 Label rule: decisions/0010-label-rule-time-averaged-references.md

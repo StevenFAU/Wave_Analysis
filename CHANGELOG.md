@@ -11,6 +11,19 @@ separately (`docs/REPRODUCIBILITY.md`).
 - Landscape review cited `Quach2020`; the bibliography key is `Quach2021`
   (found by the new catalog consistency test).
 
+### Added (2026-10-01)
+- `processing.synchronize.label_from_candidates`: one label per image from
+  `pair_window` candidates with a named rule (`nearest`, `interpolate`,
+  `window_mean`, `in_record`), an optional propagation lag, and circular
+  handling for directions; returns the label, the spread of the records used,
+  their count and the largest offset. ADR 0010 makes the window mean the
+  primary label and keeps the others for sensitivity analysis.
+- `scripts/waimea_pairs.py` adds the ADR 0010 labels (`Hs_label_m`,
+  `Hs_label_spread_m`, `n_label_records`; `Tp_label_s` and `Dp_label_deg` from
+  the nearest record, with their window range and a `peak_records_disagree`
+  flag) and a `label` block to its summary. Run on the full archive: earlier
+  counts unchanged; the two-record H_s spread is a median 3.9 %.
+
 ### Added
 - Package `wave_analysis` with layered architecture: `sources`, `ingest`,
   `schemas`, `physics`, `processing`, `qc`, `datasets`, `evaluation`, `models`,

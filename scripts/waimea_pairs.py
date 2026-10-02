@@ -2,10 +2,12 @@
 """Pair every Waimea Bay image with the CDIP 106 records around its capture time.
 
 Run after ``scripts/waimea_extract.py`` and ``scripts/waimea_timing_audit.py``.
-No label is chosen here. For each image with a trusted capture time
-(``time_source == "caption"``) every CDIP 106 record whose sample centre lies
-within +-3 h is kept with its offset, so the rule that picks or combines records
-into a label is applied later, can be changed, and its effect can be measured.
+For each image with a trusted capture time (``time_source == "caption"``)
+every CDIP 106 record whose sample centre lies within +-3 h is kept with its
+offset, so the rule that picks or combines records into a label can be
+changed and its effect measured. The label of ADR 0010 (mean of the records
+centred within +-30 min, with their spread) is added to the samples; the
+nearest and interpolated values stay beside it for sensitivity analysis.
 
 Outputs in ``data/processed/pairs/waimea_cdip106/``:
 
@@ -18,7 +20,13 @@ Outputs in ``data/processed/pairs/waimea_cdip106/``:
     ``Hs_nearest_m`` (record with the nearest centre, if within 30 min),
     ``Hs_interp_m`` (linear in time between the two records around the image,
     if they are consecutive) and ``Hs_range_1h_m`` (spread of the records
-    centred within 1 h: how much the label depends on timing).
+    centred within 1 h: how much the label depends on timing). The label
+    itself: ``Hs_label_m``, ``Hs_label_spread_m`` and ``n_label_records``.
+    Peak period and direction (``Tp_label_s``, ``Dp_label_deg``) come from the
+    nearest record: a peak can jump between swell systems, and a mean of two
+    peaks may match neither. ``Tp_window_spread_s`` and
+    ``Dp_window_spread_deg`` give their range over the label window, and
+    ``peak_records_disagree`` marks images where that range is large.
 ``candidates.parquet``
     One row per (image, record) within the window: offsets, whether the image
     time falls inside the 1600-s sample, rank by distance in time, and the
@@ -45,7 +53,7 @@ from wave_analysis.datasets.provenance import build_provenance, write_provenance
 from wave_analysis.physics.dispersion import group_velocity
 from wave_analysis.processing.geospatial import haversine_m
 from wave_analysis.processing.solar import illumination_category, solar_position
-from wave_analysis.processing.synchronize import pair_window
+from wave_analysis.processing.synchronize import label_from_candidates, pair_window
 from wave_analysis.sources.pacioos import HST_TO_UTC_HOURS
 
 NAME = "waimea_cdip106"
@@ -57,6 +65,11 @@ CONFIG = {
     "interp_max_gap": "40min",
     "range_window": "1h",
     "caption_mask_rows": [1232, 1254],
+    "label_rule": "window_mean",  # ADR 0010
+    "label_window": "30min",
+    "peak_label_rule": "nearest",  # Tp and Dp (ADR 0010)
+    "peak_disagree_tp_s": 3.0,  # >= 2 CDIP frequency bands at 9-17 s
+    "peak_disagree_dp_deg": 60.0,
 }
 #: CDIP variables as columns: (variable, method) -> column.
 RECORD_COLUMNS = {
@@ -218,6 +231,31 @@ def main() -> int:
     rng = pd.Timedelta(CONFIG["range_window"]).total_seconds()
     near_h = cand[cand["offset_s"].abs() <= rng].groupby("sample_id")["Hs_m"]
     img["Hs_range_1h_m"] = (near_h.max() - near_h.min()).where(near_h.size() >= 2)
+
+    # The label (ADR 0010): mean of the records centred within the label window.
+    def label(column: str, rule: str, circular: bool = False) -> pd.DataFrame:
+        return label_from_candidates(
+            cand,
+            column,
+            rule=rule,
+            target="sample_id",
+            max_offset=CONFIG["label_window"],
+            circular=circular,
+        )
+
+    hs_label = label("Hs_m", CONFIG["label_rule"])
+    img["Hs_label_m"] = hs_label["label"]
+    img["Hs_label_spread_m"] = hs_label["spread"]
+    img["n_label_records"] = hs_label["n_records"]
+    img["n_label_records"] = img["n_label_records"].fillna(0).astype(int)
+    # Peaks from one record; their range over the window shows a change of system.
+    img["Tp_label_s"] = label("Tp_s", CONFIG["peak_label_rule"])["label"]
+    img["Dp_label_deg"] = label("Dp_deg", CONFIG["peak_label_rule"], circular=True)["label"]
+    img["Tp_window_spread_s"] = label("Tp_s", "window_mean")["spread"]
+    img["Dp_window_spread_deg"] = label("Dp_deg", "window_mean", circular=True)["spread"]
+    tp_jump = img["Tp_window_spread_s"] >= CONFIG["peak_disagree_tp_s"]
+    dp_jump = img["Dp_window_spread_deg"] >= CONFIG["peak_disagree_dp_deg"]
+    img["peak_records_disagree"] = tp_jump | dp_jump
     img = img.reset_index()
 
     el, az = solar_position(img["time_utc"], LAT, LON)
@@ -285,6 +323,23 @@ def main() -> int:
         },
         "interp_available_fraction": round(float(p["Hs_interp_m"].notna().mean()), 3),
     }
+    dl = (p["Hs_label_m"] - p["Hs_nearest_m"]).abs()
+    s["label"] = {
+        "rule": CONFIG["label_rule"],
+        "window": CONFIG["label_window"],
+        "n_label_records": p["n_label_records"].value_counts().sort_index().to_dict(),
+        "abs_label_minus_nearest_m_quantiles": {str(k): round(float(dl.quantile(k)), 3) for k in q},
+        "label_spread_relative_quantiles": {
+            str(k): round(float((p["Hs_label_spread_m"] / p["Hs_label_m"]).quantile(k)), 3)
+            for k in q
+        },
+        "peak_rule": CONFIG["peak_label_rule"],
+        "peak_disagree_by_Tp": int((p["Tp_window_spread_s"] >= CONFIG["peak_disagree_tp_s"]).sum()),
+        "peak_disagree_by_Dp": int(
+            (p["Dp_window_spread_deg"] >= CONFIG["peak_disagree_dp_deg"]).sum()
+        ),
+        "peak_records_disagree": int(p["peak_records_disagree"].sum()),
+    }
     hs = p["Hs_nearest_m"]
     s["labels"] = {
         "Hs_m_quantiles": {str(k): round(float(hs.quantile(k)), 2) for k in [0.01, 0.5, 0.99]},
@@ -309,7 +364,9 @@ def main() -> int:
         "other_camera_offset_s", "sun_elevation_deg", "sun_azimuth_deg", "illumination",
         "dark", "deployment_id", "reference_distance_m", "nearest_offset_s",
         "nearest_in_record", "n_records_30min", "Hs_nearest_m", "Hs_interp_m",
-        "Hs_range_1h_m", "Tp_nearest_s", "Dp_nearest_deg", "source_qc_flag", "exclusion",
+        "Hs_range_1h_m", "Tp_nearest_s", "Dp_nearest_deg", "Hs_label_m", "Hs_label_spread_m",
+        "n_label_records", "Tp_label_s", "Dp_label_deg", "Tp_window_spread_s",
+        "Dp_window_spread_deg", "peak_records_disagree", "source_qc_flag", "exclusion",
     ]  # fmt: skip
     paths = {
         "samples": out / "samples.parquet",
@@ -334,7 +391,10 @@ def main() -> int:
         outputs=list(paths.values()),
         command="python scripts/waimea_pairs.py",
         config=CONFIG,
-        notes="No label rule applied; see docs/datasets/pacioos_beachcam.md.",
+        notes=(
+            "Labels by ADR 0010 (Hs window mean; Tp, Dp nearest record); "
+            "see docs/datasets/pacioos_beachcam.md."
+        ),
     )
     write_provenance(prov, out / "provenance.yaml")
     keep = data_dir("manifests") / "processed"

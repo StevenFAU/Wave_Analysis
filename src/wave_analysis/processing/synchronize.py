@@ -22,6 +22,10 @@ Three pairing modes are provided:
   offset, so that the rule choosing the label is applied later and can be
   changed (e.g. when the target's clock is only known to some minutes).
 
+:func:`label_from_candidates` then turns those candidates into one label per
+target with a named rule (nearest, interpolate, window mean, in-record; ADR
+0010), so that results can be compared across rules.
+
 and one physical correction:
 
 * :func:`propagation_lag` - group-velocity travel time for a wave state to
@@ -210,6 +214,166 @@ def pair_window(
     within = np.arange(len(out)) - np.repeat(first, np.diff(np.r_[first, len(out)]))
     rank[key] = within
     out["rank"] = rank
+    return out
+
+
+LabelRule = Literal["nearest", "interpolate", "window_mean", "in_record"]
+LABEL_RULES: tuple[LabelRule, ...] = ("nearest", "interpolate", "window_mean", "in_record")
+
+
+def _wrap_deg(x: pd.Series) -> pd.Series:
+    """Angles wrapped to [-180, 180)."""
+    return (x + 180.0) % 360.0 - 180.0
+
+
+def _atan2_deg360(sin: np.ndarray, cos: np.ndarray) -> np.ndarray:
+    """Direction in [0, 360) from vector components (rounding can give 360.0 itself)."""
+    deg = np.rad2deg(np.arctan2(sin, cos)) % 360.0
+    return np.where(deg >= 360.0, 0.0, deg)
+
+
+def label_from_candidates(
+    candidates: pd.DataFrame,
+    value: str,
+    *,
+    rule: LabelRule,
+    target: str = "target_index",
+    max_offset: str | pd.Timedelta = "30min",
+    max_gap: str | pd.Timedelta = "40min",
+    lag_s: float | str | None = None,
+    circular: bool = False,
+) -> pd.DataFrame:
+    """One label per target from the reference records around it (ADR 0010).
+
+    ``candidates`` is :func:`pair_window` output joined with the reference
+    values: one row per (target, record) with ``offset_s`` (target time minus
+    record centre), ``in_record`` and the ``value`` column. Records whose value
+    is missing are ignored.
+
+    Rules
+    -----
+    ``nearest``
+        The record with the nearest centre, if within ``max_offset``; ties go
+        to the earlier record (as :func:`pair_window`'s rank).
+    ``interpolate``
+        Linear in time between the nearest record centred at or before the
+        target and the nearest after it, if their centres are at most
+        ``max_gap`` apart. A target exactly at a centre takes that record.
+    ``window_mean``
+        Mean of every record centred within ``max_offset``. With two records
+        30 min apart and independent sampling noise, it halves the noise
+        variance of a single record. Meant for statistics of the whole
+        spectrum; a peak value (T_p, D_p) can jump between swell systems, and
+        the mean of two peaks may match neither (ADR 0010 uses ``nearest``).
+    ``in_record``
+        The record whose sample contains the target time.
+
+    ``lag_s`` (seconds, or the name of a column such as a per-record
+    propagation lag) moves each target time earlier before the rule is
+    applied, for a reference upstream of the target. It cannot be combined
+    with ``in_record``, whose containment flag refers to the unshifted time.
+    ``circular=True`` treats the values as directions in degrees (vector mean
+    and interpolation; spread from wrapped deviations).
+
+    Returns
+    -------
+    pandas.DataFrame
+        Indexed by ``target`` (every target present in ``candidates``, in
+        order of appearance), with ``label`` (NaN when the rule finds no
+        record), ``spread`` (max - min of the records used; NaN with fewer
+        than two), ``n_records`` and ``max_abs_offset_s`` (after the lag).
+    """
+    if rule not in LABEL_RULES:
+        raise ValueError(f"unknown label rule {rule!r}; choose one of {LABEL_RULES}")
+    if lag_s is not None and rule == "in_record":
+        raise ValueError("the in_record rule cannot be combined with a lag")
+    cols = [target, "offset_s", value]
+    if rule == "in_record":
+        cols.append("in_record")
+    if isinstance(lag_s, str):
+        cols.append(lag_s)
+    c = candidates[list(dict.fromkeys(cols))].copy()
+    targets = pd.Index(c[target].unique(), name=target)
+    c = c[c[value].notna()]
+    off = c["offset_s"].astype("float64")
+    if lag_s is not None:
+        off = off - (c[lag_s].astype("float64") if isinstance(lag_s, str) else float(lag_s))
+    c["off"] = off
+    c["abs_off"] = off.abs()
+    max_off = pd.Timedelta(max_offset).total_seconds()
+
+    def first_by(frame: pd.DataFrame, by: list[str], ascending: list[bool]) -> pd.DataFrame:
+        frame = frame.sort_values([target, *by], ascending=[True, *ascending], kind="stable")
+        return frame.groupby(target, sort=False).head(1).set_index(target)
+
+    if rule in ("nearest", "in_record"):
+        sel = c[c["abs_off"] <= max_off] if rule == "nearest" else c[c["in_record"].astype(bool)]
+        best = first_by(sel, ["abs_off", "off"], [True, False])  # tie: earlier record
+        res = pd.DataFrame(
+            {
+                "label": best[value].astype("float64"),
+                "spread": np.nan,
+                "n_records": 1,
+                "max_abs_offset_s": best["abs_off"],
+            }
+        )
+    elif rule == "window_mean":
+        sel = c[c["abs_off"] <= max_off]
+        v = sel[value].astype("float64")
+        g = sel.groupby(target, sort=False)
+        n = g.size()
+        if circular:
+            rad = np.deg2rad(v.to_numpy())
+            s = pd.Series(np.sin(rad), index=sel.index).groupby(sel[target], sort=False).mean()
+            co = pd.Series(np.cos(rad), index=sel.index).groupby(sel[target], sort=False).mean()
+            mean = pd.Series(_atan2_deg360(s.to_numpy(), co.to_numpy()), index=s.index)
+            dev = _wrap_deg(v - sel[target].map(mean).astype("float64")).groupby(sel[target])
+            spread = dev.max() - dev.min()
+        else:
+            mean = v.groupby(sel[target], sort=False).mean()
+            spread = v.groupby(sel[target], sort=False).max() - v.groupby(sel[target]).min()
+        res = pd.DataFrame(
+            {
+                "label": mean,
+                "spread": spread.where(n >= 2),
+                "n_records": n,
+                "max_abs_offset_s": g["abs_off"].max(),
+            }
+        )
+    else:  # interpolate
+        gap = pd.Timedelta(max_gap).total_seconds()
+        before = first_by(c[c["off"] >= 0], ["off"], [True])
+        after = first_by(c[c["off"] < 0], ["off"], [False])
+        j = before[[value, "off"]].join(after[[value, "off"]], lsuffix="_b", rsuffix="_a")
+        vb, va = j[f"{value}_b"].astype("float64"), j[f"{value}_a"].astype("float64")
+        span = j["off_b"] - j["off_a"]
+        w = j["off_b"] / span
+        if circular:
+            rb, ra, wv = np.deg2rad(vb.to_numpy()), np.deg2rad(va.to_numpy()), w.to_numpy()
+            sin = np.sin(rb) + wv * (np.sin(ra) - np.sin(rb))
+            cos = np.cos(rb) + wv * (np.cos(ra) - np.cos(rb))
+            lab = pd.Series(_atan2_deg360(sin, cos), index=j.index)
+            spread = _wrap_deg(va - vb).abs()
+        else:
+            lab = vb + w * (va - vb)
+            spread = (va - vb).abs()
+        ok = span <= gap
+        exact = j["off_b"] == 0
+        res = pd.DataFrame(
+            {
+                "label": lab.where(ok).mask(exact, vb),
+                "spread": spread.where(ok & ~exact),
+                "n_records": np.where(exact, 1, np.where(ok, 2, 0)),
+                "max_abs_offset_s": pd.concat([j["off_b"], -j["off_a"]], axis=1)
+                .max(axis=1)
+                .where(ok)
+                .mask(exact, 0.0),
+            },
+            index=j.index,
+        )
+    out = res.reindex(targets)
+    out["n_records"] = out["n_records"].fillna(0).astype("int64")
+    out["label"] = out["label"].astype("float64")
     return out
 
 

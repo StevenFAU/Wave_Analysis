@@ -72,6 +72,17 @@ refraction, breaking, bathymetry) means an offshore H_s is **not** the H_s in
 front of a beach camera. Pairings over large distances must be labelled as such,
 and their evaluation stratified by distance.
 
+## Label rules
+
+`pair_window` keeps every reference record near each image, and
+`label_from_candidates` turns them into one label with a named rule:
+`nearest`, `interpolate`, `window_mean` (default, ADR 0010) or `in_record`,
+optionally after a propagation lag. Labels from the other rules are kept for
+sensitivity analysis: if a result changes materially between rules, the label
+is the bottleneck. Peak period and peak direction take `nearest`, because a
+record's peak can jump between swell systems and the mean of two peaks may
+match neither.
+
 ## Tolerances
 
 Tolerances are experiment parameters (`configs/experiments/*.yaml`), not

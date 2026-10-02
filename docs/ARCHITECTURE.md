@@ -37,7 +37,7 @@ a configuration file.
 | `ingest` | Polite, atomic, checksummed downloads; CSV manifests | `Downloader`, `ManifestEntry` |
 | `schemas` | Typed contracts (pydantic + frame validators) | `Observation`, `ImageRecord`, `MultimodalSample`, `VARIABLES` |
 | `physics` | Linear wave theory, zero-crossing analysis, parametric spectra, simulation | `wavenumber`, `zero_crossing_analysis`, `jonswap`, `simulate_surface_elevation` |
-| `processing` | Spectral analysis, synchronisation, geodesy, solar geometry | `FrequencySpectrum`, `bulk_parameters`, `directional_distribution`, `pair_nearest` |
+| `processing` | Spectral analysis, synchronisation, geodesy, solar geometry | `FrequencySpectrum`, `bulk_parameters`, `directional_distribution`, `pair_nearest`, `pair_window`, `label_from_candidates` |
 | `qc` | Layered QC with one flag vocabulary | `QCFlag`, `QCTestResult`, `qartod.*`, `waves.*`, `imagery.*` |
 | `datasets` | Manifests, splits, leakage audit, provenance, RO-Crate | `build_manifest`, `grouped_split`, `check_leakage`, `build_provenance` |
 | `evaluation` | Regression, circular, ordinal classification, agreement, uncertainty, strata | `regression_report`, `circular_report`, `block_bootstrap_ci` |
@@ -58,6 +58,9 @@ Recorded as Architecture Decision Records in [`docs/decisions/`](decisions/):
 | [0005](decisions/0005-group-based-splits.md) | Group- and time-block-based splits with an embargo and leakage audit |
 | [0006](decisions/0006-manifests-not-data-in-git.md) | Manifests and small registries in Git; bulk data outside Git |
 | [0007](decisions/0007-optional-deep-learning.md) | Deep learning is an optional extra; baselines are mandatory |
+| [0008](decisions/0008-prospective-collection-and-storage.md) | Prospective collection runs continuously; raw archive outside Git with an offsite copy |
+| [0009](decisions/0009-public-dashboard.md) | A static public dashboard, with live data on a single-commit branch |
+| [0010](decisions/0010-label-rule-time-averaged-references.md) | Window-mean labels from time-averaged references; other rules kept for sensitivity |
 
 ## Extension points
 

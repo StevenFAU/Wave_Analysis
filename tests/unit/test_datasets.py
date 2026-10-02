@@ -33,6 +33,7 @@ from wave_analysis.datasets.splits import (
 )
 from wave_analysis.processing.geospatial import haversine_m, initial_bearing_deg
 from wave_analysis.processing.synchronize import (
+    label_from_candidates,
     pair_interval_overlap,
     pair_nearest,
     pair_window,
@@ -157,6 +158,84 @@ def test_pair_window_validates_and_handles_empty():
     bad = recs.assign(end_utc=recs["start_utc"] - pd.Timedelta(seconds=1))
     with pytest.raises(ValueError, match="ends before"):
         pair_window(pd.DataFrame({"time_utc": recs["start_utc"]}), bad, window="1h")
+
+
+def _label_candidates(values, times, column="Hs"):
+    # Records start 00:00, 00:30, 01:00 (centres 00:13:20, 00:43:20, 01:13:20).
+    recs = _cdip_like_records(
+        ["2024-01-01 00:00", "2024-01-01 00:30", "2024-01-01 01:00"], index=[10, 11, 12]
+    )
+    recs[column] = values
+    imgs = pd.DataFrame({"time_utc": pd.to_datetime(list(times.values()), utc=True)})
+    imgs.index = list(times)
+    pw = pair_window(imgs, recs, window="1h")
+    return pw.join(recs[[column]], on="reference_index")
+
+
+def test_label_rules_on_one_image():
+    # Image at 00:55: offsets +2500 s (rec 10), +700 s (rec 11), -1100 s (rec 12).
+    cand = _label_candidates([1.0, 2.0, 4.0], {"a": "2024-01-01 00:55:00"})
+    near = label_from_candidates(cand, "Hs", rule="nearest").loc["a"]
+    assert near["label"] == 2.0 and near["n_records"] == 1 and near["max_abs_offset_s"] == 700
+    assert np.isnan(near["spread"])
+    interp = label_from_candidates(cand, "Hs", rule="interpolate").loc["a"]
+    assert interp["label"] == pytest.approx(2.0 + 700 / 1800 * 2.0)
+    assert interp["spread"] == 2.0 and interp["n_records"] == 2
+    mean = label_from_candidates(cand, "Hs", rule="window_mean").loc["a"]
+    # rec 10 is 41.7 min away, outside the 30-min window
+    assert mean["label"] == 3.0 and mean["spread"] == 2.0 and mean["n_records"] == 2
+    assert mean["max_abs_offset_s"] == 1100
+    inside = label_from_candidates(cand, "Hs", rule="in_record").loc["a"]
+    assert inside["label"] == 2.0  # 00:55 lies in the sample 00:30-00:56:40
+
+
+def test_label_rules_lag_window_and_missing_values():
+    cand = _label_candidates([1.0, 2.0, 4.0], {"a": "2024-01-01 00:55:00"})
+    # A 2000-s lag moves the image to 00:21:40: rec 10 is now nearest (500 s).
+    lagged = label_from_candidates(cand, "Hs", rule="nearest", lag_s=2000)
+    assert lagged.loc["a", "label"] == 1.0
+    per_row = label_from_candidates(cand.assign(lag=2000.0), "Hs", rule="nearest", lag_s="lag")
+    assert per_row.loc["a", "label"] == 1.0
+    with pytest.raises(ValueError, match="in_record"):
+        label_from_candidates(cand, "Hs", rule="in_record", lag_s=600)
+    with pytest.raises(ValueError, match="unknown label rule"):
+        label_from_candidates(cand, "Hs", rule="median")  # type: ignore[arg-type]
+    # Nothing within 5 min: the target is kept with no label.
+    none = label_from_candidates(cand, "Hs", rule="window_mean", max_offset="5min")
+    assert list(none.index) == ["a"] and np.isnan(none.loc["a", "label"])
+    assert none.loc["a", "n_records"] == 0
+    # A record without a value is skipped, not treated as zero.
+    gap = _label_candidates([1.0, np.nan, 4.0], {"a": "2024-01-01 00:55:00"})
+    assert label_from_candidates(gap, "Hs", rule="nearest").loc["a", "label"] == 4.0
+
+
+def test_label_rules_ties_exact_centres_and_gaps():
+    cand = _label_candidates(
+        [1.0, 2.0, 4.0],
+        {"tie": "2024-01-01 00:28:20", "centre": "2024-01-01 00:43:20"},
+    )
+    near = label_from_candidates(cand, "Hs", rule="nearest")
+    assert near.loc["tie", "label"] == 1.0  # 15 min from two centres: the earlier wins
+    interp = label_from_candidates(cand, "Hs", rule="interpolate")
+    assert interp.loc["centre", "label"] == 2.0 and interp.loc["centre", "n_records"] == 1
+    # Without the middle record the two neighbours are 60 min apart (> 40 min).
+    holey = cand[cand["reference_index"] != 11]
+    out = label_from_candidates(holey, "Hs", rule="interpolate")
+    assert np.isnan(out.loc["centre", "label"]) and out.loc["centre", "n_records"] == 0
+
+
+def test_label_rules_circular_directions():
+    cand = _label_candidates([90.0, 350.0, 10.0], {"a": "2024-01-01 00:58:20"}, column="Dp")
+    # 00:58:20 is 15 min after rec 11's centre and 15 min before rec 12's.
+    mean = label_from_candidates(cand, "Dp", rule="window_mean", circular=True).loc["a"]
+    # Labels stay in [0, 360): rounding must not produce 360.0 for a northerly mean.
+    assert 0.0 <= mean["label"] < 1e-9 or 360.0 - 1e-9 < mean["label"] < 360.0
+    assert mean["spread"] == pytest.approx(20.0)
+    interp = label_from_candidates(cand, "Dp", rule="interpolate", circular=True).loc["a"]
+    assert 0.0 <= interp["label"] < 1e-9 or 360.0 - 1e-9 < interp["label"] < 360.0
+    assert interp["spread"] == pytest.approx(20.0)
+    linear = label_from_candidates(cand, "Dp", rule="window_mean").loc["a"]
+    assert linear["label"] == 180.0  # why directions need circular=True
 
 
 def test_propagation_lag_deep_water():
