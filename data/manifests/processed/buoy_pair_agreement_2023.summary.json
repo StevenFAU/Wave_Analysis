@@ -1,0 +1,67 @@
+{
+ "year": 2023,
+ "max_km": 100.0,
+ "min_km": 0.5,
+ "min_hours": 720,
+ "wave_stations": 186,
+ "stations_read": 104,
+ "pairs_within_max_km": 212,
+ "pairs_reported": 211,
+ "by_distance_bin": {
+  "[0, 10)": {
+   "pairs": 4,
+   "n_hours": 6720.5,
+   "pearson_r": 0.987,
+   "median_abs_rel_diff": 0.06,
+   "p90_abs_rel_diff": 0.13,
+   "systematic_pct": 4.8,
+   "random_pct": 6.8,
+   "best_lag_h": 0.0,
+   "r_best_lag": 0.987
+  },
+  "[10, 20)": {
+   "pairs": 19,
+   "n_hours": 8681.0,
+   "pearson_r": 0.939,
+   "median_abs_rel_diff": 0.152,
+   "p90_abs_rel_diff": 0.341,
+   "systematic_pct": 11.7,
+   "random_pct": 13.8,
+   "best_lag_h": 0.0,
+   "r_best_lag": 0.939
+  },
+  "[20, 30)": {
+   "pairs": 14,
+   "n_hours": 8588.5,
+   "pearson_r": 0.901,
+   "median_abs_rel_diff": 0.142,
+   "p90_abs_rel_diff": 0.378,
+   "systematic_pct": 12.2,
+   "random_pct": 15.25,
+   "best_lag_h": 0.0,
+   "r_best_lag": 0.901
+  },
+  "[30, 50)": {
+   "pairs": 51,
+   "n_hours": 8687.0,
+   "pearson_r": 0.891,
+   "median_abs_rel_diff": 0.233,
+   "p90_abs_rel_diff": 0.495,
+   "systematic_pct": 21.3,
+   "random_pct": 22.2,
+   "best_lag_h": 0.0,
+   "r_best_lag": 0.892
+  },
+  "[50, 100)": {
+   "pairs": 123,
+   "n_hours": 8686.0,
+   "pearson_r": 0.894,
+   "median_abs_rel_diff": 0.205,
+   "p90_abs_rel_diff": 0.464,
+   "systematic_pct": 16.1,
+   "random_pct": 20.2,
+   "best_lag_h": 0.0,
+   "r_best_lag": 0.901
+  }
+ }
+}
