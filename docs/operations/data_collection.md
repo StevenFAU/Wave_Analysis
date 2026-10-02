@@ -149,6 +149,18 @@ file even when usage stays within the free tier.
 Credentials stay in rclone's config (`~/.config/rclone/rclone.conf`) and never
 in this repository.
 
+## Incidents
+
+| Period (UTC) | What happened | Effect |
+|---|---|---|
+| 2026-09-29 20:41 to 2026-10-01 12:18 | No collector run for about 40 h (host down) | Recovered by the 70 h backfill: the 12:18 run took 55 min and archived 3,101 images (219 never published). The dashboard snapshot of 12:52 was taken mid-run and briefly showed the Pacific stations empty for 2026-09-30 |
+| 2026-10-01 13:13 to 23:38 | No collector run for about 10 h (host down again) | Recovered by the 23:38 backfill (615 images). Seven-day coverage as of 23:49: 12,874 archived, 83 never published, and 164 gaps, all at 2026-10-01 21:00 and 22:00 UTC (78 stations each). The next two runs (2026-10-02 00:42 and 01:41) filled them: at 01:45 the 3-day window had no unexplained gap. Separately, station 46061's camera stopped publishing on 2026-09-29 |
+| Since installation | Offsite copy never ran (`offsite.last_sync` null as of 2026-10-02) | The archive exists on one disk |
+
+Both outages were recovered only because each lasted less than the 70 h
+backfill window. The archive is only as safe as the collector host. See P0
+in the [collection plan](collection_plan.md).
+
 ## Verifying integrity
 
 Every ledger row carries the SHA-256 of the payload as served. Realtime

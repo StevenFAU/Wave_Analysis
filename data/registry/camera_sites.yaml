@@ -175,7 +175,7 @@ sites:
     latitude: 27.535
     longitude: -80.36
     approximate: true
-    coordinate_source: "approximate position of the Fort Pierce Inlet shoreline"
+    coordinate_source: "approximate position of the FAU Harbor Branch campus (Indian River Lagoon side); an ocean-facing camera site is not yet chosen (docs/operations/collection_plan.md)"
     period: "not yet collected"
     references:
       - {station_id: "41114", network: CDIP, cdip_id: "134", role: primary}

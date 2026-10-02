@@ -13,6 +13,9 @@ separately (`docs/REPRODUCIBILITY.md`).
 - NDBC wave processing is cited as TD 03-01 (Earle 2003). The previously cited
   TD 96-01 (Earle 1996) is superseded, and NDBC says it should no longer be
   used. Bibliography key `Earle1996` is now `Earle2003` (verified V1).
+- The FAU Harbor Branch entry in `camera_sites.yaml` described its coordinate
+  as the Fort Pierce Inlet shoreline; it is the approximate campus position on
+  the lagoon.
 
 ### Added (2026-10-01)
 - `processing.synchronize.label_from_candidates`: one label per image from
@@ -31,6 +34,13 @@ separately (`docs/REPRODUCIBILITY.md`).
   2023 (211 pairs) in `data/manifests/processed/`: about 6 % mismatch under
   10 km, a median 15 % at 10–30 km ranging from 4 % on open coasts to 60 %
   across Oahu, and lags that barely matter at hourly resolution.
+- Documentation: a data collection plan (gaps, streams, priorities,
+  self-collected site specification; `docs/operations/collection_plan.md`); a
+  common-baseline policy for H_s labels (`wave_parameters.md` §5); measured
+  reference distances and label rules (`synchronization.md`); the WebCOOS
+  video pilot; TD 03-01 facts in the NDBC datasheet; research gaps G-9 (no
+  real image + attitude dataset) and G-10 (reference representativeness), and
+  questions Q-D9 and Q-M7; an incident log for the collector.
 
 ### Added
 - Package `wave_analysis` with layered architecture: `sources`, `ingest`,

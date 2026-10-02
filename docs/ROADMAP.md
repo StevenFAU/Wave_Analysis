@@ -29,8 +29,15 @@ Priorities from the [landscape review](literature/landscape_review.md) §7:
   do: displacement → zero-crossing labels. CDIP is the primary label source for
   shore cameras.
 - **PacIOOS Waimea benchmark:** `beachcam_003/004` (2009–2013, 17,854 images)
-  paired with CDIP 106 (6.3 km). ✅ Archiver and CDIP 106 2009–2013 standardized;
-  image download started 2026-09-26. Next: pairing by hour window, splits, baselines.
+  paired with CDIP 106 (6.3 km). ✅ Archive complete, audited and paired; ✅
+  label rule decided (ADR 0010, `label_from_candidates`); ✅ labels added to
+  the pairing. Next: splits by day across both cameras, baselines.
+- ✅ **Reference representativeness (G-10):** buoy-pair agreement against
+  distance and exposure for 2023 (`scripts/buoy_pair_agreement.py`). Next: the
+  same check for each camera site's reference where a neighbour exists.
+- **Collection robustness (P0 in the
+  [collection plan](operations/collection_plan.md)):** always-on collector
+  host, offsite copy, alert on missed runs.
 - **USGS CoastCam adapter:** NIMS S3 snapshots and data-release IO/EO
   calibration. Pair with CDIP 214, 156, 221, and 121, and with the Dorado Spotter
   (five sites for leave-site-out tests).
@@ -40,9 +47,9 @@ Priorities from the [landscape review](literature/landscape_review.md) §7:
   requested 2026-09-26. Still to do: WIS/WW3, wind.
 - ERDDAP adapter (SECOORA, PacIOOS), discovery by CF standard name.
 - ✅ WebCOOS access terms and adapter; hourly collection of the Yin et al. (2025)
-  cameras. Next: request historical access (webcoos@secoora.org); pairing study for
-  the NC sites used in Kamagata's test set (CDIP 433, 243; CDIP 200 offline since
-  2026-07-20).
+  cameras. Next: request historical access and a video pilot in one email
+  (webcoos@secoora.org); pairing study for the NC sites used in Kamagata's test
+  set (CDIP 433, 243; CDIP 200 offline since 2026-07-20).
 - NDBC `adcp2` parser plus QARTOD current tests; NDBC deployment table.
 - CF/ACDD netCDF export of standardized tables.
 - Directional-moment regridding.
@@ -63,7 +70,11 @@ Priorities from the [landscape review](literature/landscape_review.md) §7:
   WebCOOS, NIMS; V-JEPA 2 freeze-and-probe first).
 - Buoy-camera physics features: whitecap fraction and wind (H3/Q-M4), horizon
   tilt (Q-M5).
-- Thermal IR: candidate self-collected dataset (Q-D5, CDIP 134 Fort Pierce).
+- WebCOOS video clips synchronised with CDIP records (pilot first).
+- Self-collected site, phase A (calibrated video, GPS time) and phase B
+  (instrument in view, stereo); thermal IR in phase C (Q-D5, CDIP 134 Fort
+  Pierce). Specification in the [collection plan](operations/collection_plan.md).
+- Camera + IMU on a moving platform with a wave reference (G-9).
 
 ## v0.5.0 — Spectral and spatial products
 

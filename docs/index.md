@@ -17,6 +17,7 @@ instrument ground truth**.
 | Trace a result to raw bytes | [PROVENANCE](PROVENANCE.md) |
 | Re-run everything | [REPRODUCIBILITY](REPRODUCIBILITY.md) |
 | Run the continuous collectors, store the archive | [operations/data_collection.md](operations/data_collection.md) |
+| Know which gaps the data collection targets and what to do next | [operations/collection_plan.md](operations/collection_plan.md) |
 | Browse the live archive, sources and literature | [Dashboard](https://stevenfau.github.io/Wave_Analysis/) · [how it works](operations/dashboard.md) |
 | Cite the work | [CITATION_POLICY](CITATION_POLICY.md) |
 | See what's next | [ROADMAP](ROADMAP.md) |

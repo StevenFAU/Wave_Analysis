@@ -104,6 +104,41 @@ download, email webcoos@secoora.org with the purpose, cameras, period, cadence
 and volume, and the acknowledgement that will be used; record their answer in
 this document.
 
+## Video archive (pilot, not yet collected)
+
+Every Yin et al. (2025) camera has a `video-archive` product next to its
+stills (`/assets/`). Video is what the stills cannot give:
+
+- **Wave motion.** Periods are 5–15 s; stills one minute apart cannot resolve
+  them. At 5–10 fps, timestacks, celerity and dispersion give period and
+  direction physically (landscape review §2.1), and temporal models have
+  access to the information that helped in every study that tested it.
+- **The literature's own test views.** Kamagata et al. (2026) tested on
+  clips from these cameras without instrument labels. Paired with CDIP
+  records, the same views become an instrument-referenced test.
+
+Plan:
+
+1. **Inventory first** (no downloads): list the `video-archive` elements for
+   one week per camera and record clip length, frame rate, resolution,
+   bitrate, and how far back the archive goes (Q-D9).
+2. **Ask WebCOOS** in the same email as the historical stills request:
+   purpose, cameras, clip cadence, volume, and whether derived datasets may
+   include frames.
+3. **Pilot** on two cameras whose reference buoy is online:
+   `currituck_hampton_inn` (CDIP 433) and `jennette_south` (CDIP 243;
+   buoy-pair check: CDIP 243 and Oregon Inlet, 29 km apart on the same coast,
+   differ by a median 7 %, `docs/methodology/synchronization.md`). Not Oak
+   Island while CDIP 200 is offline. One clip of 2–5 min starting inside each
+   CDIP record (every 30 min) in daylight, for 2–4 weeks, within the 90-day
+   window.
+4. **Budget from the pilot.** As a rough guide (assumed 4–8 Mbit/s), a 5-min
+   clip is 150–300 MB, so 20 clips a day from 2 cameras is 6–12 GB a day or
+   2–4 TB a year. Decide cadence and retention from the measured numbers.
+
+Pairing uses `pair_interval_overlap`: a clip inside a 1600-s CDIP sample has
+overlap fraction 1.
+
 ## Open questions
 
 - Frame geometry and calibration per camera (none published in the API).

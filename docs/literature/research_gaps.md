@@ -15,6 +15,8 @@ so that commits and results can reference them.
 | **G-6** | **Spectral targets** S(f), S(f,θ) almost untried from vision | Papers predict bulk scalars only | Spectra preserved end-to-end; energy-conserving regridding; spectral-consistency loss |
 | **G-7** | **Metric reporting inconsistent** (NRMSE normaliser, linear direction RMSE, in-sample "full-set" metrics, i.i.d. CIs) | Kamagata 2026 details (V1) | Required reporting set (`methodology/evaluation.md`) |
 | **G-8** | **Reproducibility**: no paper releases code and data | Literature matrix | Open code, manifests, provenance, RO-Crate, DOIs |
+| **G-9** | **No real image + platform-attitude dataset.** Moving-platform methods fuse images with IMU attitude, but the only such dataset is simulated | Yang 2026 (digital twin); NDBC computes waves on board and transmits no raw motion series (Earle 2003) | Horizon tilt as an attitude proxy on NDBC buoy cameras (Q-M5); a self-collected camera + IMU record time-synchronised per frame ([collection plan](../operations/collection_plan.md)) |
+| **G-10** | **Representativeness of a reference is assumed, not measured.** Papers pair cameras with instruments 10–100+ km away without quantifying the label error this adds | Choi 2020 (same hull, but 30-min offset); camera-to-buoy table in the landscape review | Buoy-pair agreement vs distance and exposure (`scripts/buoy_pair_agreement.py`; [synchronisation](../methodology/synchronization.md)); per-site label noise floor |
 
 ## Open questions
 
@@ -44,13 +46,25 @@ so that commits and results can reference them.
 - **Q-D5** CDIP 134 (Fort Pierce, FL; WMO 41114; Datawell DWR-M3) lies near FAU
   Harbor Branch. Is a self-deployed camera (RGB and/or radiometric thermal)
   viewing its location feasible? This would be a co-located dataset designed
-  for this project.
+  for this project. The campus is on the lagoon, so the camera must stand on
+  the ocean side, about 9–13 km from CDIP 134 depending on the site. That is
+  usable on an open coast (G-10), but an instrument in the camera's view
+  would make the site co-located. See the
+  [collection plan](../operations/collection_plan.md).
+- **Q-D9** WebCOOS `video-archive`: clip length, frame rate, bitrate and
+  retention per camera, and whether WebCOOS permits a research download of
+  clips synchronised with CDIP records (no video is collected yet).
 
 ### Methodology
 - **Q-M1** How large is the H₁/₃ vs H_m0 label difference in real paired data,
   and does mixing estimators measurably hurt models?
 - **Q-M2** Buoy-to-shore propagation: when does a group-velocity lag
   correction improve pairing, and when do shoaling and refraction dominate?
+  *Partly answered (2026-10-01):* between buoys, a lag of up to 3 h raises the
+  hourly H_s correlation by a median 0.003, while exposure changes the
+  mismatch from 4 % to 60 % at the same 10–30 km
+  ([synchronisation](../methodology/synchronization.md)). Place dominates
+  timing at hourly resolution. Buoy-to-surf-zone transformation is still open.
 - **Q-M3** How should spectra from different grids be combined for training
   without distorting energy? (Energy-conserving rebinning implemented; directional
   moments pending.)
@@ -64,6 +78,9 @@ so that commits and results can reference them.
 - **Q-M6** Does predicting the residual (buoy − WIS/WW3/ERA5 nowcast) from
   imagery beat direct regression, and does any camera model beat the nowcast
   at all?
+- **Q-M7** How much do benchmark results depend on the label rule (nearest,
+  interpolated, window mean; ADR 0010)? A large difference means the label,
+  not the model, limits accuracy.
 
 ### Generalisation
 - **Q-G1** Can a model trained on one coast transfer to South Florida?

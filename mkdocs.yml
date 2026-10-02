@@ -54,6 +54,7 @@ nav:
       - Thermal IR: datasets/thermal_ir.md
   - Operations:
       - Continuous data collection: operations/data_collection.md
+      - Collection plan: operations/collection_plan.md
       - Public dashboard: operations/dashboard.md
   - Literature:
       - Landscape review: literature/landscape_review.md

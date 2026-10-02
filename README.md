@@ -172,7 +172,7 @@ Start at **[docs/index.md](docs/index.md)** (also buildable as a site with
 | Method | [Wave parameters](docs/methodology/wave_parameters.md) · [Spectra](docs/methodology/spectral_analysis.md) · [Synchronisation](docs/methodology/synchronization.md) · [Splitting](docs/methodology/dataset_splitting.md) · [Evaluation](docs/methodology/evaluation.md) · [Models](docs/methodology/models.md) |
 | Data | [Dataset datasheets](docs/datasets/README.md) · [Registry](data/registry/datasets.yaml) · [Camera sites](data/registry/camera_sites.yaml) · [QC](docs/QUALITY_CONTROL.md) · [Provenance](docs/PROVENANCE.md) |
 | Literature | [Landscape review](docs/literature/landscape_review.md) · [Matrix](docs/literature/literature_matrix.md) · [Gaps & questions](docs/literature/research_gaps.md) · [Source verification](docs/literature/source_verification.md) |
-| Process | [Reproducibility](docs/REPRODUCIBILITY.md) · [Data collection & storage](docs/operations/data_collection.md) · [Dashboard](docs/operations/dashboard.md) · [Roadmap](docs/ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Citation policy](docs/CITATION_POLICY.md) |
+| Process | [Reproducibility](docs/REPRODUCIBILITY.md) · [Data collection & storage](docs/operations/data_collection.md) · [Collection plan](docs/operations/collection_plan.md) · [Dashboard](docs/operations/dashboard.md) · [Roadmap](docs/ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Citation policy](docs/CITATION_POLICY.md) |
 
 ## Principles
 
