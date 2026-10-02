@@ -1,7 +1,7 @@
 artifact_id: waimea_cdip106
-created_at: '2026-09-27T13:44:09.487034Z'
+created_at: '2026-10-02T01:58:46.449502Z'
 git:
-  commit: 7b8ab7c60638af3b9d26c873b35af5a61b85d090
+  commit: 18b8c3e7ad0f8cc0f47e3e3265a0666f51ef78ed
   branch: main
   dirty: false
 pipeline:
@@ -15,7 +15,12 @@ pipeline:
     caption_mask_rows:
     - 1232
     - 1254
-  config_sha256: 3d4349e590150dc39e580929389910ab86a73e1ae73209a11810eb08c5492a9c
+    label_rule: window_mean
+    label_window: 30min
+    peak_label_rule: nearest
+    peak_disagree_tp_s: 3.0
+    peak_disagree_dp_deg: 60.0
+  config_sha256: 28e04af588b38617e1c8b22a0e86718e4c16f53f2886edf6b4cf80505dc25f22
 software:
   python: 3.12.13
   platform: Linux-7.0.0-34-generic-x86_64-with-glibc2.43
@@ -41,9 +46,9 @@ input_files:
 upstream_manifests: []
 output_files:
 - path: data/processed/pairs/waimea_cdip106/samples.parquet
-  sha256: 1b4a646d557513eb5a07780ccb82a6d08f1079ea6c15c624636de79f7d2b5b0c
+  sha256: 82c11c19d2c1b8ed8c9332565b92e57102c0b0cbeb12d8203efaadccbd857462
 - path: data/processed/pairs/waimea_cdip106/candidates.parquet
   sha256: 8d906cffe2feb2725b507251226d6df9ce7354219bf15c27f88668d7ef4d71ad
 - path: data/processed/pairs/waimea_cdip106/summary.json
-  sha256: 3d56387e194861e593e01fa4178e008dbe1bf266d2e3d98aaaf0cbc483e987ea
-notes: No label rule applied; see docs/datasets/pacioos_beachcam.md.
+  sha256: 12d2ecac2a02159effdeab7feace32d0dbe1d29804b23d36651616b33d721671
+notes: Labels by ADR 0010 (Hs window mean; Tp, Dp nearest record); see docs/datasets/pacioos_beachcam.md.

@@ -8,7 +8,12 @@
   "caption_mask_rows": [
    1232,
    1254
-  ]
+  ],
+  "label_rule": "window_mean",
+  "label_window": "30min",
+  "peak_label_rule": "nearest",
+  "peak_disagree_tp_s": 3.0,
+  "peak_disagree_dp_deg": 60.0
  },
  "cdip": {
   "records": 84893,
@@ -139,6 +144,29 @@
    "0.99": 0.186
   },
   "interp_available_fraction": 0.998
+ },
+ "label": {
+  "rule": "window_mean",
+  "window": "30min",
+  "n_label_records": {
+   "1": 31,
+   "2": 16370,
+   "3": 3
+  },
+  "abs_label_minus_nearest_m_quantiles": {
+   "0.5": 0.03,
+   "0.9": 0.1,
+   "0.99": 0.25
+  },
+  "label_spread_relative_quantiles": {
+   "0.5": 0.039,
+   "0.9": 0.103,
+   "0.99": 0.177
+  },
+  "peak_rule": "nearest",
+  "peak_disagree_by_Tp": 808,
+  "peak_disagree_by_Dp": 401,
+  "peak_records_disagree": 929
  },
  "labels": {
   "Hs_m_quantiles": {
