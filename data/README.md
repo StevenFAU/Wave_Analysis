@@ -22,6 +22,7 @@ directories.
 | `raw/cdip/<stn>/` | ❌ | CDIP netCDF files as served (`wave-analysis cdip download`); requests in `manifests/raw/cdip.csv` |
 | `raw/pacioos/beachcam/` | ❌ | PacIOOS beach-camera images mirroring ERDDAP's `files/` tree, `_index/` snapshots and `_manifests/<dataset>.csv` ledgers (kept with the archive) |
 | `raw/era5/<site>/` | ❌ | ERA5 monthly netCDF files as returned by the CDS, each with its `.request.json`; requests in `manifests/raw/era5.csv` |
+| `raw/wis/<stn>/` | ❌ | WIS hindcast at buoy sites as served: `ST<stn>.nc4` (whole record) and `<yyyy>/WIS-ocean_waves_ST<stn>_<yyyymm>.nc` (with the 2-D spectrum) (`wave-analysis wis download`); requests in `manifests/raw/wis.csv` |
 | `raw/webcoos/` | ❌ | WebCOOS stills by camera and UTC date, `_listings/` of each run's selection and `_listings/onprem/<camera>/<YYYY-MM>.csv` month listings of the on-premise archive, `_manifests/<camera>.csv` (hourly collector) and `<camera>.<host>.csv` (historical download) ledgers |
 | `raw/webcoos_timex/`, `raw/webcoos_brt/` | ❌ | WebCOOS 10-minute time exposures and brightest-pixel images from the on-premise archive, same layout as `raw/webcoos/` |
 | `raw/ndbc/buoycam/` | ❌ | Camera archive: `<station>/<YYYY>/<MM>/*.jpg`, `_listings/`, `_manifests/<YYYY-MM>.<host>.csv` (one ledger per collector host, kept with the archive, ADR 0008) |

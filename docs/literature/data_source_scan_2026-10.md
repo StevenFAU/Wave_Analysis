@@ -230,6 +230,52 @@ So that nobody repeats these searches:
    webcam images), Cam-Era.
 5. Add a registry entry (`data/registry/datasets.yaml`) for each source when it
    is acquired.
+6. ✅ **Check the remaining registry candidates** (2026-10-08, §8). The WIS
+   hindcast was acquired and added to the Waimea benchmark; SOCIB's image
+   archive needs a request (drafted, not sent).
+
+## 8. Registry candidates checked (2026-10-08)
+
+The eleven registry entries still marked `candidate` were checked on the same
+day against each provider's own server. Three are now `verified` (accessed
+and files read), eight `documented`. One was acquired.
+
+| Entry | What was checked | Useful now? | Outcome |
+|---|---|---|---|
+| `usace_wis` | THREDDS catalogs; files of 21 buoy sites read | **Yes**: a model value at CDIP 106 itself, not 40 km away | **Acquired**, 358 MB ([WIS](../datasets/wis.md)); Waimea benchmark v1 |
+| `socib_cala_millor` | Camera API and four images (a calm day and Storm Gloria); AWAC files on THREDDS | **Yes**: hourly images since 2011, 1.5 km from an AWAC | Bulk images need SOCIB's agreement; request drafted |
+| `noaa_ww3` | GFS-Wave bulletin for 51201 read from AWS | Later: the nowcast at the buoys for 2026 (P4) | Not downloaded; AWS keeps it from 2021-04 |
+| `copernicus_marine_waves` | STAC metadata: WAVERYS, 1980 to 2026-07 | Marginal: a third model | Needs a free Copernicus Marine account |
+| `cmems_insitu_waves` | STAC metadata: 1970 to 2025-06 | No: every camera site is in the U.S. | Needs the same account |
+| `esa_cci_sea_state` | CEDA listing and licence (open, v4 released 2026) | No: a track rarely passes a buoy in the hour of a photo | — |
+| `cfosat_swim` | AVISO+ product page | No: sparse open-ocean tracks | Needs AVISO+ registration |
+| `swot_karin_wave` | NASA CMR collection, from 2022-12 | No: a few overpasses a month | Needs Earthdata or AVISO+ login |
+| `hls` | NASA CMR collections, from 2013 and 2015 | No | Needs Earthdata login |
+| `noaa_digital_coast` | Lidar bucket on AWS lists without login | Later: georectification (P3, P5) | — |
+| `wass_stereo` | WASS data page | Only Guimarães et al. (2020), which has its own entry, and two software test sets | IFREMER Sextant refused connections; retry for P6 |
+
+**WIS (Q).** The U.S. Army Corps of Engineers' hindcast is written out at
+the position of each buoy WIS is evaluated against: 51201 (CDIP 106) from
+1980 to 2025, hourly. At Waimea, WIS and ERA5 together predict CDIP 106 0.06 m
+better on held-out days than ERA5 alone. Against that pair the image adds
+0.012 m instead of the 0.041 m it added to ERA5
+([benchmark v1](../datasets/pacioos_beachcam.md#benchmark-v1-a-second-wave-model-2026-10-08)).
+
+**SOCIB beach monitoring (Q).** The viewer's public API
+(`apps.socib.es/beamon/api/cam_stations/`) lists four sites: Cala Millor and
+Son Bou (2011 on), Playa de Palma (2011-04 to 2017-06) and Muro (2022-09 on).
+Each has several cameras and an AWAC on SOCIB's THREDDS server. Each daylight
+hour (05-19, time zone not stated) gives a snapshot, a 10-minute time
+exposure, a variance image and timestacks. Images are served as 1280 × 960
+PNG with a SOCIB logo burned in. The Cala Millor AWAC (Nortek 600 kHz, 18 m
+deep, about 1.5 km from the cameras) has 38,119 hourly H_s values from
+2011-08 to 2026-08. Median 0.37 m; 8.8 % of hours above 1 m, 1.0 % above
+2 m; maximum 5.45 m in Storm Gloria (2020-01-21), which the cameras show
+plainly. The AWAC files say "Approved for public release. Distribution
+Unlimited". The images carry no licence: BEAMON asks for acknowledgement, and
+says products beyond the viewer are available on request. They are therefore
+not bulk-downloaded until SOCIB agrees. The request asks for the original
+files without the logo, and for the images' time zone.
 
 ## Sources
 
@@ -246,6 +292,11 @@ So that nobody repeats these searches:
 - NSW buoys: <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10861473/>
 - CCO: <https://coastalmonitoring.org/ccoresources/api/>; <https://research.bangor.ac.uk/en/datasets/nc-cco-channel-coastal-observatory-cco-wave-buoy-dataset/>
 - KHOA APIs: <https://www.data.go.kr/data/15099707/openapi.do>
+- WIS: <https://chldata.erdc.dren.mil/thredds/catalog/wis/WIS_buoy_sites/catalog.html>; <https://wis.erdc.dren.mil/files/RD26_Presentation_USACE_WIS.pdf>
+- SOCIB: <https://apps.socib.es/beamon/api/cam_stations/>; <https://thredds.socib.es/thredds/catalog/mooring/waves_recorder/catalog.html>; <https://help.beamon.socib.es/home/about-us>
+- GFS-Wave on AWS: <https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20261007/00/wave/station/bulls.t00z/gfswave.51201.bull>
+- Copernicus Marine STAC: <https://stac.marine.copernicus.eu/metadata/GLOBAL_MULTIYEAR_WAV_001_032/product.stac.json>
+- ESA CCI Sea State on CEDA: <https://dap.ceda.ac.uk/neodc/esacci/sea_state/data/>
 - Jiang & Su 2026: <https://essd.copernicus.org/articles/18/6841/2026/>
 - Saildrone / PMEL: <https://data.pmel.noaa.gov/pmel/erddap/info/sd1064_hurricane_2023/index.html>; <https://www.pmel.noaa.gov/news-and-media/highlights/when-saildrone-met-hurricane-sam>
 - Kamagata et al. 2026b: <https://arxiv.org/abs/2606.13302>

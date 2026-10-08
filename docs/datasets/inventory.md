@@ -35,8 +35,8 @@ Every collection does one or more of these jobs.
 ## Collections in detail
 
 A `→ name` after a meaning gives the variable's key in the project's
-standardized tables. The NDBC, CDIP and ERA5 adapters map to these keys, and a
-test checks this page's keys against their maps.
+standardized tables. The NDBC, CDIP, ERA5 and WIS adapters map to these keys,
+and a test checks this page's keys against their maps.
 
 <!-- dictionary:collections -->
 

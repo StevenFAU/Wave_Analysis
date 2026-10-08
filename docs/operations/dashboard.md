@@ -105,7 +105,7 @@ releases go to Zenodo (ADR 0008).
 | `stations[].latest_obs` | Latest realtime values: waves, wind, temperature and spectral summary, each from its own newest row, and only if under 3 h old |
 | `realtime[]`, `offsite` | Realtime-spectra snapshots on disk by date; time of the last successful offsite copy (`data/raw/.offsite_last_sync`) |
 | `seastate` | Which stations have `seastate/<id>.json`, and the refresh summary (requests, bytes, failures) |
-| `collections[]` | One entry per collection on the host (`wave_analysis.dashboard.collections`): NDBC buoy cameras, realtime snapshots and historical files, PacIOOS Waimea Bay, WebCOOS, ERA5, CDIP, published research datasets. Ids match `data/registry/data_dictionary.yaml`. `count` and `bytes` are from the files on disk; `first`/`last` the period of data; `updated` the last ledger activity; `check` compares files with verified ledger rows (`missing_files`, `unledgered_files`); `parts[]` per camera, site or station. Counts and dates only, no images |
+| `collections[]` | One entry per collection on the host (`wave_analysis.dashboard.collections`): NDBC buoy cameras, realtime snapshots and historical files, PacIOOS Waimea Bay, WebCOOS, ERA5, the WIS hindcast, CDIP, published research datasets. Ids match `data/registry/data_dictionary.yaml`. `count` and `bytes` are from the files on disk; `first`/`last` the period of data; `updated` the last ledger activity; `check` compares files with verified ledger rows (`missing_files`, `unledgered_files`); `parts[]` per camera, site or station. Counts and dates only, no images |
 
 An hour becomes *due* 50 minutes after it starts. NDBC posts images ~20–30
 minutes after their :10 stamp, and the collector runs at :40.

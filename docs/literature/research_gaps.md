@@ -79,7 +79,11 @@ so that commits and results can reference them.
   imagery beat direct regression, and does any camera model beat the nowcast
   at all? *First result (Waimea baselines, 2026-10-08): residual ridge on image
   statistics beats both direct regression and the corrected ERA5 nowcast on
-  held-out days (by 0.04 m RMSE), but not on a held-out year.*
+  held-out days (by 0.04 m RMSE), but not on a held-out year. Against ERA5
+  and the WIS hindcast at the buoy together (benchmark v1), it gains only
+  0.012 m on held-out days, an interval reaching zero, and nothing on weeks or
+  the held-out year: most of the gain over ERA5 was information a model at
+  the buoy already has.*
 - **Q-M7** How much do benchmark results depend on the label rule (nearest,
   interpolated, window mean; ADR 0010)? A large difference means the label,
   not the model, limits accuracy. *First result (Waimea, 2026-10-08): under

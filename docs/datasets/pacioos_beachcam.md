@@ -346,11 +346,66 @@ What this says:
   label is when the buoy itself is available: a buoy 1 h out of date gives
   0.09-0.14 m.
 
+## Benchmark v1: a second wave model (2026-10-08)
+
+`configs/experiments/waimea_hs_v1.yaml` is v0 plus a second nowcast: the USACE
+WIS hindcast written out at CDIP 106's own position
+([WIS](wis.md)), rather than ERA5's sea point 40 km away. Manifest, splits,
+labels and image features are v0's; every v0 number is reproduced exactly
+(63 rows). Outputs: `data/manifests/processed/waimea_cdip106_v1.*`, run from
+a clean tree (commit `7e65c79`).
+
+New baselines: `wis_raw` and `wis_linear` (WIS alone, raw and with a linear
+correction fitted on training data), `era5+wis_linear` (one linear regression
+on both models) and `era5+wis_linear+ridge_blocks` (the image ridge on the
+combined nowcast's residual, fitted as in v0).
+
+Test RMSE (m) [95 % CI] and R², window-mean label:
+
+| Baseline | `day` | `day` R² | `week` | `week` R² | `year` | `year` R² |
+|---|---|---|---|---|---|---|
+| ERA5, linear correction (v0's baseline to beat) | 0.30 [0.25, 0.35] | 0.81 | 0.33 [0.28, 0.38] | 0.82 | 0.23 [0.20, 0.26] | 0.86 |
+| WIS, raw | 0.34 [0.28, 0.41] | 0.76 | 0.31 [0.26, 0.37] | 0.84 | 0.35 [0.25, 0.46] | 0.69 |
+| WIS, linear correction | 0.32 [0.26, 0.38] | 0.79 | 0.29 [0.23, 0.37] | 0.85 | 0.31 [0.21, 0.41] | 0.75 |
+| **ERA5 + WIS** | **0.24 [0.21, 0.28]** | **0.87** | **0.27 [0.22, 0.31]** | **0.88** | 0.23 [0.19, 0.27] | 0.87 |
+| ERA5 + image (v0) | 0.26 [0.23, 0.30] | 0.86 | 0.30 [0.26, 0.34] | 0.85 | 0.24 [0.22, 0.27] | 0.85 |
+| ERA5 + WIS + image | 0.23 [0.20, 0.26] | 0.89 | 0.26 [0.22, 0.30] | 0.89 | 0.24 [0.19, 0.29] | 0.86 |
+
+Paired RMSE differences (m, candidate minus reference, day bootstrap):
+
+| Candidate vs reference | `day` | `week` | `year` |
+|---|---|---|---|
+| WIS vs ERA5 (both corrected) | +0.014 [−0.051, +0.086] | −0.036 [−0.102, +0.024] | +0.078 [−0.022, +0.181] |
+| **ERA5 + WIS vs ERA5** | **−0.058 [−0.088, −0.023]** | **−0.064 [−0.092, −0.038]** | −0.004 [−0.045, +0.040] |
+| ERA5 + WIS + image vs ERA5 + WIS | −0.012 [−0.025, −0.000] | −0.012 [−0.025, +0.002] | +0.007 [−0.005, +0.019] |
+| Image blocks vs ERA5 + WIS | +0.157 [+0.106, +0.216] | +0.162 [+0.121, +0.205] | +0.132 [+0.083, +0.180] |
+
+What this says:
+- **WIS needs almost no correction.** Raw WIS is biased by only −0.07 m,
+  against ERA5's +0.40 to +0.46 m, because it sits at the buoy rather than 40 km
+  offshore. Corrected, the two models are about equally good: neither
+  difference is significant.
+- **Together they are the new baseline to beat.** On held-out days and weeks
+  the regression on both models (about H_s = −0.30 + 0.58 × ERA5 + 0.46 × WIS
+  m) is 0.06 m better than ERA5 alone. The two models make partly independent
+  errors: before 2020 WIS's winds are not ERA5's. On 2013 the combination
+  gains nothing over ERA5, and WIS alone is weaker that year.
+- **Most of what the image added to ERA5, WIS already knows.** Against ERA5
+  alone the image lowered RMSE by 0.041 m on held-out days (v0). Against
+  ERA5 + WIS it lowers it by 0.012 m, an interval that reaches zero, and not
+  at all on weeks or on 2013. The coarse block statistics mostly carried
+  local wave-height information that ERA5's grid misses. A learned image
+  model now has to beat 0.24 m (days), 0.27 m (weeks) and 0.23 m (2013).
+- **Large waves** (`*.strata.csv`; 34 images on 2 days at 4 m or more, so
+  very few events): ERA5 corrected under-predicts them by 0.85 m, ERA5 + WIS
+  by 0.56 m, and ERA5 + WIS + image by 0.33 m.
+- The nearest-record label again changes RMSE by less than 0.01 m (Q-M7).
+
 ## Next steps
 
-- First learned image model on these splits, scored against the table above
-  on both `day` and `year`. Mask the caption band (rows 1232-1253) before
-  training.
+- First learned image model on these splits, scored against benchmark v1
+  (ERA5 + WIS) on `day`, `week` and `year`. Mask the caption band (rows
+  1232-1253) before training.
 - Diagnose the 2013 drift: per-year image statistics, and retrain with 2012
   in training (`year` uses it for validation only).
 - Day splits are fine for the baselines, but report `week` beside `day` for

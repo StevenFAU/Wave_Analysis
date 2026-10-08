@@ -124,6 +124,23 @@ separately (`docs/REPRODUCIBILITY.md`).
   follows symlinks (`--copy-links`), so a collection can live on another drive.
 
 ### Added (2026-10-08)
+- The USACE Wave Information Study hindcast at buoy sites: adapter
+  `wave_analysis.sources.wis` and `wave-analysis wis discover | download |
+  standardize`, stations in `configs/sources/wis.yaml` (CDIP 106 and the
+  reference buoy of every camera site), ledger `data/manifests/raw/wis.csv`
+  (21 whole-record files and Waimea's 2009-2013 monthly spectra, 358 MB),
+  datasheet [docs/datasets/wis.md](docs/datasets/wis.md), and a `wis`
+  collection on the dashboard and in the data inventory.
+- Waimea benchmark v1 (`configs/experiments/waimea_hs_v1.yaml`): v0 plus WIS
+  as a nowcast, alone and with ERA5. ERA5 + WIS is 0.06 m better than ERA5 on
+  held-out days and weeks; against it the image ridge adds 0.012 m at most
+  ([results](docs/datasets/pacioos_beachcam.md#benchmark-v1-a-second-wave-model-2026-10-08)).
+  `scripts/waimea_benchmark.py` takes the config as an argument and any
+  number of nowcast models; v0 reproduces byte for byte.
+- Every registry `candidate` was checked against its provider
+  ([data source scan §8](docs/literature/data_source_scan_2026-10.md#8-registry-candidates-checked-2026-10-08)):
+  `usace_wis`, `noaa_ww3` and `socib_cala_millor` are now verified, the other
+  eight documented.
 - A data inventory: `data/registry/data_dictionary.yaml` says what each
   collection is for (pictures, labels, context, model, our tables,
   bookkeeping) and what every field and variable in it means, with a

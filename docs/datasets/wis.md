@@ -54,7 +54,7 @@ goes into `data/manifests/raw/wis.csv` with its SHA-256. WIS re-runs and
 replaces its archive from time to time, so a later download records each
 file as `unchanged` or `changed`.
 
-Held since 2026-10-08: 21 bulk files and 60 monthly files, 343 MB. WIS ends
+Held since 2026-10-08: 21 bulk files and 60 monthly files, 358 MB. WIS ends
 on 2025-12-31, so it covers the Waimea archive (2009–2013), the USGS CoastCam
 data releases and any historical WebCOOS stills, but none of the 2026
 collection. For 2026 onward the matching model is NOAA's operational

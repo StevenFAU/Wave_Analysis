@@ -93,7 +93,11 @@ numbers and exercises the full pipeline.
 baseline table is in [pacioos_beachcam.md](../datasets/pacioos_beachcam.md#benchmark-v0-splits-and-baselines-2026-10-08).
 The corrected ERA5 nowcast (RMSE 0.23-0.33 m) beats image statistics alone.
 The image improves the nowcast on held-out days, but not on a held-out year.
-Next: the first learned image model on the same splits.
+Benchmark v1 (same day) adds the USACE WIS hindcast at CDIP 106: ERA5 and
+WIS together reach 0.24 m on held-out days and 0.27 m on weeks, and against
+that the image adds 0.012 m at most
+([v1](../datasets/pacioos_beachcam.md#benchmark-v1-a-second-wave-model-2026-10-08)).
+Next: the first learned image model on the same splits, scored against v1.
 
 ### P2. WebCOOS permission and video pilot (send this week)
 
