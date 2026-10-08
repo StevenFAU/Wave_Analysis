@@ -193,7 +193,8 @@ def test_build_catalog_is_strict_json():
     assert ref["notes"] not in ref["mentions"]
     assert "bibtex" in ref and ref["url"] == "https://arxiv.org/abs/2607.11998"
     assert any(d["sites"] for d in cat["datasets"])
-    assert "/home/" not in text
+    # No local paths; "/home/" inside a URL (help.beamon.socib.es/home/about-us) is fine.
+    assert not re.search(r"(?<![\w.])/home/", text)
 
 
 # ----------------------------------------------------------------------------- live status
@@ -491,6 +492,41 @@ def test_collections_ndbc_history_and_external(tmp_path):
     assert e["check"] == {"on_disk": 2, "ledger": 2, "missing_files": 0, "unledgered_files": 0}
     assert e["parts"][0]["id"] == "stereo_set"
     assert str(tmp_path) not in to_json(out)
+
+
+def test_collections_wis(tmp_path):
+    nc4 = pytest.importorskip("netCDF4")
+    raw, man = tmp_path / "raw", tmp_path / "manifests"
+    base = "https://chldata.erdc.dren.mil/thredds/fileServer/wis/WIS_buoy_sites/Pacific/ST51201"
+    month = "WIS-ocean_waves_ST51201_201201.nc"
+    _ledger_rows(
+        man / "raw" / "wis.csv",
+        [
+            {"source_id": "usace_wis", "product": "bulk", "station_id": "51201", "period": "all",
+             "url": f"{base}/ST51201.nc4", "size_bytes": 10, "status": EntryStatus.VERIFIED},
+            {"source_id": "usace_wis", "product": "month", "station_id": "51201",
+             "period": "2012-01", "url": f"{base}/2012/{month}", "size_bytes": 4,
+             "status": EntryStatus.VERIFIED},
+            {"source_id": "usace_wis", "product": "bulk", "station_id": "46274", "period": "all",
+             "url": f"{base}/ST46274.nc4", "status": EntryStatus.FAILED},
+        ],
+    )  # fmt: skip
+    (raw / "wis" / "51201" / "2012").mkdir(parents=True)
+    with nc4.Dataset(raw / "wis" / "51201" / "ST51201.nc4", "w") as nc:
+        nc.setncattr("time_coverage_start", "1980-02-01T01:00:00Z")
+        nc.setncattr("time_coverage_end", "2025-12-31T23:00:00Z")
+    (raw / "wis" / "51201" / "2012" / month).write_bytes(b"x" * 4)
+
+    by = {c["id"]: c for c in build_collections(CollectionInputs(raw, man))}
+    w = by["wis"]
+    assert (w["dataset_id"], w["count"], w["first"], w["last"]) == (
+        "usace_wis",
+        2,
+        "1980-02-01T01:00:00Z",
+        "2025-12-31T23:00:00Z",
+    )
+    assert w["check"] == {"on_disk": 2, "ledger": 2, "missing_files": 0, "unledgered_files": 0}
+    assert [(p["id"], p["count"], p["months"]) for p in w["parts"]] == [("51201", 2, 1)]
 
 
 def test_status_offsite_stamp(archive):

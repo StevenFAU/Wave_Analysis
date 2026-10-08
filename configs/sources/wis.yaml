@@ -1,0 +1,35 @@
+# USACE Wave Information Study (WIS) hindcast at buoy sites (docs/datasets/wis.md).
+# Model output = context and non-vision baseline, never ground truth.
+# `wave-analysis wis download @sites` fetches the whole-record bulk file of every
+# station below, plus the monthly files (bulk + 2-D spectrum) listed under
+# `months`. Stations are the reference buoys of the project's camera sites;
+# a buoy site only has output for the years it was on WIS's evaluation list.
+source_id: usace_wis
+role: context
+thredds: https://chldata.erdc.dren.mil/thredds
+stations:
+  # Waimea Bay benchmark (pacioos_waimea): CDIP 106, and the offshore NDBC buoy.
+  - {station_id: "51201", sites: [pacioos_waimea], months: "2009-01:2013-12"}
+  - {station_id: "51003", sites: [pacioos_waimea]}
+  # Reference buoys in data/registry/camera_sites.yaml (USGS CoastCam, WebCOOS, FAU).
+  - {station_id: "41121", sites: [usgs_dorado]}
+  - {station_id: "41043", sites: [usgs_dorado]}
+  - {station_id: "42098", sites: [usgs_madeira, usgs_sand_key]}
+  - {station_id: "44090", sites: [usgs_head_of_the_meadow, usgs_marconi]}
+  - {station_id: "46236", sites: [usgs_santa_cruz, usgs_sunset]}
+  - {station_id: "52200", sites: [usgs_adelup]}
+  - {station_id: "41108", sites: [webcoos_oak_island]}
+  - {station_id: "44056", sites: [webcoos_currituck, currituck_sailfish]}
+  - {station_id: "44086", sites: [webcoos_jennettes_pier]}
+  - {station_id: "41114", sites: [fau_harbor_branch]}
+  # Reference buoys of the WebCOOS near-buoy cameras (NEAR_BUOY_CAMERAS in
+  # src/wave_analysis/sources/webcoos.py) and of cocoabeach (historical request).
+  - {station_id: "46027", sites: [crescent_city]}
+  - {station_id: "41110", sites: [masonboro_inlet]}
+  - {station_id: "44084", sites: [oceancity]}
+  - {station_id: "42012", sites: [pgtalabama_south, pgtalabama_west]}
+  - {station_id: "46274", sites: [san_elijo]}
+  - {station_id: "46026", sites: [stinson]}
+  - {station_id: "44099", sites: [vabeach_hamptonos]}
+  - {station_id: "46211", sites: [westport_north, westport_south]}
+  - {station_id: "41113", sites: [cocoabeach]}

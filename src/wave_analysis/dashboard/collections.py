@@ -20,6 +20,7 @@ id                     Ledger                                          Items
 ``webcoos_brt``        ``raw/webcoos_brt/_manifests/*.csv``             images
 ``era5_waves``         ``manifests/raw/era5.csv``                       months
 ``cdip``               ``manifests/raw/cdip.csv``                       files
+``wis``                ``manifests/raw/wis.csv``                        files
 ``ndbc_history``       ``manifests/raw/ndbc.csv``                       files
 ``external``           ``manifests/raw/external.csv``                   files
 =====================  ==============================================  ==========
@@ -344,6 +345,56 @@ def cdip(inputs: CollectionInputs) -> dict[str, Any] | None:
     }
 
 
+def wis(inputs: CollectionInputs) -> dict[str, Any] | None:
+    """WIS hindcast files at buoy sites: a whole-record bulk file and monthly spectra per station."""
+    ledger_path = inputs.manifests_root / "raw" / "wis.csv"
+    if not ledger_path.exists():
+        return None
+    ledger = read_ledgers([ledger_path])
+    held = _latest(ledger)
+    held = held[held["status"].isin(_ARCHIVED)]
+    held = held.assign(name=held["url"].str.rsplit("/", n=1).str[-1])
+    files = scan_files(inputs.raw_root / "wis", "")
+    files = files[files["name"].str.endswith((".nc", ".nc4"))]
+    on_disk = set(zip(files["part"], files["name"], strict=True))
+    ledgered = set(zip(held["station_id"], held["name"], strict=True))
+    parts = []
+    for stn, g in held.groupby("station_id"):
+        bulk = g[g["product"] == "bulk"]
+        first, last = (
+            _nc_coverage(inputs.raw_root / "wis" / str(stn) / bulk["name"].iloc[0])
+            if len(bulk)
+            else (None, None)
+        )
+        parts.append(
+            {
+                "id": str(stn),
+                "count": len(g),
+                "bytes": int(files.loc[files["part"] == stn, "size_bytes"].sum()),
+                "first": first,
+                "last": last,
+                "months": int((g["product"] == "month").sum()),
+            }
+        )
+    firsts = [str(p["first"]) for p in parts if p["first"]]
+    lasts = [str(p["last"]) for p in parts if p["last"]]
+    return {
+        "id": "wis",
+        "dataset_id": "usace_wis",
+        "name": "WIS hindcast at buoy sites",
+        "provider": "USACE ERDC Coastal and Hydraulics Laboratory",
+        "mode": "on_request",
+        "unit": "files",
+        "count": len(held),
+        "bytes": int(files["size_bytes"].sum()),
+        "first": min(firsts) if firsts else None,
+        "last": max(lasts) if lasts else None,
+        "updated": _iso(ledger["retrieved_at"].max()),
+        "check": disk_check(ledgered, on_disk),
+        "parts": parts,
+    }
+
+
 def ndbc_history(inputs: CollectionInputs) -> dict[str, Any] | None:
     """NDBC yearly archive files (``data/historical/<product>/``), by product."""
     ledger_path = inputs.manifests_root / "raw" / "ndbc.csv"
@@ -466,6 +517,7 @@ def build_collections(inputs: CollectionInputs) -> list[dict[str, Any]]:
         webcoos_timex,
         webcoos_brt,
         era5_waves,
+        wis,
         cdip,
         ndbc_history,
         external,

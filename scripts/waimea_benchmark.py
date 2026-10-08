@@ -39,6 +39,11 @@ The experiment is declared in ``configs/experiments/waimea_hs_v0.yaml``.
    ``era5_linear+ridge_blocks``
        ``era5_linear`` plus a ridge on the blocks fitted to its residual (Q-M6:
        does the image add anything to the nowcast?).
+   ``wis_raw``, ``wis_linear``, ``era5+wis_linear`` (v1)
+       The USACE WIS hindcast at the CDIP 106 position, raw and linearly
+       corrected, and both models in one linear regression.
+   ``era5+wis_linear+ridge_blocks`` (v1)
+       The combined nowcast plus the image ridge on its residual.
 
    ``label_rule_difference`` scores the nearest label against the window-mean
    label: the disagreement between two defensible labels, a floor for any
@@ -50,16 +55,21 @@ per sea-state bin for the ``day`` split; and paired RMSE differences between
 baselines (:data:`COMPARISONS`), bootstrapped over the same days so that the
 shared day-to-day variation cancels.
 
-Outputs in ``data/processed/benchmarks/waimea_cdip106_v0/``: ``manifest.*``
+The experiment config is the first argument (default ``waimea_hs_v0.yaml``,
+ERA5 only; ``waimea_hs_v1.yaml`` adds WIS). Splits, labels and features are
+the same in both.
+
+Outputs in ``data/processed/benchmarks/<name>/``: ``manifest.*``
 (with one split column per protocol), ``predictions.parquet``,
 ``results.csv``, ``strata.csv``, ``comparisons.csv``, ``summary.json``,
 ``provenance.yaml``. Kept in Git: the per-day split table
-``data/manifests/ml/waimea_cdip106_v0.days.csv`` and copies of results, strata,
+``data/manifests/ml/<name>.days.csv`` and copies of results, strata,
 comparisons, summary and provenance in ``data/manifests/processed/``.
 
 Usage::
 
     uv run python scripts/waimea_benchmark.py
+    uv run python scripts/waimea_benchmark.py configs/experiments/waimea_hs_v1.yaml
 """
 
 from __future__ import annotations
@@ -96,7 +106,10 @@ from wave_analysis.models.baselines.statistical import (
 )
 from wave_analysis.qc.imagery import difference_hash
 
+#: Default experiment; ``waimea_hs_v1.yaml`` adds the WIS nowcast (pass its path).
 CONFIG_PATH = repo_root() / "configs" / "experiments" / "waimea_hs_v0.yaml"
+#: Nowcast tables when a config names none (v0: ERA5 only), relative to ``data/processed``.
+DEFAULT_NOWCASTS = {"era5": "era5/pacioos_waimea/bulk_2009-01_2013-12.parquet"}
 HST = pd.Timedelta(hours=10)  # HST = UTC - 10 h, no daylight saving
 CAMERAS = ("beachcam_003", "beachcam_004")
 METRICS: dict[str, Callable[[np.ndarray, np.ndarray], float]] = {
@@ -113,6 +126,13 @@ COMPARISONS = (
     ("ridge_blocks", "era5_linear"),
     ("ridge_blocks", "climatology_month"),
     ("era5_linear", "climatology_month"),
+)
+#: Added when the config also has the WIS nowcast (v1).
+WIS_COMPARISONS = (
+    ("wis_linear", "era5_linear"),
+    ("era5+wis_linear", "era5_linear"),
+    ("era5+wis_linear+ridge_blocks", "era5+wis_linear"),
+    ("ridge_blocks", "era5+wis_linear"),
 )
 Frame = pd.DataFrame
 
@@ -292,17 +312,53 @@ def linear_fit(x: np.ndarray, y: np.ndarray, rows: np.ndarray) -> tuple[float, f
     return float(a), float(b)
 
 
+def linear_fit_multi(cols: list[np.ndarray], y: np.ndarray, rows: np.ndarray) -> np.ndarray:
+    """Least-squares ``y = c0 + c1 x1 + c2 x2 + ...`` on the given rows (finite values only)."""
+    A = np.column_stack([np.ones(len(y)), *cols])
+    ok = rows & np.isfinite(A).all(axis=1) & np.isfinite(y)
+    return np.linalg.lstsq(A[ok], y[ok], rcond=None)[0]
+
+
+def residual_ridge(
+    X: np.ndarray,
+    y: np.ndarray,
+    cam: np.ndarray,
+    part: np.ndarray,
+    alphas: np.ndarray,
+    nowcast: np.ndarray,
+    nowcast_train_only: np.ndarray,
+) -> tuple[np.ndarray, dict[str, float]]:
+    """``nowcast`` plus a per-camera ridge on the blocks fitted to its residual (Q-M6).
+
+    The residual's alpha is chosen with the nowcast fitted on train only
+    (``nowcast_train_only``), so val stays unseen during selection.
+    """
+    fit = np.isin(part, [TRAIN, VAL])
+    _, chosen = ridge_per_camera(X, y - nowcast_train_only, cam, part, alphas)
+    resid = y - nowcast
+    combo = nowcast.copy()
+    for c, alpha in chosen.items():
+        on, rows = cam == c, fit & (cam == c) & np.isfinite(resid)
+        combo[on] += RidgeBaseline(alpha=alpha).fit(X[rows], resid[rows]).predict(X[on])
+    return combo, chosen
+
+
 def baselines(
     m: Frame,
     X: np.ndarray,
     y: np.ndarray,
     part: np.ndarray,
     cdip: pd.Series,
-    era5: np.ndarray,
+    models: dict[str, np.ndarray],
     cfg: dict[str, Any],
     target: str,
 ) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
-    """Predictions of every baseline for every row of ``m`` (fitted on train/val only)."""
+    """Predictions of every baseline for every row of ``m`` (fitted on train/val only).
+
+    ``models`` holds each wave model's H_s at the capture times (``era5``, and
+    ``wis`` from v1 on). With both, ``era5+wis_linear`` regresses the label on
+    the two together.
+    """
     fit = np.isin(part, [TRAIN, VAL])
     cam = m["camera"].to_numpy()
     alphas = np.logspace(**cfg["ridge_alphas"])
@@ -318,27 +374,35 @@ def baselines(
             cdip.to_numpy(),
             max_age=cfg["persistence_max_age"],
         )
-    p["era5_raw"] = era5
-    a, b = linear_fit(era5, y, fit)
-    p["era5_linear"] = a + b * era5
-    info["era5_linear"] = {"intercept": round(a, 4), "slope": round(b, 4)}
+    train_only: dict[str, np.ndarray] = {}
+    for name, x in models.items():
+        p[f"{name}_raw"] = x
+        a, b = linear_fit(x, y, fit)
+        p[f"{name}_linear"] = a + b * x
+        info[f"{name}_linear"] = {"intercept": round(a, 4), "slope": round(b, 4)}
+        a_tr, b_tr = linear_fit(x, y, part == TRAIN)
+        train_only[f"{name}_linear"] = a_tr + b_tr * x
+    combined = "+".join(models) + "_linear" if len(models) > 1 else None
+    if combined:
+        cols = list(models.values())
+        c = linear_fit_multi(cols, y, fit)
+        p[combined] = c[0] + sum(ci * x for ci, x in zip(c[1:], cols, strict=True))
+        info[combined] = {"intercept": round(float(c[0]), 4)} | {
+            f"slope_{n}": round(float(ci), 4) for n, ci in zip(models, c[1:], strict=True)
+        }
+        c_tr = linear_fit_multi(cols, y, part == TRAIN)
+        train_only[combined] = c_tr[0] + sum(ci * x for ci, x in zip(c_tr[1:], cols, strict=True))
     ww = m[["whitewater_fraction"]].to_numpy()
     p["ridge_whitewater"], info["ridge_whitewater_alpha"] = ridge_per_camera(
         ww, y, cam, part, alphas
     )
     p["ridge_blocks"], info["ridge_blocks_alpha"] = ridge_per_camera(X, y, cam, part, alphas)
-    # Q-M6: the image models the nowcast's residual. The residual's alpha is chosen
-    # with the nowcast fitted on train only, so val stays unseen during selection.
-    a_tr, b_tr = linear_fit(era5, y, part == TRAIN)
-    resid_sel = y - (a_tr + b_tr * era5)
-    _, chosen = ridge_per_camera(X, resid_sel, cam, part, alphas)
-    resid = y - p["era5_linear"]
-    combo = p["era5_linear"].copy()
-    for c, alpha in chosen.items():
-        on, rows = cam == c, fit & (cam == c) & np.isfinite(resid)
-        combo[on] += RidgeBaseline(alpha=alpha).fit(X[rows], resid[rows]).predict(X[on])
-    p["era5_linear+ridge_blocks"] = combo
-    info["era5_linear+ridge_blocks_alpha"] = chosen
+    # Q-M6: the image models the nowcast's residual (the ERA5 nowcast, and from v1
+    # also the combined one).
+    for key in ["era5_linear", *([combined] if combined else [])]:
+        p[f"{key}+ridge_blocks"], info[f"{key}+ridge_blocks_alpha"] = residual_ridge(
+            X, y, cam, part, alphas, p[key], train_only[key]
+        )
     return p, info
 
 
@@ -392,8 +456,10 @@ def compare(
     return {"n": int(ok.sum()), "rmse_difference": d, "lo": lo, "hi": hi}
 
 
-def main() -> int:
-    cfg = load_yaml(CONFIG_PATH)
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    config_path = repo_root() / args[0] if args else CONFIG_PATH
+    cfg = load_yaml(config_path)
     name = cfg["name"]
     out = data_dir("processed") / "benchmarks" / name
     out.mkdir(parents=True, exist_ok=True)
@@ -445,13 +511,16 @@ def main() -> int:
         str(data_dir("processed") / "cdip" / "106" / "bulk_2009-01-01_2014-01-01.parquet"),
         "wave_significant_height",
     )
-    era5_s = load_series(
-        str(data_dir("processed") / "era5" / "pacioos_waimea" / "bulk_2009-01_2013-12.parquet"),
-        "wave_significant_height",
-    )
-    era5 = np.interp(
-        _ns(m["time_utc"]), _ns(era5_s.index), era5_s.to_numpy(), left=np.nan, right=np.nan
-    )
+    nowcast_paths = {
+        k: data_dir("processed") / v for k, v in cfg.get("nowcasts", DEFAULT_NOWCASTS).items()
+    }
+    models = {}
+    for k, path in nowcast_paths.items():
+        s = load_series(str(path), "wave_significant_height")
+        models[k] = np.interp(
+            _ns(m["time_utc"]), _ns(s.index), s.to_numpy(), left=np.nan, right=np.nan
+        )
+    comparisons = COMPARISONS + (WIS_COMPARISONS if "wis" in models else ())
     boot = cfg["evaluation"]["bootstrap"]
     edges = [float(e) for e in cfg["evaluation"]["sea_state_edges"]]
     rows, strata, preds, comps, fits = [], [], [], [], {}
@@ -461,9 +530,9 @@ def main() -> int:
         g = m["hst_day"].to_numpy()
         for rule, col in cfg["task"]["labels"].items():
             y = m[col].to_numpy(dtype=float)
-            p, info = baselines(m, X, y, part, cdip, era5, cfg["baselines"], col)
+            p, info = baselines(m, X, y, part, cdip, models, cfg["baselines"], col)
             fits[f"{proto}/{rule}"] = info
-            for new, ref in COMPARISONS:
+            for new, ref in comparisons:
                 comps.append(
                     {
                         "protocol": proto,
@@ -515,6 +584,8 @@ def main() -> int:
     results = pd.DataFrame(rows)
     summary["fits"] = fits
     summary["era5_grid_point"] = "22.0N 158.0W, 40.2 km from the cameras"
+    if "wis" in models:
+        summary["wis_point"] = "WIS buoy site ST51201 (CDIP 106), 21.6705N 158.1171W"
 
     # --- Write -----------------------------------------------------------------
     m_out = m.drop(columns=["dhash", "feature_row"])
@@ -549,15 +620,16 @@ def main() -> int:
     prov = build_provenance(
         artifact_id=name,
         inputs=[
-            CONFIG_PATH,
+            config_path,
             d_proc / "pairs" / "waimea_cdip106" / "samples.parquet",
             audit_dir / "images.parquet",
             audit_dir / "features.npz",
             d_proc / "cdip" / "106" / "bulk_2009-01-01_2014-01-01.parquet",
-            d_proc / "era5" / "pacioos_waimea" / "bulk_2009-01_2013-12.parquet",
+            *nowcast_paths.values(),
         ],
         outputs=list(paths.values()),
-        command="python scripts/waimea_benchmark.py",
+        command="python scripts/waimea_benchmark.py"
+        + ("" if config_path == CONFIG_PATH else f" {config_path.relative_to(repo_root())}"),
         config=cfg,
         notes="P1 of docs/operations/collection_plan.md; results in docs/datasets/pacioos_beachcam.md.",
     )

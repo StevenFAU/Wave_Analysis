@@ -350,28 +350,51 @@ datasets:
     provider: NASA LP DAAC
     modalities: [multispectral]
     intended_roles: [context]
-    access: {public: true, authentication_required: true, protocols: [HTTPS]}
+    access:
+      public: true
+      authentication_required: true
+      protocols: [HTTPS]
+      endpoints: ["https://cmr.earthdata.nasa.gov/search/collections.umm_json?short_name=HLSS30"]
     data_types: [surface_reflectance]
+    temporal: {coverage: "HLSL30 v2.0 from 2013-04-11; HLSS30 v2.0 from 2015-11-28 (CMR, 2026-10-08)"}
     documentation: [https://hls.gsfc.nasa.gov/]
-    license: {status: open}
+    license: {status: open, url: https://earthdata.nasa.gov/earth-observation-data/data-use-policy, notes: "NASA Earthdata login needed to download."}
     phase: v0.4.0
     doc: docs/datasets/multispectral.md
-    verification: {status: candidate}
+    verification:
+      status: documented
+      date: 2026-10-08
+      evidence: ["https://cmr.earthdata.nasa.gov/search/collections.umm_json?short_name=HLSS30"]
+      notes: >
+        CMR collections C2021957295-LPCLOUD (HLSS30) and C2021957657-LPCLOUD (HLSL30). Not
+        acquired: 30 m reflectance every 2-3 days says nothing about wave height at a camera at
+        the time of a photo. Revisit for coastline or whitecap context.
 
   - dataset_id: copernicus_marine_waves
     name: Copernicus Marine global/regional wave analysis and reanalysis
     provider: Copernicus Marine Service (Mercator Ocean International)
     modalities: [numerical_model]
     intended_roles: [context]
-    access: {public: true, authentication_required: true, protocols: [API]}
+    access:
+      public: true
+      authentication_required: true
+      protocols: [API]
+      endpoints: [https://stac.marine.copernicus.eu/metadata/GLOBAL_MULTIYEAR_WAV_001_032/product.stac.json]
     data_types: [hs, tp, tm, direction, swell_partitions, stokes_drift]
+    temporal: {coverage: "GLOBAL_MULTIYEAR_WAV_001_032 (WAVERYS reanalysis): 1980-01-01 to 2026-07-31 (STAC, 2026-10-08)"}
     documentation: [https://marine.copernicus.eu/]
-    license: {status: copernicus_marine_licence}
+    license: {status: copernicus_marine_licence, url: https://marine.copernicus.eu/user-corner/service-commitments-and-licence}
     phase: v0.4.0
     doc: docs/datasets/README.md
     verification:
-      status: candidate
-      notes: "Model products are priors/context, never equated with co-located physical ground truth."
+      status: documented
+      date: 2026-10-08
+      evidence: [https://stac.marine.copernicus.eu/metadata/GLOBAL_MULTIYEAR_WAV_001_032/product.stac.json]
+      notes: >
+        Metadata are public; downloads need a free Copernicus Marine account (the user has to
+        register). Not acquired: ERA5 and the WIS hindcast at the buoy already give two
+        independent model baselines at the camera sites; WAVERYS would be a third on a 0.2 deg grid.
+        Model products are priors/context, never equated with co-located physical ground truth.
 
   - dataset_id: era5_waves
     name: ECMWF ERA5 reanalysis (ocean-wave parameters)
@@ -427,43 +450,86 @@ datasets:
     provider: NOAA NCEP / EMC
     modalities: [numerical_model]
     intended_roles: [context]
-    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints:
+        - https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.YYYYMMDD/HH/wave/station/bulls.tHHz/gfswave.STATION.bull
+        - https://polar.ncep.noaa.gov/waves/hindcasts/
     data_types: [hs, tp, direction, partitions, spectra_at_points]
-    documentation: [https://polar.ncep.noaa.gov/waves/]
+    temporal:
+      coverage: >-
+        GFS-Wave station output on AWS (NODD) from 2021-04 (four cycles a day, hourly from hour 0);
+        NCEP hindcasts: phase 2 1979-2009 (CFSR winds), multi_1 from 2005
+    formats: [text_bulletin, tar]
+    documentation: [https://polar.ncep.noaa.gov/waves/, https://registry.opendata.aws/noaa-gfs-bdp-pds/]
     license: {status: public_domain_us_government}
     phase: v0.4.0
     doc: docs/datasets/README.md
-    verification: {status: candidate}
+    verification:
+      status: verified
+      date: 2026-10-08
+      evidence:
+        - https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20261007/00/wave/station/bulls.t00z/gfswave.51201.bull
+      notes: >
+        Read gfswave.51201.bull (cycle 2026-10-07 00 UTC, 52 kB): position 21.67N 158.12W, total
+        Hs and up to six partitions (Hs, Tp, direction) for each forecast hour from hour 0. Every
+        buoy in the project has a bulletin (.bull, .cbull) and a spectral file (.spec, 7.8 MB).
+        Not acquired yet: WIS (to 2025) covers every historical pairing; this is the nowcast at the
+        buoys for 2026 onward (P4 buoy-camera benchmark), and the AWS archive keeps it.
 
   - dataset_id: noaa_digital_coast
     name: NOAA Digital Coast (lidar, imagery, shoreline)
     provider: NOAA Office for Coastal Management
     modalities: [bathymetry, multispectral]
     intended_roles: [context]
-    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints: [https://noaa-nos-coastal-lidar-pds.s3.amazonaws.com/]
     data_types: [topobathy_lidar, aerial_imagery, shoreline]
-    documentation: [https://coast.noaa.gov/digitalcoast/]
+    documentation: [https://coast.noaa.gov/digitalcoast/, https://registry.opendata.aws/noaa-coastal-lidar/]
     license: {status: public_domain_us_government}
     phase: v0.4.0
     doc: docs/datasets/README.md
-    verification: {status: candidate}
+    verification:
+      status: documented
+      date: 2026-10-08
+      evidence: ["https://noaa-nos-coastal-lidar-pds.s3.amazonaws.com/?list-type=2&delimiter=/"]
+      notes: >
+        The lidar bucket lists without a login (laz/, dem/, entwine/). Not acquired: it is needed
+        to georectify a camera view (topography and bathymetry at the site), which starts with the
+        USGS CoastCam adapter (P3) and the self-collected site (P5).
 
   - dataset_id: wass_stereo
     name: WASS stereo wave-video datasets
     provider: Bergamasco, Benetazzo et al. (Ca' Foscari University of Venice / CNR-ISMAR)
     modalities: [stereo, rgb]
     intended_roles: [reference, input]
-    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints:
+        - https://www.dais.unive.it/wass/WASS_TEST.zip
+        - https://www.dais.unive.it/wass/wass_wassfast_dataset_100frames.zip
     data_types: [stereo_video, reconstructed_surface_elevation]
-    documentation: [https://sites.google.com/unive.it/wass, https://doi.org/10.1038/s41597-020-0492-9]
+    documentation: [https://sites.google.com/unive.it/wass/data, https://doi.org/10.1038/s41597-020-0492-9]
     license: {status: to_be_confirmed, notes: "The Guimaraes et al. (2020) records are CC BY 4.0 (entry guimaraes2020_stereo)."}
     phase: v0.4.0
     doc: docs/datasets/README.md
     verification:
-      status: candidate
+      status: documented
+      date: 2026-10-08
+      evidence: [https://sites.google.com/unive.it/wass/data]
       notes: >
-        Stereo reconstruction gives space-time surface elevation - a geometric ground truth for
-        video that no point sensor can provide. High priority for spatial (Level 7) tasks.
+        The WASS data page links two software test sets and the Guimaraes et al. (2020) records,
+        which have their own entry (guimaraes2020_stereo); no other WASS field dataset is public.
+        That set is on IFREMER Sextant (DOI 10.12770/af599f42-2770-4d6d-8209-13f40e2c292f), which
+        refused connections on 2026-10-08, so its size is still unknown. Stereo reconstruction gives
+        space-time surface elevation, a geometric ground truth no point sensor can provide (P6).
 
   # ---------------------------------------------------------------------------
   # Added by the landscape review, 2026-09-26 (docs/literature/landscape_review.md)
@@ -521,31 +587,52 @@ datasets:
         wave transformation must be addressed (offshore buoy, surf-zone imagery).
 
   - dataset_id: socib_cala_millor
-    name: SOCIB Beach Monitoring Facility, Cala Millor (SIRENA video + MOBIMS)
+    name: SOCIB Beach Monitoring Facility, Balearic Islands (SIRENA cameras + MOBIMS AWAC)
     provider: Balearic Islands Coastal Observing and Forecasting System (SOCIB) / IMEDEA
-    modalities: [rgb, in_situ_wave, bathymetry]
+    modalities: [rgb, in_situ_wave, acoustic, current, bathymetry]
     intended_roles: [input, reference]
     access:
       public: true
       authentication_required: false
-      protocols: [HTTPS]
+      protocols: [HTTPS, THREDDS]
       endpoints:
-        - "https://apps.socib.es/beamon/filtering?station=clm&group=clm&cameras=c05&product=snapshot"
-    data_types: [snapshot, timex, variance, timestack, hourly_wave_and_depth, bathymetry_surveys]
-    temporal: {coverage: "2011 onward; cameras record the first 10 min of each daylight hour at 7.5 fps"}
-    spatial: {platform_types: [shore_camera, fixed_station], coverage: "Cala Millor, Mallorca, Western Mediterranean"}
+        - https://apps.socib.es/beamon/api/cam_stations/
+        - https://apps.socib.es/beamon/api/image_access/view/{location}/{group}/{camera}/{product}/{YYYY-MM-DDTHH:00:00}/
+        - https://thredds.socib.es/thredds/catalog/mooring/waves_recorder/catalog.html
+    data_types: [snapshot, timex, variance, timestack, hourly_wave_parameters, current, bathymetry_surveys]
+    temporal:
+      coverage: >-
+        Cameras hourly 05-19 (time zone not stated): Cala Millor and Son Bou from 2011, Playa de
+        Palma 2011-04 to 2017-06, Muro from 2022-09. Cala Millor AWAC hourly 2011-08 to 2026-08, with gaps.
+    spatial:
+      platform_types: [shore_camera, fixed_station]
+      coverage: "Cala Millor, Son Bou, Playa de Palma and Muro (Mallorca, Menorca), Western Mediterranean"
+    formats: [png, netcdf]
     documentation:
       - https://doi.org/10.1038/s41597-023-02210-2
       - https://www.socib.es/en/what-we-do/ocean-observation/fixed-stations/mobims-cala-millor
-    license: {status: to_be_confirmed}
-    phase: v0.3.0
-    doc: docs/literature/landscape_review.md
-    verification:
-      status: candidate
+      - https://help.beamon.socib.es/home/about-us
+    license:
+      status: to_be_confirmed
       notes: >
-        Reported by the Sci. Data (2023) Cala Millor paper and SOCIB pages (search results).
-        Image archive app exists. Instrument type and depth, bulk download, and licence still
-        to be checked. A Mediterranean domain for cross-site tests.
+        AWAC files: "Approved for public release. Distribution Unlimited." Images: BEAMON asks
+        users to acknowledge the source and names no licence; products are free to view and "under
+        demand" otherwise. Bulk image access requested from SOCIB (not yet sent).
+    phase: v0.3.0
+    doc: docs/literature/data_source_scan_2026-10.md
+    verification:
+      status: verified
+      date: 2026-10-08
+      evidence:
+        - https://apps.socib.es/beamon/api/cam_stations/
+        - https://thredds.socib.es/thredds/dodsC/mooring/waves_recorder/mobims_calamillor-scb_awac001/L1/dep0024_mobims-calamillor_scb-awac001_L1_latest.nc.html
+      notes: >
+        Cala Millor: five cameras (c01-c05) on a hotel roof; images served as 1280 x 960 PNG with a
+        SOCIB logo burned in (images.socib.es). Nortek AWAC 600 kHz at 17.95 m depth (39.5924 N,
+        3.3997 E), about 1.5 km from the cameras; 38,119 hourly H_s values 2011-08 to 2026-08:
+        median 0.37 m, 8.8 % above 1 m, 1.0 % above 2 m, maximum 5.45 m in Storm Gloria
+        (2020-01-21), which the cameras show clearly. Son Bou, Playa de Palma and Muro each
+        have an AWAC on the same THREDDS server. A Mediterranean domain for cross-site tests.
 
   - dataset_id: guimaraes2020_stereo
     name: Sea-surface stereo image data set (Guimaraes et al. 2020)
@@ -698,48 +785,109 @@ datasets:
     provider: Copernicus Marine Service In Situ TAC (EuroGOOS ROOSs, NODCs, JCOMM)
     modalities: [in_situ_wave]
     intended_roles: [reference]
-    access: {public: true, authentication_required: true, protocols: [API]}
+    access:
+      public: true
+      authentication_required: true
+      protocols: [API]
+      endpoints: [https://stac.marine.copernicus.eu/metadata/INSITU_GLO_WAV_DISCRETE_MY_013_045/product.stac.json]
     data_types: [bulk_wave_parameters, wave_spectra]
+    temporal: {coverage: "Delayed mode 1970-04-27 to 2025-06-30 (STAC, 2026-10-08); updated twice a year"}
     documentation:
       - https://data.marine.copernicus.eu/product/INSITU_GLO_WAV_DISCRETE_MY_013_045/description
       - https://www.seanoe.org/data/00591/70345/
     license: {status: copernicus_marine_licence}
     phase: v0.4.0
     doc: docs/literature/landscape_review.md
-    verification: {status: candidate, notes: "Global buoy aggregation incl. spectra; updated twice a year. Useful for non-US camera sites."}
+    verification:
+      status: documented
+      date: 2026-10-08
+      evidence: [https://stac.marine.copernicus.eu/metadata/INSITU_GLO_WAV_DISCRETE_MY_013_045/product.stac.json]
+      notes: >
+        Global buoy aggregation including spectra; downloads need a Copernicus Marine account.
+        Not acquired: every current camera site is in the U.S. (NDBC and CDIP directly). Useful
+        if a non-U.S. camera without its own instrument is added.
 
   - dataset_id: usace_wis
     name: USACE Wave Information Study (WIS) hindcast
     provider: U.S. Army Corps of Engineers, ERDC Coastal and Hydraulics Laboratory
     modalities: [numerical_model]
     intended_roles: [context]
-    access: {public: true, authentication_required: false, protocols: [HTTPS, THREDDS]}
-    data_types: [hourly_bulk_parameters, spectra_2d, extremes]
-    temporal: {coverage: "1980-2024 (2024 hindcast completed Nov 2025)"}
-    spatial: {coverage: "All U.S. coasts incl. Great Lakes and territories; nearshore output points"}
-    documentation: [https://wis.erdc.dren.mil/]
-    license: {status: public_domain_us_government}
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS, THREDDS]
+      endpoints:
+        - https://chldata.erdc.dren.mil/thredds/catalog/wis/WIS_buoy_sites/catalog.html
+        - https://chldata.erdc.dren.mil/thredds/fileServer/wis/WIS_buoy_sites/{basin}/ST{station}/ST{station}.nc4
+        - https://chldata.erdc.dren.mil/thredds/fileServer/wis/WIS_buoy_sites/{basin}/ST{station}/{yyyy}/WIS-ocean_waves_ST{station}_{yyyymm}.nc
+    data_types: [hourly_bulk_parameters, wind_sea_and_swell_partitions, spectra_2d, model_wind]
+    temporal:
+      timezone: UTC
+      interval: "1 h, instantaneous"
+      coverage: >-
+        1980-02 to 2025-12 at long-running buoys (51201, 41113, 44056, ...); from the year a buoy
+        joined WIS's evaluation list otherwise (46274: 2022). Re-run and replaced about once a year.
+    spatial:
+      coverage: "All U.S. coasts incl. Great Lakes and territories; buoy-site output at the evaluation buoys"
+    formats: [netcdf]
+    documentation:
+      - https://wis.erdc.dren.mil/
+      - https://wis.erdc.dren.mil/files/RD26_Presentation_USACE_WIS.pdf
+    citation: "USACE Wave Information Study (WIS), U.S. Army Engineer Research and Development Center, Coastal and Hydraulics Laboratory, https://wis.erdc.dren.mil (accessed <date>)."
+    license:
+      status: free_for_research_with_acknowledgement
+      notes: >
+        Global attribute: "These data may be redistributed and used without restriction. Data are
+        intended for scholarly use by the research community, with the express agreement that users
+        will properly acknowledge the USACE Wave Information Study and the supporting
+        investigator(s). Use or reproduction of these data for commercial purposes is prohibited
+        without prior written permission."
     phase: v0.3.0
-    doc: docs/literature/landscape_review.md
+    adapter: wave_analysis.sources.wis.WISSource
+    doc: docs/datasets/wis.md
     verification:
-      status: candidate
-      notes: "Required nowcast baseline at every U.S. camera site (landscape review section 7). Endpoint to be verified."
+      status: verified
+      date: 2026-10-08
+      evidence:
+        - https://chldata.erdc.dren.mil/thredds/catalog/wis/WIS_buoy_sites/Pacific/ST51201/catalog.xml
+        - https://chldata.erdc.dren.mil/thredds/dodsC/wis/WIS_buoy_sites/Pacific/ST51201/ST51201.nc4.das
+      notes: >
+        Downloaded for 21 buoy sites (configs/sources/wis.yaml; ledger data/manifests/raw/wis.csv).
+        ST51201 (CDIP 106): WAVEWATCH III 4.16, 402,468 hourly records 1980-02-01 to 2025-12-31.
+        The monthly files' 2-D spectra (29 x 72, m2 s rad-1, directions going toward) reproduce
+        waveHs to 0.1 % and waveMeanDirection to 0.01 deg (median) once turned to coming-from.
+        Longitude is stored as -518.117 in 1988-2017; the README calls the netCDF files "under
+        evaluation". Pacific winds: adapted NCEP/NCAR Reanalysis-1 before 2020, ERA5 from 2020;
+        buoys are used for evaluation, not assimilation.
+    notes: "Model output: context and non-vision baseline, never ground truth."
 
   - dataset_id: esa_cci_sea_state
     name: ESA Sea State Climate Change Initiative (altimeter Hs L2P/L3/L4)
     provider: ESA CCI / CEDA
-    modalities: [altimetry]
+    modalities: [altimetry, sar]
     intended_roles: [context, reference]
-    access: {public: true, authentication_required: false, protocols: [HTTPS]}
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints: [https://dap.ceda.ac.uk/neodc/esacci/sea_state/data/]
     data_types: [along_track_hs, gridded_monthly_hs]
-    temporal: {coverage: "v3: 2002-2021"}
+    temporal: {coverage: "v3: 2002-2021; v4 (2026): altimeter l2p, l3, l4 and SAR folders"}
     documentation:
       - https://climate.esa.int/en/projects/sea-state/data/
       - https://catalogue.ceda.ac.uk/uuid/8cb46a5efaa74032bf1833438f499cc3/
-    license: {status: to_be_confirmed}
+    license: {status: esa_cci_open, notes: "CEDA record: open access without registration, 'Permitted Use: Any', ESA CCI Sea State terms; cite the dataset."}
     phase: v0.4.0
     doc: docs/datasets/satellite_sar.md
-    verification: {status: candidate, notes: "L2P DOI 10.5285/8cb46a5efaa74032bf1833438f499cc3; L3 DOI 10.5285/e6af67fca81c40b7bb3eddaadde06909."}
+    verification:
+      status: documented
+      date: 2026-10-08
+      evidence: [https://dap.ceda.ac.uk/neodc/esacci/sea_state/data/v4_release/altimeter/, https://catalogue.ceda.ac.uk/uuid/8cb46a5efaa74032bf1833438f499cc3/]
+      notes: >
+        L2P DOI 10.5285/8cb46a5efaa74032bf1833438f499cc3 (v3, superseded); L3 DOI
+        10.5285/e6af67fca81c40b7bb3eddaadde06909. Not acquired: an altimeter track passes a given
+        buoy within an hour only every few days, and not within a few km of the coast; it checks
+        the models offshore rather than labelling camera images.
 
   - dataset_id: cfosat_swim
     name: CFOSAT SWIM directional wave spectra (L2/L2P)
@@ -752,20 +900,37 @@ datasets:
     license: {status: aviso_registration}
     phase: v0.4.0
     doc: docs/datasets/satellite_sar.md
-    verification: {status: candidate}
+    verification:
+      status: documented
+      date: 2026-10-08
+      evidence: [https://www.aviso.altimetry.fr/en/data/products/wind/wave-products/wave-wind-cfosat-products.html]
+      notes: >
+        Needs an AVISO+ account. Not acquired: open-ocean spectra of 70-500 m wavelengths along
+        sparse tracks; no use at a camera site until an offshore spectral comparison is planned.
 
   - dataset_id: swot_karin_wave
     name: SWOT KaRIn wide-swath significant wave height (L2 / L3 wind-wave)
     provider: NASA / CNES (AVISO+, PO.DAAC)
     modalities: [altimetry]
     intended_roles: [context]
-    access: {public: true, authentication_required: true, protocols: [HTTPS]}
+    access:
+      public: true
+      authentication_required: true
+      protocols: [HTTPS]
+      endpoints: ["https://cmr.earthdata.nasa.gov/search/collections.umm_json?short_name=SWOT_L2_LR_SSH_WINDWAVE_2.0"]
     data_types: [wide_swath_hs, swell_parameters]
+    temporal: {coverage: "L2 LR SSH WindWave from 2022-12-16 (CMR C2799465507-POCLOUD)"}
     documentation: [https://www.aviso.altimetry.fr/en/data/products/windwave-products/swot-karin-level-3-wind-wave-product.html]
-    license: {status: open_with_registration}
+    license: {status: open_with_registration, notes: "NASA Earthdata login (PO.DAAC) for L2; AVISO+ registration for L3."}
     phase: v0.4.0
     doc: docs/datasets/satellite_sar.md
-    verification: {status: candidate, notes: "Reported vs buoys: bias 0.11 m, RMSE 0.43 m (0.25-0.35 m near nadir)."}
+    verification:
+      status: documented
+      date: 2026-10-08
+      evidence: ["https://cmr.earthdata.nasa.gov/search/collections.umm_json?short_name=SWOT_L2_LR_SSH_WINDWAVE_2.0"]
+      notes: >
+        Reported vs buoys: bias 0.11 m, RMSE 0.43 m (0.25-0.35 m near nadir). Not acquired: a
+        21-day repeat orbit gives a few overpasses a month at any site.
 
   # ---------------------------------------------------------------------------
   # Added by the data source scan, 2026-10-08 (docs/literature/data_source_scan_2026-10.md).

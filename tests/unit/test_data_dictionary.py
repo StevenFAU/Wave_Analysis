@@ -18,6 +18,7 @@ from wave_analysis.registry import validate_registry
 from wave_analysis.sources.cdip import BULK_MAP
 from wave_analysis.sources.era5 import PARAMETERS
 from wave_analysis.sources.ndbc.source import SPEC_MAP, STDMET_MAP
+from wave_analysis.sources.wis import BULK_MAP as WIS_MAP
 
 ROOT = repo_root(Path(__file__))
 PATH = ROOT / "data/registry/data_dictionary.yaml"
@@ -32,6 +33,7 @@ LIVE_IDS = {
     "era5_waves",
     "cdip",
     "ndbc_history",
+    "wis",
     "external",
 }
 
@@ -71,6 +73,7 @@ def _canonical(dd: DataDictionary, collection: str) -> dict[str, str]:
         ),
         ("cdip", BULK_MAP),
         ("era5_waves", {p.short: p.variable for p in PARAMETERS}),
+        ("wis", {k: v[0] for k, v in WIS_MAP.items()}),
     ],
 )
 def test_canonical_keys_match_the_adapters(dd, collection, adapter):

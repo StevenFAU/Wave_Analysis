@@ -33,6 +33,11 @@ Commands
     camera sites (``data/registry/camera_sites.yaml``) from the Copernicus CDS
     (key in ``~/.cdsapirc``); write standardized tables at the nearest sea
     grid point.
+``wis discover | download | standardize``
+    USACE Wave Information Study hindcast at buoy sites: find a station's
+    basin and years; download the whole-record bulk file and monthly files
+    with the 2-D spectrum (``data/manifests/raw/wis.csv``); write standardized
+    bulk (and spectral) tables for a time range.
 ``registry validate``
     Validate ``data/registry/datasets.yaml`` against the registry schema.
 ``archive verify | compare-remote | repair``
@@ -1147,6 +1152,168 @@ def _cmd_archive_repair(args: argparse.Namespace) -> int:
     return 1 if bad else 0
 
 
+def _wis_months(spec: str | None) -> list[str]:
+    """``"2009-01:2013-12"`` -> every month in the range, inclusive (``None``: none)."""
+    if not spec:
+        return []
+    first, _, last = spec.partition(":")
+    periods = pd.period_range(pd.Period(first, "M"), pd.Period(last or first, "M"), freq="M")
+    return [str(p) for p in periods]
+
+
+def _wis_stations(names: Sequence[str]) -> dict[str, str | None]:
+    """Station codes with their configured month range; ``@sites`` expands ``configs/sources/wis.yaml``."""
+    from wave_analysis.sources.wis import station_code
+
+    cfg = load_yaml(repo_root() / "configs" / "sources" / "wis.yaml")
+    configured = {station_code(s["station_id"]): s.get("months") for s in cfg["stations"]}
+    out: dict[str, str | None] = {}
+    for name in names:
+        if name == "@sites":
+            out.update(configured)
+        else:
+            stn = station_code(name)
+            out[stn] = configured.get(stn)
+    return out
+
+
+def _cmd_wis_discover(args: argparse.Namespace) -> int:
+    from wave_analysis.ingest.downloader import Downloader
+    from wave_analysis.sources.wis import WISSource
+
+    with Downloader(min_interval_s=args.min_interval) as dl:
+        table = WISSource(dl).discover(_wis_stations(args.stations))
+    with pd.option_context("display.width", 200, "display.max_rows", 200):
+        print(table.drop(columns="url").to_string(index=False))
+    missing = table.loc[table["basin"].isna(), "station_id"].tolist()
+    if missing:
+        print(f"not a WIS buoy site: {', '.join(missing)}")
+    print(
+        f"{len(table) - len(missing)} stations, about {table['approx_size_bytes'].sum() / 1e6:,.0f} MB of bulk files"
+    )
+    return 0
+
+
+def _cmd_wis_download(args: argparse.Namespace) -> int:
+    from wave_analysis.ingest.downloader import Downloader
+    from wave_analysis.ingest.manifest import EntryStatus, latest_by_url, write_manifest
+    from wave_analysis.sources.wis import ACKNOWLEDGEMENT, WISSource
+
+    stations = _wis_stations(args.stations)
+    manifest_path = (
+        Path(args.manifest) if args.manifest else data_dir("manifests") / "raw" / "wis.csv"
+    )
+    previous = {u: e.sha256 for u, e in latest_by_url(manifest_path).items() if e.sha256}
+    dest = data_dir("raw") / "wis"
+    failed = 0
+    with Downloader(min_interval_s=args.min_interval, timeout_s=args.timeout) as dl:
+        src = WISSource(dl)
+        for stn, configured in stations.items():
+            basin = src.basin_of(stn)
+            if basin is None:
+                print(f"{stn}: not a WIS buoy site; skipped")
+                continue
+            months = _wis_months(args.months if args.months is not None else configured)
+            # One station at a time, so a long run records what it has done so far.
+            entries = src.fetch(
+                stn,
+                basin,
+                dest_root=dest,
+                bulk=not args.no_bulk,
+                months=months,
+                previous=previous,
+            )
+            write_manifest(entries, manifest_path)
+            for e in entries:
+                size = f"{e.size_bytes / 1e6:,.2f} MB" if e.size_bytes is not None else "-"
+                print(f"{e.station_id} {basin} {e.period}: {e.status.value} ({size})", flush=True)
+            failed += sum(e.status == EntryStatus.FAILED for e in entries)
+    print(f"acknowledge in publications: {ACKNOWLEDGEMENT}")
+    return 1 if failed else 0
+
+
+def _cmd_wis_standardize(args: argparse.Namespace) -> int:
+    from wave_analysis.datasets.provenance import build_provenance, write_provenance
+    from wave_analysis.ingest.checksum import sha256_file
+    from wave_analysis.ingest.manifest import latest_by_url
+    from wave_analysis.schemas.observation import validate_observation_frame
+    from wave_analysis.sources.wis import WISSource, raw_path, station_code
+
+    src = WISSource()
+    raw = data_dir("raw") / "wis"
+    out_root = data_dir("processed") / "wis"
+    # Source URLs come from the ledger: a station's basin is in the URL, and file
+    # titles are not reliable (ST46274, a Pacific site, is titled "WIS Atlantic Hindcast").
+    urls = {
+        (e.station_id, e.product, e.period): url
+        for url, e in latest_by_url(data_dir("manifests") / "raw" / "wis.csv").items()
+    }
+    start, end = pd.Timestamp(args.start), pd.Timestamp(args.end)
+    tag = f"{args.start}_{args.end}"
+    last_month = (end - pd.Timedelta(seconds=1)).to_period("M")
+    months = [str(p) for p in pd.period_range(start.to_period("M"), last_month, freq="M")]
+    for st in args.stations:
+        stn = station_code(st)
+        path = raw_path(raw, stn, "bulk")
+        if not path.exists():
+            print(f"{stn}: {path} not found; run 'wave-analysis wis download {stn}'")
+            return 1
+        ds = src.parse(path, start=start, end=end)
+        obs = src.normalize(
+            ds,
+            station_id=stn,
+            source_file=path.name,
+            source_url=urls.get((stn, "bulk", "all")),
+            source_checksum=sha256_file(path),
+        )
+        validate_observation_frame(obs)
+        out = out_root / stn
+        out.mkdir(parents=True, exist_ok=True)
+        written = [out / f"bulk_{tag}.parquet"]
+        obs.to_parquet(written[0], index=False)
+        inputs = [path]
+        month_files = [raw_path(raw, stn, "month", m) for m in months]
+        n_spec = 0
+        if args.spectra and all(p.exists() for p in month_files):
+            spec_frames, derived_frames = [], []
+            for m, mp in zip(months, month_files, strict=True):
+                mds = src.parse(mp, start=start, end=end)
+                sl, der = src.normalize_spectrum(
+                    src.spectrum(mds, station_id=stn),
+                    station_id=stn,
+                    source_file=mp.name,
+                    source_url=urls.get((stn, "month", m)),
+                    source_checksum=sha256_file(mp),
+                )
+                spec_frames.append(sl)
+                derived_frames.append(der)
+                n_spec += int(mds.sizes["time"])
+            derived = pd.concat(derived_frames, ignore_index=True)
+            validate_observation_frame(derived)
+            written += [out / f"spectrum_{tag}.parquet", out / f"spectral_bulk_{tag}.parquet"]
+            pd.concat(spec_frames, ignore_index=True).to_parquet(written[1], index=False)
+            derived.to_parquet(written[2], index=False)
+            inputs += month_files
+        elif args.spectra:
+            have = sum(p.exists() for p in month_files)
+            print(f"{stn}: {have} of {len(month_files)} monthly files held; run 'wis download'")
+            return 1
+        write_provenance(
+            build_provenance(
+                artifact_id=f"wis_standardized_{stn}_{tag}",
+                inputs=inputs,
+                outputs=written,
+                config={"start": args.start, "end": args.end, "model": ds.attrs.get("model")},
+            ),
+            out / f"provenance_{tag}.yaml",
+        )
+        print(
+            f"{stn}: {int(ds.sizes['time']):,} hours -> {len(obs):,} bulk rows"
+            + (f", {n_spec:,} spectra" if n_spec else "")
+        )
+    return 0
+
+
 def _cmd_registry_validate(args: argparse.Namespace) -> int:
     from wave_analysis.registry import validate_registry
 
@@ -1434,6 +1601,33 @@ def build_parser() -> argparse.ArgumentParser:
     estd.add_argument("--start", required=True, help="first month, e.g. 2009-02")
     estd.add_argument("--end", required=True, help="last month, inclusive")
     estd.set_defaults(func=_cmd_era5_standardize)
+
+    wis = sub.add_parser("wis", help="USACE Wave Information Study hindcast at buoy sites")
+    wis_sub = wis.add_subparsers(dest="cmd", required=True)
+    stations_help = "NDBC/WMO ids, e.g. 51201; @sites: every station in configs/sources/wis.yaml"
+    wdisc = wis_sub.add_parser("discover", help="find each station's basin, years and file size")
+    wdisc.add_argument("stations", nargs="+", help=stations_help)
+    wdisc.add_argument("--min-interval", type=float, default=1.0)
+    wdisc.set_defaults(func=_cmd_wis_discover)
+    wisdl = wis_sub.add_parser("download", help="download bulk and monthly files (re-runnable)")
+    wisdl.add_argument("stations", nargs="+", help=stations_help)
+    wisdl.add_argument(
+        "--months",
+        help="monthly files (bulk + 2-D spectrum), e.g. 2009-01:2013-12; overrides the config",
+    )
+    wisdl.add_argument("--no-bulk", action="store_true", help="skip the whole-record bulk file")
+    wisdl.add_argument("--manifest", help="manifest CSV (default: data/manifests/raw/wis.csv)")
+    wisdl.add_argument("--min-interval", type=float, default=1.0)
+    wisdl.add_argument("--timeout", type=float, default=180.0, help="per-request timeout [s]")
+    wisdl.set_defaults(func=_cmd_wis_download)
+    wstd = wis_sub.add_parser("standardize", help="write standardized tables for a time range")
+    wstd.add_argument("stations", nargs="+")
+    wstd.add_argument("--start", required=True, help="first hour (UTC), e.g. 2009-01-01")
+    wstd.add_argument("--end", required=True, help="end of the range (UTC, exclusive)")
+    wstd.add_argument(
+        "--spectra", action="store_true", help="also write spectra from the monthly files"
+    )
+    wstd.set_defaults(func=_cmd_wis_standardize)
 
     dash = sub.add_parser("dashboard", help="public dashboard data and site").add_subparsers(
         dest="cmd", required=True

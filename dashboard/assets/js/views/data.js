@@ -200,7 +200,7 @@ function variablesTable(vars, roles, caption) {
 function partsTable(c) {
   const parts = c?.parts || [];
   if (parts.length < 2) return null;
-  const label = { external: "dataset", ndbc_history: "product", cdip: "station", ndbc_realtime: "station" }[c.id] ||
+  const label = { external: "dataset", ndbc_history: "product", cdip: "station", ndbc_realtime: "station", wis: "buoy" }[c.id] ||
     { images: "camera", "site-months": "site" }[c.unit] || "part";
   return h(
     "details",

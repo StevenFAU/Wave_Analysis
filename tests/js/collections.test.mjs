@@ -107,4 +107,6 @@ test("notes for the NDBC history and research-dataset collections", () => {
   assert.deepEqual(collectionNotes(hist, NOW), ["104 stations; stdmet files"]);
   const ext = { id: "external", mode: "complete", parts: [{ id: "a" }, { id: "b" }] };
   assert.match(collectionNotes(ext, NOW)[0], /^2 datasets/);
+  const wis = { id: "wis", mode: "on_request", parts: [{ id: "51201", months: 60 }, { id: "41113", months: 0 }] };
+  assert.deepEqual(collectionNotes(wis, NOW), ["Model output at 2 buoys; 60 monthly files with the 2-D spectrum"]);
 });

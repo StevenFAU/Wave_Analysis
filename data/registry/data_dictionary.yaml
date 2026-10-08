@@ -72,12 +72,14 @@ groups:
       rides the waves, measures its own motion, and turns that motion into
       wave statistics.
   - id: model
-    title: Wave model
+    title: Wave models
     intro: >-
-      ERA5 (ECMWF, via the Copernicus Climate Data Store) is a weather-and-wave
-      model run over the past and constrained by observations. Each value is an
-      average over a grid cell about 50 km across, so it cannot see a bay. It
-      is the baseline a camera model must beat.
+      Two wave models run over the past. ERA5 (ECMWF, via the Copernicus Climate
+      Data Store) is a weather-and-wave reanalysis constrained by observations;
+      each value is an average over a grid cell about 50 km across, so it cannot
+      see a bay. WIS (U.S. Army Corps of Engineers) is a wave hindcast written
+      out at the buoys themselves. Together they are the baseline a camera
+      model must beat.
   - id: research
     title: Published research datasets
     intro: >-
@@ -570,6 +572,116 @@ collections:
         separation frequency, so ERA5 `shts` and NDBC `SwH` are different
         estimators of "swell height".
 
+  - id: wis
+    group: model
+    name: WIS hindcast at buoy sites
+    subtitle: USACE wave model output at the reference buoys of the camera sites
+    provider: U.S. Army Corps of Engineers, Coastal and Hydraulics Laboratory
+    datasets: [usace_wis]
+    doc: docs/datasets/wis.md
+    roles: [model]
+    where: >-
+      At the position of each buoy WIS is checked against: CDIP 106 off Waimea
+      and the reference buoys of the USGS CoastCam, WebCOOS and FAU sites
+    cadence: Hourly, instantaneous values; re-run and replaced about once a year
+    facts:
+      - {label: Model, value: "WAVEWATCH III 4.16 (Atlantic, Pacific); WAM 4.5.1C (Gulf of Mexico)"}
+      - {label: Period, value: "1980–2025 at long-running buoys; from the year a buoy joined WIS's list otherwise"}
+      - {label: Winds, value: "Adjusted NCEP/NCAR reanalysis before 2020, ERA5 from 2020; no wave data assimilated"}
+      - {label: Spectrum, value: "29 frequencies (0.035–0.505 Hz) × 72 directions of 5°, in the monthly files"}
+    variables:
+      - name: waveHs
+        meaning: Significant height of all waves, 4√m_{0}.
+        unit: m
+        role: model
+        canonical: wave_significant_height
+        group: Bulk parameters (whole-record and monthly files)
+      - name: waveTpPeak
+        meaning: Peak period (the band with the most energy).
+        unit: s
+        role: model
+        canonical: wave_peak_period
+      - name: waveTp
+        meaning: Peak period from a parabolic fit around that band (like ERA5 `pp1d`).
+        unit: s
+        role: model
+      - name: waveTm
+        meaning: Energy period m_{-1}/m_{0} (WIS calls it "mean spectral period").
+        unit: s
+        role: model
+        canonical: wave_energy_period
+      - name: waveTm1
+        meaning: Mean period T_{m01} = m_{0}/m_{1}.
+        unit: s
+        role: model
+        canonical: wave_mean_period_tm01
+      - name: waveTm2
+        meaning: Zero-crossing period T_{m02} = √(m_{0}/m_{2}).
+        unit: s
+        role: model
+        canonical: wave_mean_period_tm02
+      - name: waveMeanDirection
+        meaning: Mean direction the waves come from.
+        unit: "° true"
+        role: model
+        canonical: wave_mean_from_direction
+      - name: waveHsWindsea
+        meaning: Wind-sea height (WIS's own wind-sea/swell split).
+        unit: m
+        role: model
+        canonical: wind_wave_significant_height
+      - name: waveTmWindsea
+        meaning: Wind-sea energy period m_{-1}/m_{0}.
+        unit: s
+        role: model
+        canonical: wind_wave_energy_period
+      - name: waveMeanDirectionWindsea
+        meaning: Wind-sea mean direction.
+        unit: "° true"
+        role: model
+        canonical: wind_wave_from_direction
+      - name: waveHsSwell
+        meaning: Height of all swell together.
+        unit: m
+        role: model
+        canonical: swell_significant_height
+      - name: waveTmSwell
+        meaning: Swell energy period m_{-1}/m_{0}.
+        unit: s
+        role: model
+        canonical: swell_energy_period
+      - name: waveMeanDirectionSwell
+        meaning: Swell mean direction.
+        unit: "° true"
+        role: model
+        canonical: swell_from_direction
+      - name: windSpeed
+        meaning: The 10 m wind speed that drove the model.
+        unit: m/s
+        role: context
+        canonical: wind_speed
+      - name: windDirection
+        meaning: Direction that wind blows from.
+        unit: "° true"
+        role: context
+        canonical: wind_from_direction
+      - name: directionalWaveEnergyDensity
+        meaning: >-
+          Energy per frequency and direction. Its directions are where the
+          waves go toward, the opposite of every bulk direction.
+        unit: m² s rad⁻¹
+        role: model
+        group: Spectrum (monthly files only)
+    notes:
+      - >-
+        WIS sits at the buoy itself, 6 km off Waimea rather than ERA5's 40 km,
+        and its winds before 2020 are not ERA5's. On 2012 and 2013 it predicts
+        CDIP 106 about as well as corrected ERA5 does without any correction,
+        and the two models together beat either one.
+      - >-
+        Some months store the longitude 360° too far west (−518.1° for
+        −158.1°); the adapter wraps it.
+
   # --------------------------------------------------------------- research
   - id: external
     group: research
@@ -798,30 +910,31 @@ crosswalk:
     - {id: ndbc, label: NDBC, collection: ndbc_realtime}
     - {id: cdip, label: CDIP 106, collection: cdip}
     - {id: era5, label: ERA5, collection: era5_waves}
+    - {id: wis, label: WIS, collection: wis}
     - {id: ours, label: Our label, table: waimea_pairing}
   rows:
     - quantity: Significant wave height H_{m0}
-      cells: {ndbc: WVHT, cdip: waveHs, era5: swh, ours: Hs_label_m}
+      cells: {ndbc: WVHT, cdip: waveHs, era5: swh, wis: waveHs, ours: Hs_label_m}
     - quantity: Swell height
-      cells: {ndbc: SwH, cdip: {note: from the spectrum}, era5: shts}
-      note: NDBC splits at a separation frequency; ERA5 splits by wind forcing.
+      cells: {ndbc: SwH, cdip: {note: from the spectrum}, era5: shts, wis: waveHsSwell}
+      note: NDBC splits at a separation frequency; ERA5 and WIS split by wind forcing.
     - quantity: Wind-wave height
-      cells: {ndbc: WWH, cdip: {note: from the spectrum}, era5: shww}
+      cells: {ndbc: WWH, cdip: {note: from the spectrum}, era5: shww, wis: waveHsWindsea}
     - quantity: Peak period
-      cells: {ndbc: DPD, cdip: waveTp, era5: pp1d, ours: Tp_label_s}
+      cells: {ndbc: DPD, cdip: waveTp, era5: pp1d, wis: {vars: [waveTpPeak, waveTp], note: band; parabolic fit}, ours: Tp_label_s}
     - quantity: Mean period T_{m01}
-      cells: {ndbc: {vars: [APD], note: CDIP buoys only}, cdip: waveTa, era5: mp1}
+      cells: {ndbc: {vars: [APD], note: CDIP buoys only}, cdip: waveTa, era5: mp1, wis: waveTm1}
     - quantity: Mean period T_{m02}
-      cells: {ndbc: {vars: [APD], note: NDBC-operated buoys}, cdip: waveTz, era5: mp2}
+      cells: {ndbc: {vars: [APD], note: NDBC-operated buoys}, cdip: waveTz, era5: mp2, wis: waveTm2}
     - quantity: Energy period T_{m-1,0}
-      cells: {era5: mwp}
+      cells: {era5: mwp, wis: waveTm}
     - quantity: Direction at the peak
       cells: {ndbc: MWD, cdip: waveDp, ours: Dp_label_deg}
     - quantity: Mean direction
-      cells: {ndbc: {vars: [.swdir], note: per band}, cdip: {vars: [waveMeanDirection], note: per band}, era5: mwd}
+      cells: {ndbc: {vars: [.swdir], note: per band}, cdip: {vars: [waveMeanDirection], note: per band}, era5: mwd, wis: waveMeanDirection}
     - quantity: Spectrum S(f)
-      cells: {ndbc: .data_spec, cdip: waveEnergyDensity, era5: {note: not held}}
+      cells: {ndbc: .data_spec, cdip: waveEnergyDensity, era5: {note: not held}, wis: {vars: [directionalWaveEnergyDensity], note: "2-D; directions toward"}}
     - quantity: Sea surface temperature
       cells: {ndbc: WTMP, cdip: sstSeaSurfaceTemperature}
     - quantity: Wind
-      cells: {ndbc: [WDIR, WSPD, GST], era5: {note: not held}}
+      cells: {ndbc: [WDIR, WSPD, GST], era5: {note: not held}, wis: [windDirection, windSpeed]}
