@@ -95,3 +95,10 @@ test("period labels", () => {
   assert.equal(periodLabel("2026-09-26", "2026-09-26"), "2026-09-26");
   assert.equal(periodLabel(null, null), "–");
 });
+
+test("notes for the NDBC history and research-dataset collections", () => {
+  const hist = { id: "ndbc_history", mode: "on_request", parts_count: 104, parts: [{ id: "stdmet" }] };
+  assert.deepEqual(collectionNotes(hist, NOW), ["104 stations; stdmet files"]);
+  const ext = { id: "external", mode: "complete", parts: [{ id: "a" }, { id: "b" }] };
+  assert.match(collectionNotes(ext, NOW)[0], /^2 datasets/);
+});

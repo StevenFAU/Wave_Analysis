@@ -9,13 +9,16 @@ are:
 * ``data/registry/camera_sites.yaml``: camera sites and their wave references;
 * ``data/registry/stations.parquet`` and ``ndbc_station_summary.csv``: NDBC
   station metadata and per-product archive years;
+* ``data/registry/data_dictionary.yaml``: what each collection holds and what
+  its variables mean (validated by :mod:`wave_analysis.data_dictionary`);
 * ``docs/literature/bibliography.bib`` and the *Verification index* table in
   ``docs/literature/source_verification.md``;
 * the Markdown under ``docs/`` (titles, citation mentions, navigation).
 
 :func:`build_catalog` fails loudly on dangling references (a verification row
 for a key not in the bibliography, a site referencing an unknown station or
-dataset) so that CI catches them.
+dataset, a dictionary entry naming an unknown dataset or doc) so that CI
+catches them.
 """
 
 from __future__ import annotations
@@ -38,6 +41,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from wave_analysis import __version__
 from wave_analysis.config import load_yaml
 from wave_analysis.dashboard.bibtex import BibEntry, ascii_fold, delatex, parse_bibtex
+from wave_analysis.data_dictionary import DataDictionary, check_references, load_data_dictionary
 from wave_analysis.processing.geospatial import haversine_m
 from wave_analysis.registry import DatasetEntry, validate_registry
 
@@ -420,6 +424,14 @@ def dataset_records(registry: Mapping[str, Any], sites: list[CameraSite]) -> lis
     return out
 
 
+def dictionary_record(dd: DataDictionary) -> dict[str, Any]:
+    """The data dictionary as JSON, with each documentation path's site URL."""
+    rec = dd.model_dump(mode="json")
+    for item in [*rec["collections"], *rec["tables"]]:
+        item["doc_url"] = docs_url(item["doc"])
+    return rec
+
+
 # --------------------------------------------------------------------------- #
 # Assembly
 # --------------------------------------------------------------------------- #
@@ -459,6 +471,10 @@ def build_catalog(root: Path, *, now: dt.datetime | None = None) -> dict[str, An
     for s in sites:
         if s.dataset_id and s.dataset_id not in known_datasets:
             raise ValueError(f"{s.site_id}: unknown dataset_id {s.dataset_id!r}")
+    dictionary = load_data_dictionary(reg_dir / "data_dictionary.yaml")
+    problems = check_references(dictionary, datasets=known_datasets, docs=docs)
+    if problems:
+        raise ValueError("data dictionary is invalid:\n  " + "\n  ".join(problems))
 
     stations_df = pd.read_parquet(reg_dir / "stations.parquet")
     summary_df = pd.read_csv(reg_dir / "ndbc_station_summary.csv", dtype={"station_id": str})
@@ -495,6 +511,7 @@ def build_catalog(root: Path, *, now: dt.datetime | None = None) -> dict[str, An
         },
         "registry_version": registry.get("registry_version"),
         "datasets": datasets,
+        "dictionary": dictionary_record(dictionary),
         "sites": site_recs,
         "stations": stations,
         "references": references,

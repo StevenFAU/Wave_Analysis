@@ -802,6 +802,7 @@ def _cmd_dashboard_live(args: argparse.Namespace) -> int:
         ndbc_root=raw / "ndbc",
         raw_root=raw,
         manifests_root=data_dir("manifests"),
+        external_root=data_dir("external"),
     )
     cache = Path(args.cache) if args.cache else data_dir("interim") / "dashboard" / "seastate"
     fetcher = None if args.no_fetch else RangeFetcher(min_interval_s=args.min_interval)

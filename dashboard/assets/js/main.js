@@ -7,6 +7,7 @@ import { hideTooltip } from "./lib/tooltip.js";
 import * as about from "./views/about.js";
 import * as archive from "./views/archive.js";
 import * as cameras from "./views/cameras.js";
+import * as data from "./views/data.js";
 import * as literature from "./views/literature.js";
 import * as overview from "./views/overview.js";
 import * as sources from "./views/sources.js";
@@ -14,6 +15,7 @@ import * as station from "./views/station.js";
 
 const ROUTES = [
   { re: /^$/, view: overview, nav: "" },
+  { re: /^data(?:\/([a-z0-9_-]+))?$/, view: data, nav: "data" },
   { re: /^cameras$/, view: cameras, nav: "cameras" },
   { re: /^station\/([A-Za-z0-9_]+)(?:\/(\d+))?$/, view: station, nav: "cameras" },
   { re: /^archive$/, view: archive, nav: "archive" },
@@ -128,7 +130,7 @@ function renderFooter() {
       "p",
       null,
       "Buoy-camera images and observations: NOAA National Data Buoy Center (U.S. Government work, public domain); sea-state values are provisional realtime data. ",
-      "Collection totals also count data from PacIOOS, WebCOOS (SECOORA), CDIP and ERA5 (Copernicus Climate Change Service); their images and files are not republished here. ",
+      "Collection totals also count data from PacIOOS, WebCOOS (SECOORA), CDIP, ERA5 (Copernicus Climate Change Service) and published research datasets; their images and files are not republished here. ",
       "Map data © OpenStreetMap contributors; bathymetry © GEBCO Compilation Group. Code: MIT licence.",
     ),
   );

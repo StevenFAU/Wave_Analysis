@@ -13,6 +13,8 @@ markdown_extensions:
   - pymdownx.arithmatex: {generic: true}
   - pymdownx.superfences
   - pymdownx.highlight
+hooks:
+  - scripts/mkdocs_data_dictionary.py   # renders data/registry/data_dictionary.yaml into datasets/inventory.md
 extra_javascript:
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 not_in_nav: |
@@ -41,6 +43,7 @@ nav:
       - Models: methodology/models.md
   - Datasets:
       - Overview & template: datasets/README.md
+      - Data inventory: datasets/inventory.md
       - NDBC: datasets/ndbc.md
       - NDBC ADCP: datasets/ndbc_adcp.md
       - CDIP: datasets/cdip.md

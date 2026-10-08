@@ -80,6 +80,10 @@ export function collectionNotes(c, now = Date.now()) {
     notes.push(`${fmtInt(c.parts_count)} cameras; ${fmtInt(c.not_found)} camera-hours never published by NDBC`);
   } else if (c.id === "ndbc_realtime") {
     notes.push(`45-day spectral and meteorological files for ${fmtInt(c.parts_count)} camera stations`);
+  } else if (c.id === "ndbc_history") {
+    notes.push(`${fmtInt(c.parts_count)} stations; ${(c.parts || []).map((p) => p.id).join(", ")} files`);
+  } else if (c.id === "external") {
+    notes.push(`${fmtInt((c.parts || []).length)} datasets, each file checked against its repository's published sizes and checksums`);
   } else if (c.not_found) {
     notes.push(`${fmtInt(c.not_found)} listed images no longer served (HTTP 404)`);
   }

@@ -125,7 +125,9 @@ function collectionsCard(st) {
     h(
       "p",
       { class: "card-sub" },
-      "Every collection on the collector host, counted from the files on disk and checked against the collection's request ledger. Counts only: PacIOOS and WebCOOS images are not republished here.",
+      "Every collection on the collector host, counted from the files on disk and checked against the collection's request ledger. Counts only: PacIOOS and WebCOOS images are not republished here. What each collection holds and what its variables mean: ",
+      h("a", { href: "#/data" }, "Data inventory"),
+      ".",
     ),
     h(
       "div",
@@ -155,7 +157,7 @@ function collectionsCard(st) {
             h(
               "div",
               null,
-              h("a", { href: `#/sources/${c.dataset_id}` }, c.name),
+              h("a", { href: `#/data/${c.id}` }, c.name),
               h("div", { class: "small muted" }, `${c.provider} · ${MODES[c.mode] || c.mode}`),
               c.notes.map((n) => h("div", { class: "small muted" }, n)),
             ),

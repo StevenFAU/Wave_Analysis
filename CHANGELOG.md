@@ -18,6 +18,19 @@ separately (`docs/REPRODUCIBILITY.md`).
   the lagoon.
 
 ### Added (2026-10-08)
+- A data inventory: `data/registry/data_dictionary.yaml` says what each
+  collection is for (pictures, labels, context, model, our tables,
+  bookkeeping) and what every field and variable in it means, with a
+  cross-reference of the same quantity under NDBC, CDIP, ERA5 and label names.
+  It is validated (`wave_analysis.data_dictionary`; canonical keys tested
+  against the NDBC, CDIP and ERA5 adapters) and rendered twice from the one
+  file: the dashboard's new **Data** view (`#/data`, with live counts) and
+  [docs/datasets/inventory.md](docs/datasets/inventory.md) (MkDocs hook
+  `scripts/mkdocs_data_dictionary.py`), which also explains where NDBC wave
+  numbers are computed and what that means for pairing with cameras.
+- The dashboard's collection list now includes the NDBC historical files
+  (`ndbc_history`) and the published research datasets (`external`), each
+  checked against its ledger.
 - A second collector host. Buoy-camera ledgers are named per host
   (`_manifests/<YYYY-MM>.<host>.csv`, `buoycam.collector_host`,
   `WAVE_ANALYSIS_HOST`), so two hosts can archive the same images.

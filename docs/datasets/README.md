@@ -1,5 +1,8 @@
 # Dataset Documentation
 
+For what the project holds today, what each collection is for, and what
+every variable means, see the [data inventory](inventory.md).
+
 Each upstream source has a datasheet in this directory, following one template
 adapted from *Datasheets for Datasets* (Gebru et al. 2021). The machine-readable
 counterpart is the registry, `data/registry/datasets.yaml`, whose
@@ -59,7 +62,8 @@ see open questions" rather than deleting a section.
 ## Open Research Questions
 ```
 
-Adding a source also requires: a registry entry (validated in CI), a config in
+Adding a source also requires: a registry entry (validated in CI), an entry in
+`data/registry/data_dictionary.yaml` once data is held, a config in
 `configs/sources/`, an adapter implementing `sources.base.DataSource`, real
 trimmed fixtures in `tests/fixtures/<source>/` with a provenance README, and a
 `CHANGELOG.md` entry.

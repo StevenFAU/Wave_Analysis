@@ -1,0 +1,781 @@
+# Wave_Analysis data dictionary
+# ------------------------------------------------------------------------------
+# What each data collection is for, and what every field or variable in it
+# means. The dashboard's Data view (#/data) and the documentation page
+# docs/datasets/inventory.md are both rendered from this file, so they cannot
+# disagree. Counts, sizes and periods are NOT stored here: the dashboard reads
+# them from the collector's live status (status.json `collections[]`), whose ids
+# match the `id` of each collection below.
+#
+# Text markup (both renderers): `code` for names, _{x} for a subscript.
+# A variable's `canonical` is its key in the standardized layer
+# (src/wave_analysis/schemas/variables.py); tests check it against the adapters'
+# own maps (NDBC STDMET_MAP/SPEC_MAP, CDIP BULK_MAP, ERA5 PARAMETERS).
+# Crosswalk cells name variables of the collection (or table) the column points
+# to; the catalog build fails on a name that does not exist.
+#
+# Facts here were checked on the files on disk on `checked`; see each
+# datasheet (`doc`) for the full record and its sources.
+# Schema: src/wave_analysis/data_dictionary.py
+# ------------------------------------------------------------------------------
+dictionary_version: "1.0.0"
+checked: "2026-10-08"
+
+roles:
+  - id: pictures
+    label: Pictures
+    short: What the model sees
+    description: Camera images of the sea. Nothing else is fed to an image model as input.
+  - id: labels
+    label: Labels
+    short: What the model must predict
+    description: >-
+      Instrument measurements of the waves, such as wave height from a buoy.
+      The ground truth.
+  - id: context
+    label: Context
+    short: Why a picture looks the way it does
+    description: >-
+      Wind (whitecaps), sun angle (glare, darkness), water and air temperature,
+      platform motion. Used to split results and explain errors.
+  - id: model
+    label: Model
+    short: A score to beat
+    description: >-
+      ERA5 is a computer estimate of the waves, not a measurement. It is a
+      baseline and is never used as a label.
+  - id: derived
+    label: Our tables
+    short: Things we computed
+    description: >-
+      Which picture goes with which buoy record, image audits, benchmark
+      results, buoy-to-buoy comparisons.
+  - id: bookkeeping
+    label: Bookkeeping
+    short: Proof of origin
+    description: >-
+      For every downloaded file: where it came from, when, and its SHA-256
+      fingerprint. Plus the registries of cameras, stations and datasets.
+
+groups:
+  - id: pictures
+    title: Pictures of the sea
+    intro: >-
+      A picture has no "variables" in the instrument sense. Its information is
+      the pixels, plus a few facts about when, where and how it was taken. None
+      of these images records exposure settings, and there is no lens
+      calibration for any of these cameras.
+  - id: measurements
+    title: Wave and weather measurements
+    intro: >-
+      Every wave number below summarises a record of 20 to 27 minutes. A buoy
+      rides the waves, measures its own motion, and turns that motion into
+      wave statistics.
+  - id: model
+    title: Wave model
+    intro: >-
+      ERA5 (ECMWF, via the Copernicus Climate Data Store) is a weather-and-wave
+      model run over the past and constrained by observations. Each value is an
+      average over a grid cell about 50 km across, so it cannot see a bay. It
+      is the baseline a camera model must beat.
+  - id: research
+    title: Published research datasets
+    intro: >-
+      Short, well-instrumented field campaigns released by their authors. They
+      fill sensor gaps no public camera network can: stereo from a moving ship
+      with its motion record, thermal infrared with lidar, and stereo of very
+      large waves in sea ice. They are for checking methods, not for training:
+      each covers days, not years.
+
+collections:
+  # ---------------------------------------------------------------- pictures
+  - id: ndbc_buoycam
+    group: pictures
+    name: NDBC buoy cameras
+    subtitle: Cameras on the buoys, six views each
+    provider: NOAA National Data Buoy Center
+    datasets: [ndbc]
+    doc: docs/datasets/ndbc.md
+    roles: [pictures]
+    where: Camera buoys on US coasts and in the Pacific
+    cadence: Hourly, day and night
+    facts:
+      - {label: Mounted on, value: "The buoy hull, so the camera rocks with it"}
+      - {label: Image, value: "2880 × 300 px: six 480 × 270 views side by side, plus a 30-px caption band"}
+      - {label: Timing, value: "Hourly, mostly at minute :10 (97 %), some at :00 or :50"}
+      - {label: Wave reference, value: "The same buoy (0 km)"}
+    variables:
+      - name: pixels
+        meaning: >-
+          Six views side by side, each looking a different direction from the
+          buoy mast. Night images are mostly dark.
+        source: JPEG
+      - name: caption band
+        meaning: >-
+          A 30-pixel strip burned into the bottom with the station and UTC
+          time. Masked before training so a model cannot read it.
+        source: in image
+      - name: station_id
+        meaning: The buoy, e.g. `41002` (South Hatteras).
+        source: folder
+      - name: time (UTC)
+        meaning: From the file name, e.g. `Z24A_2026_10_02_0110.jpg` = 01:10 UTC.
+        source: file name
+      - name: EXIF
+        meaning: None. The files carry no camera metadata.
+        source: "–"
+    notes:
+      - >-
+        NDBC keeps each image for only about 72 hours, so this archive is the
+        only copy of older images. Two hosts collect it, and a daily offsite
+        copy goes to object storage.
+
+  - id: pacioos_waimea
+    group: pictures
+    name: PacIOOS Waimea Bay cameras
+    subtitle: Two shore cameras, Oahu, 2009–2013
+    provider: Pacific Islands Ocean Observing System
+    datasets: [pacioos_beachcam]
+    doc: docs/datasets/pacioos_beachcam.md
+    roles: [pictures]
+    where: Waimea Bay, Oahu, Hawaii
+    cadence: Roughly hourly, daylight
+    facts:
+      - {label: Cameras, value: "`beachcam_003`, `beachcam_004` (same spot)"}
+      - {label: Image, value: "1624 × 1254 px"}
+      - {label: Timing, value: "Roughly hourly in daylight; the two cameras are often minutes apart, not simultaneous"}
+      - {label: Wave reference, value: "CDIP 106, 6.3 km away"}
+    variables:
+      - name: pixels
+        meaning: One wide view of the bay. Camera 004 has a fixed black mask over the shore.
+        source: JPEG
+      - name: caption time (HST)
+        meaning: >-
+          The real capture time, burned into the image (Hawaii time, UTC−10).
+          Read from every image and checked against sunrise and sunset.
+        source: in image
+      - name: file-name hour
+        meaning: >-
+          The hour in the file name. Usually 25–55 min earlier than the
+          capture, so it is not used as the capture time.
+        source: file name
+      - name: EXIF
+        meaning: None.
+        source: "–"
+    notes:
+      - >-
+        The camera clock was wrong from 23 May to 27 Jul 2013, so 636 images
+        there have no trusted time and are excluded.
+
+  - id: webcoos
+    group: pictures
+    name: WebCOOS cameras
+    subtitle: Beachfront webcams near wave buoys
+    provider: Webcam Coastal Observation System (SECOORA / NOAA IOOS)
+    datasets: [webcoos]
+    doc: docs/datasets/webcoos.md
+    roles: [pictures]
+    where: >-
+      The five Yin et al. (2025) cameras in North Carolina, plus eleven
+      beachfront cameras within 25 km of a directional wave buoy (Atlantic,
+      Gulf and Pacific coasts)
+    cadence: One still per 30 min, daylight
+    facts:
+      - {label: Image, value: "1920 × 1080 to 2688 × 1520 px, by camera (2592 × 1944 at Jennette's Pier)"}
+      - {label: Timing, value: "One still per 30-min slot, nearest to the slot start"}
+      - {label: Wave reference, value: "Nearest directional buoy 5.8–28.9 km away, by camera"}
+      - {label: History, value: "The 85 days before collection began were fetched; older stills need SECOORA's permission first"}
+    variables:
+      - name: pixels
+        meaning: One beach view per camera. Two cameras (`pgtalabama_*`) burn a time overlay into the image.
+        source: JPEG
+      - name: capture time (UTC)
+        meaning: To the second, from the WebCOOS API and the file name.
+        source: API
+      - name: EXIF GPS
+        meaning: Camera latitude and longitude.
+        source: EXIF
+      - name: EXIF UserComment
+        meaning: >-
+          Camera name, e.g. "UNCW Oak Island West". No exposure or time fields
+          (checked on one image from each of four cameras).
+        source: EXIF
+    notes:
+      - >-
+        The Oak Island reference buoy (CDIP 200) has no data after 20 Jul
+        2026, so those two cameras currently have no nearby wave label.
+      - >-
+        Images are counted but never republished: the WebCOOS usage guidelines
+        do not address redistribution.
+
+  # ------------------------------------------------------------ measurements
+  - id: cdip
+    group: measurements
+    name: "CDIP 106: Datawell Waverider off Waimea"
+    subtitle: The reference wave buoy for the Waimea cameras (also NDBC 51201)
+    provider: Scripps Institution of Oceanography (CDIP)
+    datasets: [cdip]
+    doc: docs/datasets/cdip.md
+    roles: [labels, context]
+    where: 6.3 km from the Waimea cameras
+    cadence: One record every 30 min
+    facts:
+      - {label: Record, value: "1600 s (26.7 min), one every 30 min"}
+      - {label: Spectrum, value: "64 bands, 0.025–0.58 Hz (waves of 40 s to 1.7 s)"}
+      - {label: Processed so far, value: "2009–2013: 84,893 records"}
+      - {label: Time stamp, value: "Start of the record (UTC)"}
+    variables:
+      - group: One number per record
+        name: waveHs
+        meaning: >-
+          Significant wave height, H_{m0} = 4√(total energy). Roughly the
+          height of the biggest third of the waves.
+        unit: m
+        role: labels
+        canonical: wave_significant_height
+      - name: waveTp
+        meaning: "Peak period: the wave period carrying the most energy."
+        unit: s
+        role: labels
+        canonical: wave_peak_period
+      - name: waveTa
+        meaning: Average period T_{m01} = m_{0}/m_{1}.
+        unit: s
+        role: labels
+        canonical: wave_mean_period_tm01
+      - name: waveTz
+        meaning: Zero-upcrossing period from the spectrum, T_{m02} = √(m_{0}/m_{2}).
+        unit: s
+        role: labels
+        canonical: wave_mean_period_tm02
+      - name: waveDp
+        meaning: Direction the peak waves come from.
+        unit: "° true"
+        role: labels
+        canonical: wave_from_direction_at_peak
+      - name: wavePeakPSD
+        meaning: Energy density at the peak.
+        unit: m²/Hz
+        role: labels
+      - name: waveFlagPrimary, waveFlagSecondary
+        meaning: Quality flag (1 good … 4 bad) and its reason (one of 20).
+        unit: code
+        role: bookkeeping
+      - group: One value per frequency band (64 per record)
+        name: waveEnergyDensity
+        meaning: "The spectrum: how much wave energy sits at each frequency."
+        unit: m²/Hz
+        role: labels
+      - name: waveMeanDirection
+        meaning: Direction the waves of that band come from.
+        unit: "° true"
+        role: labels
+      - name: waveA1Value, waveB1Value, waveA2Value, waveB2Value
+        meaning: "Directional Fourier coefficients: the shape of the spread of directions."
+        unit: "–"
+        role: labels
+      - name: waveSpread
+        meaning: How widely the band's directions spread.
+        unit: "°"
+        role: labels
+      - name: waveM2Value, waveN2Value
+        meaning: Centred second-order coefficients (skew and peakedness of the spread).
+        unit: "–"
+        role: labels
+      - name: waveCheckFactor
+        meaning: >-
+          Consistency of vertical and horizontal motion (inverse of wave
+          ellipticity). Near 1 when the buoy follows the water.
+        unit: "–"
+        role: bookkeeping
+      - group: Other sensors and the buoy itself
+        name: sstSeaSurfaceTemperature
+        meaning: Water temperature at the surface (plus a reference temperature).
+        unit: °C
+        role: context
+      - name: gpsLatitude, gpsLongitude
+        meaning: Where the buoy actually was (it swings on its mooring).
+        unit: "°"
+        role: context
+      - name: dwr… (7 variables)
+        meaning: >-
+          Buoy health: battery level and weeks left, accelerometer offsets
+          (x, y, z), orientation, magnetic inclination.
+        unit: mixed
+        role: bookkeeping
+      - name: meta…
+        meaning: "Per deployment: position, water depth, magnetic declination."
+        unit: mixed
+        role: bookkeeping
+    notes:
+      - >-
+        CDIP also publishes the buoy's raw motion (displacement at about 1.28
+        samples per second) in per-deployment files. For station 106 those
+        total 18.7 GB and are not downloaded.
+
+  - id: ndbc_realtime
+    group: measurements
+    name: NDBC waves and weather at the camera buoys
+    subtitle: Seven 45-day "realtime" files per buoy, saved twice a month
+    provider: NOAA National Data Buoy Center
+    datasets: [ndbc]
+    doc: docs/datasets/ndbc.md
+    roles: [labels, context]
+    where: The camera buoys
+    cadence: Weather every 10–60 min; waves every 30–60 min
+    facts:
+      - {label: Saved, value: "On the 1st and 15th of each month; each file holds the last 45 days, so saves overlap"}
+      - {label: Wave record, value: "20 min (40 min on some systems)"}
+      - {label: Spectrum, value: "46 bands, 0.0325–0.485 Hz (at 41002)"}
+      - {label: Time stamp, value: "UTC; wave times rounded to the half hour or hour"}
+    variables:
+      - group: "Standard file (`.txt`): weather plus bulk waves"
+        name: WVHT
+        meaning: >-
+          Significant wave height. NDBC's text calls it the average of the
+          highest third; it is computed as H_{m0} = 4√(total energy) (verified
+          on 31,944 records).
+        unit: m
+        role: labels
+        canonical: wave_significant_height
+      - name: DPD
+        meaning: "Dominant (peak) period: the period of the band with the most energy."
+        unit: s
+        role: labels
+        canonical: wave_peak_period
+      - name: APD
+        meaning: >-
+          Average period. NDBC computes √(m_{0}/m_{2}) = T_{m02}; for CDIP buoys
+          that NDBC distributes it shows m_{0}/m_{1} = T_{m01} instead.
+        unit: s
+        role: labels
+        canonical: wave_mean_period
+      - name: MWD
+        meaning: Direction the dominant-period waves come from.
+        unit: "° true"
+        role: labels
+        canonical: wave_from_direction_at_peak
+      - name: WDIR
+        meaning: Wind direction (coming from), over the same 8 minutes as WSPD.
+        unit: "° true"
+        role: context
+        canonical: wind_from_direction
+      - name: WSPD
+        meaning: Wind speed, 8-minute average.
+        unit: m/s
+        role: context
+        canonical: wind_speed
+      - name: GST
+        meaning: Peak 5- or 8-second gust in that period.
+        unit: m/s
+        role: context
+        canonical: wind_speed_of_gust
+      - name: PRES
+        meaning: Sea-level air pressure.
+        unit: hPa
+        role: context
+        canonical: air_pressure_at_sea_level
+      - name: PTDY
+        meaning: Pressure change over the last 3 hours (realtime files only).
+        unit: hPa
+        role: context
+        canonical: air_pressure_tendency
+      - name: ATMP
+        meaning: Air temperature.
+        unit: °C
+        role: context
+        canonical: air_temperature
+      - name: WTMP
+        meaning: Sea surface temperature; sensor depth depends on the hull.
+        unit: °C
+        role: context
+        canonical: sea_surface_temperature
+      - name: DEWP
+        meaning: "Dew point: how humid the air is. A hint of fog or a wet lens."
+        unit: °C
+        role: context
+        canonical: dew_point_temperature
+      - name: VIS
+        meaning: Visibility. Buoys report only 0–1.6 nmi.
+        unit: nmi
+        role: context
+        canonical: visibility
+      - name: TIDE
+        meaning: >-
+          Water level relative to mean lower low water. No camera buoy
+          reported it in the 1 Oct 2026 save.
+        unit: ft
+        role: context
+        canonical: water_level
+      - group: "Wave summary (`.spec`): the sea split into swell and wind waves"
+        name: SwH
+        meaning: Swell height. Swell is waves made by distant storms.
+        unit: m
+        role: labels
+        canonical: swell_significant_height
+      - name: SwP
+        meaning: Swell period.
+        unit: s
+        role: labels
+        canonical: swell_period
+      - name: SwD
+        meaning: Swell direction (16-point compass).
+        unit: compass
+        role: labels
+        canonical: swell_from_direction
+      - name: WWH
+        meaning: Wind-wave height. Wind waves are made by the local wind.
+        unit: m
+        role: labels
+        canonical: wind_wave_significant_height
+      - name: WWP
+        meaning: Wind-wave period.
+        unit: s
+        role: labels
+        canonical: wind_wave_period
+      - name: WWD
+        meaning: Wind-wave direction (16-point compass).
+        unit: compass
+        role: labels
+        canonical: wind_wave_from_direction
+      - name: STEEPNESS
+        meaning: >-
+          Category from height and peak period: SWELL, AVERAGE, STEEP,
+          VERY_STEEP, or N/A when the height is under 0.8 m.
+        unit: class
+        role: labels
+      - group: "Spectral files: one value per frequency band"
+        name: .data_spec
+        meaning: >-
+          The spectrum S(f): wave energy at each frequency. Also `Sep_Freq`,
+          the frequency that divides swell from wind waves.
+        unit: m²/Hz
+        role: labels
+        canonical: wave_spectral_density
+      - name: .swdir
+        meaning: α_{1}, the mean direction the waves of each band come from.
+        unit: "° true"
+        role: labels
+      - name: .swdir2
+        meaning: α_{2}, the principal direction of each band.
+        unit: "° true"
+        role: labels
+      - name: .swr1
+        meaning: r_{1}, how concentrated the directions are (0 spread out, 1 one direction).
+        unit: "–"
+        role: labels
+      - name: .swr2
+        meaning: r_{2}, the second-order version of r_{1}.
+        unit: "–"
+        role: labels
+
+  - id: ndbc_history
+    group: measurements
+    name: NDBC historical weather and wave files
+    subtitle: Yearly archive files, for the buoy-to-buoy study
+    provider: NOAA National Data Buoy Center
+    datasets: [ndbc]
+    doc: docs/datasets/ndbc.md
+    roles: [labels, context]
+    where: Stations with another buoy within 100 km (2023)
+    cadence: Weather every 10–60 min; waves every 30–60 min
+    facts:
+      - {label: Files, value: "Standard meteorological (`stdmet`) files, one per station and year"}
+      - {label: Used for, value: "How well two nearby buoys agree on H_{s} (`scripts/buoy_pair_agreement.py`)"}
+    variables: []
+    notes:
+      - Same columns as the standard (`.txt`) file above, except PTDY, which only realtime files carry.
+
+  # ------------------------------------------------------------------ model
+  - id: era5_waves
+    group: model
+    name: ERA5 wave reanalysis
+    subtitle: ECMWF model, 0.5° grid, at the camera sites
+    provider: ECMWF / Copernicus Climate Change Service
+    datasets: [era5_waves]
+    doc: docs/datasets/era5.md
+    roles: [model]
+    where: A 6 × 6 block of grid points around each camera site
+    cadence: Hourly, instantaneous values
+    facts:
+      - {label: Grid, value: "0.5° (about 50 km); land points are empty"}
+      - {label: Nearest sea point to Waimea, value: "22.0° N 158.0° W, about 40 km away"}
+      - {label: Final vs preliminary, value: "The last ~3 months are ERA5T and can still change"}
+    variables:
+      - name: swh
+        meaning: Significant height of all waves (wind waves + swell), 4√m_{0}.
+        unit: m
+        role: model
+        canonical: wave_significant_height
+      - name: pp1d
+        meaning: Peak period (parabolic fit around the spectral peak).
+        unit: s
+        role: model
+        canonical: wave_peak_period
+      - name: mwp
+        meaning: >-
+          "Mean wave period". Actually the energy period m_{-1}/m_{0}, not
+          T_{m01} (Bidlot 2020).
+        unit: s
+        role: model
+        canonical: wave_energy_period
+      - name: mp1
+        meaning: Mean period T_{m01} = m_{0}/m_{1}.
+        unit: s
+        role: model
+        canonical: wave_mean_period_tm01
+      - name: mp2
+        meaning: Zero-crossing period T_{m02} = √(m_{0}/m_{2}).
+        unit: s
+        role: model
+        canonical: wave_mean_period_tm02
+      - name: mwd
+        meaning: Mean direction the waves come from.
+        unit: "° true"
+        role: model
+        canonical: wave_mean_from_direction
+      - name: shww
+        meaning: Wind-sea height (ERA5's own wind-sea/swell split).
+        unit: m
+        role: model
+        canonical: wind_wave_significant_height
+      - name: mpww
+        meaning: Wind-sea energy period m_{-1}/m_{0}.
+        unit: s
+        role: model
+        canonical: wind_wave_energy_period
+      - name: mdww
+        meaning: Wind-sea mean direction.
+        unit: "° true"
+        role: model
+        canonical: wind_wave_from_direction
+      - name: shts
+        meaning: Height of all swell together.
+        unit: m
+        role: model
+        canonical: swell_significant_height
+      - name: mpts
+        meaning: Total-swell energy period m_{-1}/m_{0}.
+        unit: s
+        role: model
+        canonical: swell_energy_period
+      - name: mdts
+        meaning: Total-swell mean direction.
+        unit: "° true"
+        role: model
+        canonical: swell_from_direction
+    notes:
+      - >-
+        ERA5's swell and wind-sea split is by wind forcing, not NDBC's
+        separation frequency, so ERA5 `shts` and NDBC `SwH` are different
+        estimators of "swell height".
+
+  # --------------------------------------------------------------- research
+  - id: external
+    group: research
+    name: Published stereo and thermal-IR datasets
+    subtitle: Three field campaigns, downloaded with checksums
+    provider: Dataset authors, via UW ResearchWorks and the Australian Antarctic Data Centre
+    datasets: [schwendeman_thomson_2017_ship_stereo, carini_duck2016_ir_lidar, alberello_2017_agulhas_wass]
+    doc: docs/datasets/external_research_datasets.md
+    roles: [pictures, labels, context]
+    where: >-
+      North Pacific (ship, winter 2014–15); Duck, North Carolina (surf zone,
+      Nov 2016); Antarctic marginal ice zone, about 62° S 30° E (ship, 4 Jul 2017)
+    cadence: Fixed archives (complete)
+    facts:
+      - {label: Licences, value: "CC BY 3.0 US (ship stereo); CC BY (IR + lidar); CC BY 4.0 (Agulhas II stereo)"}
+      - {label: Checks, value: "Size and the repository's MD5 for every UW file; CRC and the AADC object list for the Agulhas II zip"}
+      - {label: Offsite copy, value: "Not needed: the repositories are permanent"}
+      - {label: Use, value: "Checking methods and validation, not training: each covers days, not years"}
+    variables:
+      - group: "Schwendeman & Thomson (2017): stereo from R/V Thomas G. Thompson"
+        name: StereoXYZData_FiveMin.zip
+        meaning: >-
+          55 five-minute stereo bursts on 10 days (the readme says 52). Each
+          one-minute file holds the radiance image (`imgrid`) and the measured
+          surface elevation (`zgrid`) on the same 161 × 161 grid at 0.25 m,
+          5 or 7.5 Hz, plus the cameras' own motion from an IMU.
+        role: pictures
+        source: 8.2 GB
+      - name: StereoXYZData_FullCapture.zip
+        meaning: The 10 best bursts at full length (20–60 min), same layout.
+        role: pictures
+        source: 9.6 GB
+      - name: WaveriderSpectra_TGT2015.mat
+        meaning: >-
+          263 thirty-minute records from two drifting Waveriders: directional
+          spectra, moments, position. H_{m0} 1.05–7.19 m.
+        role: labels
+        source: 11 MB
+      - name: SWIFTdata_TGT2015.mat
+        meaning: "2,522 SWIFT drifter bursts of 512 s: H_{s}, T_{p}, direction, spectra, wind, turbulence."
+        role: labels
+        source: 8 MB
+      - name: ShipData_TGT2015.mat
+        meaning: Ship position, speed, heading, wind, air and sea temperature.
+        role: context
+        source: 40 MB
+      - name: ResultsAndPlots_JPO.zip
+        meaning: The paper's results (whitecap events, stereo spectra, figures).
+        role: derived
+        source: 6.8 GB
+      - group: "Carini et al.: Duck 2016, thermal IR and lidar"
+        name: SurfZoneWavesAtOnsetBreaking.mat
+        meaning: >-
+          Thermal IR stacks of 640 × 480 frames with breaking masks (an example
+          sequence, not the full record), IR and lidar geometry, bathymetry,
+          and wave conditions from a bottom-mounted sensor in 3.5 m depth
+          (H_{s} 0.33–2.52 m, T_{p} 3.3–15.9 s).
+        role: pictures
+        source: 2.8 GB
+      - name: lidarIR_sharedData.mat
+        meaning: >-
+          1,782 individually tracked waves from 53 runs: lidar profiles, IR
+          breaking masks, height, period, shape; 1,674 have a hand-labelled
+          breaker type (non-breaking, steady, spilling, plunging).
+        role: labels
+        source: 3.5 GB
+      - group: "Alberello et al. (2017): WASS stereo from S.A. Agulhas II"
+        name: wass__20170704_*.nc (6 files)
+        meaning: >-
+          Reconstructed sea-surface elevation `Z` (int16, mm) on a 151 × 201
+          grid at 1 m, 2 Hz: six acquisitions of 24–58 min, 08:05–12:25 UTC,
+          during an explosive polar cyclone. Rough H_{s} 4.5–6.5 m (the
+          project's estimate, not the paper's). No camera images included.
+        role: labels
+        source: 1.6 GB
+      - name: README, LICENSE, AAS_4434_AGULHAS_WASS_2017.xml
+        meaning: Description, licence and AADC metadata record.
+        role: bookkeeping
+        source: 17 kB
+    notes:
+      - Raw stereo frames are not included in the Schwendeman & Thomson release; the authors provide them on request.
+      - >-
+        Agulhas II files: missing values are the fill value 0, not NaN as the
+        README says, and the `datenum` variable is wrong (7 April). Take each
+        acquisition's start time from the file name.
+
+tables:
+  - id: waimea_pairing
+    name: Waimea pairing (samples)
+    roles: [derived]
+    shape: "17,854 rows × 37 columns"
+    path: data/processed/pairs/waimea_cdip106/samples.parquet
+    doc: docs/datasets/pacioos_beachcam.md
+    holds: >-
+      One row per Waimea image: capture time and how it is known, sun height
+      and direction, light category (day, low sun, twilight, dark), distance
+      and time offset to the nearest CDIP record, and the labels: `Hs_label_m`
+      (mean of the records within ±30 min) with its spread, `Tp_label_s` and
+      `Dp_label_deg` (nearest record), the alternatives, a
+      `peak_records_disagree` flag, and why an image was excluded.
+    columns: [Hs_label_m, Tp_label_s, Dp_label_deg]
+  - id: waimea_candidates
+    name: Waimea pairing (candidates)
+    roles: [derived]
+    shape: "196,672 rows × 20 columns"
+    path: data/processed/pairs/waimea_cdip106/candidates.parquet
+    doc: docs/datasets/pacioos_beachcam.md
+    holds: >-
+      Every CDIP record within ±3 h of every image, with offsets and values,
+      so another labelling rule can be tried without pairing again.
+  - id: waimea_audit
+    name: Waimea image audit
+    roles: [derived]
+    shape: 122 MB
+    path: data/interim/waimea_audit/
+    doc: docs/datasets/pacioos_beachcam.md
+    holds: >-
+      Checksums, decode checks, the caption time read from each image, clock
+      checks against sunrise and sunset, simple image features.
+  - id: waimea_benchmark_v0
+    name: Waimea benchmark v0
+    roles: [derived]
+    shape: "63 results, 24 comparisons"
+    path: data/processed/benchmarks/waimea_cdip106_v0/
+    doc: docs/datasets/pacioos_beachcam.md
+    holds: >-
+      Leakage-audited day, week and year splits; baseline scores (climatology,
+      corrected ERA5, image-statistics ridge) with bootstrap intervals, and
+      the scores by light and wave height.
+  - id: cdip_standardized
+    name: CDIP 106 standardized
+    roles: [derived]
+    shape: 2009–2013
+    path: data/processed/cdip/106/
+    doc: docs/datasets/cdip.md
+    holds: Bulk parameters and spectra in the project's long format, with CDIP's flags kept.
+  - id: era5_standardized
+    name: ERA5 standardized
+    roles: [derived]
+    shape: 4 sites
+    path: data/processed/era5/
+    doc: docs/datasets/era5.md
+    holds: ERA5 wave parameters at each camera site in the project's long format.
+  - id: buoy_pairs_2023
+    name: Buoy-pair agreement 2023
+    roles: [derived]
+    shape: "211 pairs × 16 columns"
+    path: data/manifests/processed/buoy_pair_agreement_2023.csv
+    doc: docs/methodology/synchronization.md
+    holds: >-
+      For buoys within 100 km of each other: distance, hours in common,
+      correlation, typical and 90th-percentile mismatch, its systematic and
+      random parts, best time lag.
+  - id: ledgers
+    name: Ledgers
+    roles: [bookkeeping]
+    shape: CSV
+    path: data/manifests/raw/, data/raw/*/_manifests/
+    doc: docs/PROVENANCE.md
+    holds: >-
+      One row per downloaded file: URL, download time, HTTP details, SHA-256,
+      size, status.
+  - id: registries
+    name: Registries
+    roles: [bookkeeping]
+    shape: YAML / CSV
+    path: data/registry/
+    doc: docs/datasets/README.md
+    holds: >-
+      Dataset catalogue, camera sites and their reference buoys, NDBC station
+      inventory (which station has which files in which year), and this data
+      dictionary.
+
+crosswalk:
+  intro: >-
+    Each source names the same physical quantity differently, and some names
+    hide different definitions. When two sources are compared, the definition
+    has to match.
+  columns:
+    - {id: ndbc, label: NDBC, collection: ndbc_realtime}
+    - {id: cdip, label: CDIP 106, collection: cdip}
+    - {id: era5, label: ERA5, collection: era5_waves}
+    - {id: ours, label: Our label, table: waimea_pairing}
+  rows:
+    - quantity: Significant wave height H_{m0}
+      cells: {ndbc: WVHT, cdip: waveHs, era5: swh, ours: Hs_label_m}
+    - quantity: Swell height
+      cells: {ndbc: SwH, cdip: {note: from the spectrum}, era5: shts}
+      note: NDBC splits at a separation frequency; ERA5 splits by wind forcing.
+    - quantity: Wind-wave height
+      cells: {ndbc: WWH, cdip: {note: from the spectrum}, era5: shww}
+    - quantity: Peak period
+      cells: {ndbc: DPD, cdip: waveTp, era5: pp1d, ours: Tp_label_s}
+    - quantity: Mean period T_{m01}
+      cells: {ndbc: {vars: [APD], note: CDIP buoys only}, cdip: waveTa, era5: mp1}
+    - quantity: Mean period T_{m02}
+      cells: {ndbc: {vars: [APD], note: NDBC-operated buoys}, cdip: waveTz, era5: mp2}
+    - quantity: Energy period T_{m-1,0}
+      cells: {era5: mwp}
+    - quantity: Direction at the peak
+      cells: {ndbc: MWD, cdip: waveDp, ours: Dp_label_deg}
+    - quantity: Mean direction
+      cells: {ndbc: {vars: [.swdir], note: per band}, cdip: {vars: [waveMeanDirection], note: per band}, era5: mwd}
+    - quantity: Spectrum S(f)
+      cells: {ndbc: .data_spec, cdip: waveEnergyDensity, era5: {note: not held}}
+    - quantity: Sea surface temperature
+      cells: {ndbc: WTMP, cdip: sstSeaSurfaceTemperature}
+    - quantity: Wind
+      cells: {ndbc: [WDIR, WSPD, GST], era5: {note: not held}}

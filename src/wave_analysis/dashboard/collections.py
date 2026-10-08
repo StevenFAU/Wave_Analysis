@@ -18,6 +18,8 @@ id                     Ledger                                          Items
 ``webcoos``            ``raw/webcoos/_manifests/*.csv``                 images
 ``era5_waves``         ``manifests/raw/era5.csv``                       months
 ``cdip``               ``manifests/raw/cdip.csv``                       files
+``ndbc_history``       ``manifests/raw/ndbc.csv``                       files
+``external``           ``manifests/raw/external.csv``                   files
 =====================  ==============================================  ==========
 
 The NDBC buoy-camera archive and the realtime-spectra snapshots are summarised
@@ -42,6 +44,9 @@ from wave_analysis.sources.era5 import raw_path
 _ARCHIVED = {"verified", "unchanged", "changed"}
 _ERA5_STATE = re.compile(r";\s*(\w+) \(was \w+\)\s*$")
 _LEDGER_COLS = ("product", "station_id", "period", "url", "size_bytes", "status", "retrieved_at")
+#: NDBC yearly archive file, e.g. ``41008h2023.txt.gz`` or ``41013jb2005.txt.gz``
+#: (``b``: second grid segment); realtime snapshots carry a time stamp instead.
+_NDBC_HISTORY_NAME = re.compile(r"^[A-Za-z0-9]+?[hwdijka]b?(\d{4})\.txt\.gz$")
 
 
 @dataclass(frozen=True)
@@ -50,6 +55,12 @@ class CollectionInputs:
 
     raw_root: Path
     manifests_root: Path
+    external_root: Path | None = None  # data/external (default: next to raw_root)
+
+    @property
+    def external(self) -> Path:
+        """Root of the published research datasets."""
+        return self.external_root or self.raw_root.parent / "external"
 
 
 def _iso(ts: Any) -> str | None:
@@ -58,16 +69,17 @@ def _iso(ts: Any) -> str | None:
     return pd.Timestamp(ts).tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def read_ledgers(paths: Iterable[Path]) -> pd.DataFrame:
+def read_ledgers(paths: Iterable[Path], extra: tuple[str, ...] = ()) -> pd.DataFrame:
     """Ledger rows from CSV files, skipping a partially written last line."""
+    cols = (*_LEDGER_COLS, "note", *extra)
     rows: list[dict[str, str]] = []
     for p in sorted(paths):
         with p.open(newline="", encoding="utf-8") as fh:
             for row in csv.DictReader(fh):
                 if None in row or any(row.get(c) is None for c in _LEDGER_COLS):
                     continue  # truncated line (file being appended to)
-                rows.append({c: row[c] for c in (*_LEDGER_COLS, "note")})
-    df = pd.DataFrame(rows, columns=[*_LEDGER_COLS, "note"])
+                rows.append({c: row.get(c) or "" for c in cols})
+    df = pd.DataFrame(rows, columns=list(cols))
     df["retrieved_at"] = pd.to_datetime(
         df["retrieved_at"], utc=True, errors="coerce", format="ISO8601"
     )
@@ -295,6 +307,104 @@ def cdip(inputs: CollectionInputs) -> dict[str, Any] | None:
     }
 
 
+def ndbc_history(inputs: CollectionInputs) -> dict[str, Any] | None:
+    """NDBC yearly archive files (``data/historical/<product>/``), by product."""
+    ledger_path = inputs.manifests_root / "raw" / "ndbc.csv"
+    if not ledger_path.exists():
+        return None
+    ledger = read_ledgers([ledger_path])
+    held = _latest(ledger)
+    held = held[held["status"].isin(_ARCHIVED)]
+    held = held.assign(name=held["url"].str.rsplit("/", n=1).str[-1])
+    files: list[tuple[str, str, str, int]] = []  # station, product, name, size
+    root = inputs.raw_root / "ndbc"
+    if root.exists():
+        for sdir in os.scandir(root):
+            if not sdir.is_dir() or sdir.name.startswith(("_", ".")) or sdir.name == "buoycam":
+                continue
+            for pdir in os.scandir(sdir.path):
+                if not pdir.is_dir():
+                    continue
+                for entry in os.scandir(pdir.path):
+                    if _NDBC_HISTORY_NAME.match(entry.name):
+                        files.append((sdir.name, pdir.name, entry.name, entry.stat().st_size))
+    df = pd.DataFrame(files, columns=["station_id", "product", "name", "size_bytes"])
+    on_disk = set(zip(df["station_id"], df["name"], strict=True))
+    ledgered = set(zip(held["station_id"], held["name"], strict=True))
+    parts = []
+    for product, g in held.groupby("product"):
+        f = df[df["product"] == product]
+        parts.append(
+            {
+                "id": str(product),
+                "count": len(g),
+                "bytes": int(f["size_bytes"].sum()),
+                "first": str(g["period"].min()),
+                "last": str(g["period"].max()),
+                "stations": int(g["station_id"].nunique()),
+            }
+        )
+    return {
+        "id": "ndbc_history",
+        "dataset_id": "ndbc",
+        "name": "NDBC historical files",
+        "provider": "NOAA NDBC",
+        "mode": "on_request",
+        "unit": "files",
+        "count": len(held),
+        "bytes": int(df["size_bytes"].sum()),
+        "first": str(held["period"].min()) if len(held) else None,
+        "last": str(held["period"].max()) if len(held) else None,
+        "updated": _iso(ledger["retrieved_at"].max()),
+        "check": disk_check(ledgered, on_disk),
+        "parts_count": int(held["station_id"].nunique()),
+        "parts": parts,
+    }
+
+
+def external(inputs: CollectionInputs) -> dict[str, Any] | None:
+    """Published research datasets (``data/external/<source id>/``), by dataset.
+
+    The ``SOURCE.yaml`` copy of each config entry is written by the downloader
+    and is not a downloaded file, so it is not counted.
+    """
+    ledger_path = inputs.manifests_root / "raw" / "external.csv"
+    if not ledger_path.exists():
+        return None
+    ledger = read_ledgers([ledger_path], extra=("source_id",))
+    held = ledger.sort_values("retrieved_at").drop_duplicates(["source_id", "product"], keep="last")
+    held = held[held["status"].isin(_ARCHIVED)]
+    files = scan_files(inputs.external, "")
+    files = files[files["name"] != "SOURCE.yaml"]
+    on_disk = set(zip(files["part"], files["name"], strict=True))
+    ledgered = set(zip(held["source_id"], held["product"], strict=True))
+    parts = [
+        {
+            "id": str(sid),
+            "count": len(g),
+            "bytes": int(files.loc[files["part"] == sid, "size_bytes"].sum()),
+            "first": None,
+            "last": None,
+        }
+        for sid, g in held.groupby("source_id")
+    ]
+    return {
+        "id": "external",
+        "dataset_id": None,  # several registry entries: see parts
+        "name": "Published research datasets",
+        "provider": "Dataset authors (UW ResearchWorks, AADC)",
+        "mode": "complete",
+        "unit": "files",
+        "count": len(held),
+        "bytes": int(files["size_bytes"].sum()),
+        "first": None,
+        "last": None,
+        "updated": _iso(ledger["retrieved_at"].max()),
+        "check": disk_check(ledgered, on_disk),
+        "parts": parts,
+    }
+
+
 def _nc_coverage(path: Path) -> tuple[str | None, str | None]:
     """``time_coverage_start``/``end`` from a netCDF header (``None`` if unreadable)."""
     try:
@@ -313,7 +423,7 @@ def _nc_coverage(path: Path) -> tuple[str | None, str | None]:
 def build_collections(inputs: CollectionInputs) -> list[dict[str, Any]]:
     """Every collection present on this host (see module docstring)."""
     out = []
-    for build in (pacioos_waimea, webcoos, era5_waves, cdip):
+    for build in (pacioos_waimea, webcoos, era5_waves, cdip, ndbc_history, external):
         entry = build(inputs)
         if entry is not None:
             out.append(entry)

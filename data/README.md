@@ -7,6 +7,7 @@ directories.
 | Path | In Git? | Content |
 |---|---|---|
 | `registry/datasets.yaml` | ✅ | Source catalogue with verification status; validate with `wave-analysis registry validate` |
+| `registry/data_dictionary.yaml` | ✅ | What each collection is for and what every variable means; rendered by the dashboard (`#/data`) and `docs/datasets/inventory.md` |
 | `registry/camera_sites.yaml` | ✅ | Public camera sites and their proposed wave-reference buoys (distances computed by the dashboard build) |
 | `registry/ndbc_files.parquet` | ✅ | NDBC inventory: every file (station, product, period, segment, URL, size, last-modified) |
 | `registry/stations.parquet` | ✅ | NDBC station metadata |

@@ -12,6 +12,7 @@ behind the project's claims. This documentation is served under
 | View | Content | Built from |
 |---|---|---|
 | **Overview** | Collector health, images archived, 7-day coverage, archive size and projected growth; **data held**: every collection on the collector host (counts, sizes, data periods, files checked against ledgers); images per hour by illumination, collector runs, latest daylight images | live status |
+| **Data** (`#/data/<section or collection>`) | The data inventory: the six roles data plays, every collection with its live count, size, period and ledger check, the facts and variables of each (with their names in the standardized tables), the tables the project built, the same quantity under each source's name, and where NDBC computes wave numbers. Same content as [docs/datasets/inventory.md](../datasets/inventory.md) | catalog (data dictionary), live status |
 | **Cameras** | Map of NDBC buoy cameras (coloured by current H_s), shore-camera sites and their reference buoys, with base layers for streets and GEBCO bathymetry. Sortable station table with 7-day coverage strips | live status, catalog |
 | **Station** (`#/station/<id>`) | Image viewer for the last ~72 h, including a six-view split. For each image, the nearest buoy observation: H_s, periods, direction, swell and wind-sea, wind, water temperature. Linked sea-state charts, an hour-by-day coverage grid, NDBC archive years per product, and the camera sites that use the buoy as a reference | live status, sea state, catalog |
 | **Archive** | Coverage heatmap (station × hour) with window, region and gap filters; images per day; storage; minute-stamp distribution; integrity checks; realtime-spectra snapshots; the run log | live status |
@@ -44,11 +45,13 @@ browser: site from Pages; live data from raw.githubusercontent.com/<repo>/dashbo
 - **Catalog** (`data/catalog.json`, `wave-analysis dashboard catalog`): built in
   CI from files in the repository: `data/registry/datasets.yaml`,
   `data/registry/camera_sites.yaml`, `stations.parquet` and
-  `ndbc_station_summary.csv`, `docs/literature/bibliography.bib`, and the
+  `ndbc_station_summary.csv`, `data/registry/data_dictionary.yaml`,
+  `docs/literature/bibliography.bib`, and the
   *Verification index* table in `source_verification.md`, plus the MkDocs
   navigation and Markdown. The build fails on a verification row for an
   unknown key, a site that references an unknown station or dataset, or an
-  invalid registry.
+  invalid registry, or a data dictionary entry that names an unknown dataset,
+  document, canonical variable or crosswalk variable.
 - **Live data** (`wave-analysis dashboard live`): built on the collector host
   from the archive, its ledger, and the sea-state cache. It contains **no
   local paths, host names or user names**, and a test enforces this. A
@@ -102,7 +105,7 @@ releases go to Zenodo (ADR 0008).
 | `stations[].latest_obs` | Latest realtime values: waves, wind, temperature and spectral summary, each from its own newest row, and only if under 3 h old |
 | `realtime[]`, `offsite` | Realtime-spectra snapshots on disk by date; time of the last successful offsite copy (`data/raw/.offsite_last_sync`) |
 | `seastate` | Which stations have `seastate/<id>.json`, and the refresh summary (requests, bytes, failures) |
-| `collections[]` | One entry per collection on the host (`wave_analysis.dashboard.collections`): NDBC buoy cameras and realtime snapshots, PacIOOS Waimea Bay, WebCOOS, ERA5, CDIP. `count` and `bytes` are from the files on disk; `first`/`last` the period of data; `updated` the last ledger activity; `check` compares files with verified ledger rows (`missing_files`, `unledgered_files`); `parts[]` per camera, site or station. Counts and dates only, no images |
+| `collections[]` | One entry per collection on the host (`wave_analysis.dashboard.collections`): NDBC buoy cameras, realtime snapshots and historical files, PacIOOS Waimea Bay, WebCOOS, ERA5, CDIP, published research datasets. Ids match `data/registry/data_dictionary.yaml`. `count` and `bytes` are from the files on disk; `first`/`last` the period of data; `updated` the last ledger activity; `check` compares files with verified ledger rows (`missing_files`, `unledgered_files`); `parts[]` per camera, site or station. Counts and dates only, no images |
 
 An hour becomes *due* 50 minutes after it starts. NDBC posts images ~20–30
 minutes after their :10 stamp, and the collector runs at :40.

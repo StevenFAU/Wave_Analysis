@@ -283,7 +283,8 @@ class StatusInputs:
     buoycam_root: Path
     ndbc_root: Path
     raw_root: Path
-    manifests_root: Path | None = None  # data/manifests: ERA5 and CDIP ledgers
+    manifests_root: Path | None = None  # data/manifests: ERA5, CDIP, NDBC and external ledgers
+    external_root: Path | None = None  # data/external (default: next to raw_root)
 
 
 def build_status(
@@ -390,7 +391,9 @@ def build_status(
     realtime = realtime_snapshots(inputs.ndbc_root)
     collections = _ndbc_collections(images, img_rows, nf_only, listed_at, realtime)
     if inputs.manifests_root is not None:
-        collections += build_collections(CollectionInputs(inputs.raw_root, inputs.manifests_root))
+        collections += build_collections(
+            CollectionInputs(inputs.raw_root, inputs.manifests_root, inputs.external_root)
+        )
     return {
         "schema": SCHEMA,
         "generated_at": _iso(now),

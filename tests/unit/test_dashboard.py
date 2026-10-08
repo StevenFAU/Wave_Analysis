@@ -411,6 +411,58 @@ def test_collections_count_files_and_check_ledgers(tmp_path):
     assert str(tmp_path) not in to_json(out)
 
 
+def test_collections_ndbc_history_and_external(tmp_path):
+    raw, man, ext = tmp_path / "raw", tmp_path / "manifests", tmp_path / "external"
+    hist = "https://www.ndbc.noaa.gov/data/historical/stdmet"
+    _ledger_rows(
+        man / "raw" / "ndbc.csv",
+        [
+            {"source_id": "ndbc", "product": "stdmet", "station_id": stn, "period": "2023",
+             "url": f"{hist}/{stn}h2023.txt.gz", "size_bytes": 4, "status": EntryStatus.VERIFIED}
+            for stn in ("41008", "41009")
+        ],
+    )  # fmt: skip
+    (raw / "ndbc" / "41008" / "stdmet").mkdir(parents=True)
+    (raw / "ndbc" / "41008" / "stdmet" / "41008h2023.txt.gz").write_bytes(b"x" * 4)
+    # A realtime snapshot next to it and a buoy-camera image are not history files.
+    (raw / "ndbc" / "41008" / "stdmet" / "41008.txt.20261001T122511Z.gz").write_bytes(b"x")
+    (raw / "ndbc" / "buoycam" / "41008").mkdir(parents=True)
+    (raw / "ndbc" / "buoycam" / "41008" / "41008h2023.txt.gz").write_bytes(b"x")
+
+    repo = "https://digital.lib.washington.edu/server/api/core/bitstreams"
+    rows = [
+        {"source_id": "stereo_set", "product": name, "url": f"{repo}/{i}/content", "size_bytes": 6,
+         "status": EntryStatus.VERIFIED}
+        for i, name in enumerate(("readme.txt", "data.zip"))
+    ]  # fmt: skip
+    _ledger_rows(man / "raw" / "external.csv", rows)
+    (ext / "stereo_set").mkdir(parents=True)
+    for name in ("readme.txt", "data.zip"):
+        (ext / "stereo_set" / name).write_bytes(b"x" * 6)
+    (ext / "stereo_set" / "SOURCE.yaml").write_text("written by the downloader")
+
+    out = build_collections(CollectionInputs(raw, man, ext))
+    by = {c["id"]: c for c in out}
+    assert list(by) == ["ndbc_history", "external"]
+    h = by["ndbc_history"]
+    assert (h["count"], h["bytes"], h["first"], h["last"], h["parts_count"]) == (
+        2,
+        4,
+        "2023",
+        "2023",
+        2,
+    )
+    assert h["check"] == {"on_disk": 1, "ledger": 2, "missing_files": 1, "unledgered_files": 0}
+    assert h["parts"] == [
+        {"id": "stdmet", "count": 2, "bytes": 4, "first": "2023", "last": "2023", "stations": 2}
+    ]
+    e = by["external"]
+    assert (e["count"], e["bytes"], e["dataset_id"]) == (2, 12, None)
+    assert e["check"] == {"on_disk": 2, "ledger": 2, "missing_files": 0, "unledgered_files": 0}
+    assert e["parts"][0]["id"] == "stereo_set"
+    assert str(tmp_path) not in to_json(out)
+
+
 def test_status_offsite_stamp(archive):
     (archive.raw_root / ".offsite_last_sync").write_text("2026-09-26T04:15:00Z\n")
     st = build_status(archive, now=T0, window_hours=2)
