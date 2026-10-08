@@ -853,7 +853,7 @@ datasets:
       endpoints: [https://doi.org/10.26179/Q9BD-5F74]
       rate_limit_guidance: "Files are released after an email address is submitted on the AADC download page."
     data_types: [reconstructed_surface_elevation]
-    temporal: {coverage: "2017-07-04, six acquisitions, 2 Hz"}
+    temporal: {coverage: "2017-07-04 08:05-12:25 UTC, six acquisitions of 24-58 min, 2 Hz"}
     spatial: {platform_types: [ship], coverage: "Antarctic marginal ice zone, about 62 S 30 E"}
     formats: [netcdf]
     documentation: [https://doi.org/10.26179/Q9BD-5F74]
@@ -862,7 +862,14 @@ datasets:
     phase: v0.4.0
     doc: docs/datasets/external_research_datasets.md
     verification:
-      status: documented
+      status: verified
       date: 2026-10-08
       evidence: [https://data.aad.gov.au/eds/api/dataset/5241]
-      notes: "9 objects, 1,590,221,735 bytes (six NetCDF files, README, LICENSE, XML metadata)."
+      notes: >
+        9 objects, 1,590,221,735 bytes (six NetCDF files, README, LICENSE, XML metadata). Zip received from the
+        AADC download page; every member's CRC passed and every size matches the object list
+        (data/manifests/raw/external.csv). NetCDF3 classic: Z int16 mm on a 151 x 201 grid at 1 m, 2,928-6,915
+        frames per file; stereo baseline 3.73 m. Missing values are the fill value 0, not NaN as the README
+        says. The datenum variable is wrong (7 April, and start times that disagree with the file names); use
+        the file name. mask_Z is undocumented and marks from 1 to 10,510 points. Rough 4-sigma Hs over points
+        valid in every 10th frame: 6.5, 5.2, 5.6, 4.6, 4.5, 4.5 m (our estimate, not the paper's).

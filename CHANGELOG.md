@@ -58,7 +58,10 @@ separately (`docs/REPRODUCIBILITY.md`).
   ship-based stereo, Duck thermal IR + lidar, and Agulhas II WASS datasets.
   The two UW datasets (31.2 GB) are downloaded and match the repository's
   MD5s; their contents are described from inspection, including that the
-  five-minute stereo archive has 55 bursts where its readme says 52.
+  five-minute stereo archive has 55 bursts where its readme says 52. The
+  Agulhas II WASS files (1.6 GB) came as the AADC zip and are extracted with
+  `--from-zip`. Their `datenum` variable is wrong and their missing value is
+  0, not NaN; the doc says to take times from the file names.
 
 ### Fixed (2026-10-08)
 - `buoycam.known_missing_urls` read the last three ledger files rather than

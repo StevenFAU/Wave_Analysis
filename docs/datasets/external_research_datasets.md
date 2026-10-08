@@ -121,3 +121,33 @@ uv run python scripts/download_external.py alberello_2017_agulhas_wass --from-zi
 
 extracts the nine files by name, checks their sizes, and records them in the
 ledger.
+
+Downloaded 2026-10-08: the zip is 986.5 MB, because the NetCDF files compress.
+Every member's CRC passed and every size matches the AADC object list.
+
+What the files hold (inspected 2026-10-08):
+
+| File (UTC start) | Frames | Duration | Rough H_s |
+|---|---|---|---|
+| `wass__20170704_0805.nc` | 3,576 | 29.8 min | 6.5 m |
+| `wass__20170704_0845.nc` | 3,630 | 30.2 min | 5.2 m |
+| `wass__20170704_0925.nc` | 2,928 | 24.4 min | 5.6 m |
+| `wass__20170704_1000.nc` | 6,915 | 57.6 min | 4.6 m |
+| `wass__20170704_1105.nc` | 4,873 | 40.6 min | 4.5 m |
+| `wass__20170704_1150.nc` | 4,195 | 35.0 min | 4.5 m |
+
+- Format: NetCDF3 classic. `Z` (count, X, Y) is int16 in mm on a 151 × 201
+  grid at 1 m. `X_grid` and `Y_grid` are in mm. The stereo baseline (`scale`)
+  is 3.73 m.
+- **Missing values are the fill value 0**, not NaN as the README says.
+  About 64-78% of each frame is valid.
+- **`datenum` is wrong.** Every file reads 7 April 2017 (day and month
+  swapped), and five of the six start times disagree with the file names.
+  Take the start time from the file name and add `count / fps`, as the README
+  says.
+- `mask_Z` is undocumented. It marks from 1 to 10,510 grid points, so it is
+  not a usable quality mask.
+- Rough H_s is our estimate, not the paper's: 4σ of elevation about each
+  point's mean, over points valid in every 10th frame. The 08:05 file has a
+  long upper tail (13.4 m at the 99.99th percentile). Check it against
+  Alberello et al. before treating it as real.
