@@ -261,17 +261,18 @@ def test_buoycam_backfill_candidates(tmp_path: Path):
     cams = _camera_table("Z24A_2026_09_26_0110.jpg", "W04A_2026_09_26_0100.jpg")
     todo = backfill_candidates(cams, tmp_path, now=now, hours=5)
     # hours strictly before the latest image whose :10 stamp is newer than now - 5 h
-    # (21:05); both minute stamps are candidates, the latest image's minute first
+    # (21:05); both minute stamps are candidates, the latest image's minute first;
+    # oldest hour first across cameras, listing order within an hour
     z, w = "Z24A_2026_09_", "W04A_2026_09_"
     assert todo == [
-        ("41010", (f"{z}26_0010.jpg", f"{z}26_0000.jpg")),
-        ("41010", (f"{z}25_2310.jpg", f"{z}25_2300.jpg")),
-        ("41010", (f"{z}25_2210.jpg", f"{z}25_2200.jpg")),
         ("41010", (f"{z}25_2110.jpg", f"{z}25_2100.jpg")),
-        ("46026", (f"{w}26_0000.jpg", f"{w}26_0010.jpg")),
-        ("46026", (f"{w}25_2300.jpg", f"{w}25_2310.jpg")),
-        ("46026", (f"{w}25_2200.jpg", f"{w}25_2210.jpg")),
         ("46026", (f"{w}25_2100.jpg", f"{w}25_2110.jpg")),
+        ("41010", (f"{z}25_2210.jpg", f"{z}25_2200.jpg")),
+        ("46026", (f"{w}25_2200.jpg", f"{w}25_2210.jpg")),
+        ("41010", (f"{z}25_2310.jpg", f"{z}25_2300.jpg")),
+        ("46026", (f"{w}25_2300.jpg", f"{w}25_2310.jpg")),
+        ("41010", (f"{z}26_0010.jpg", f"{z}26_0000.jpg")),
+        ("46026", (f"{w}26_0000.jpg", f"{w}26_0010.jpg")),
     ]
     # an hour with any stamp on disk is skipped; known-missing names are dropped
     have = image_path(tmp_path, "41010", f"{z}26_0000.jpg")

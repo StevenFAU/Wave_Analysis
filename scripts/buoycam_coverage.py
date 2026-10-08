@@ -5,8 +5,9 @@
 
 For each station, counts archived images in the last ``--days`` days, the
 number of hours recorded upstream as never published (``not_found`` in the
-ledger), and hours with neither an image nor a ledger record (true gaps:
-the collector missed them and they may be past the 72 h retention).
+ledger at every minute stamp tried, and no image archived), and hours with
+neither an image nor a ledger record (true gaps: the collector missed them
+and they may be past the 72 h retention).
 """
 
 from __future__ import annotations
@@ -46,7 +47,8 @@ def main() -> int:
             g["time_utc"].min().floor("h"), (now - pd.Timedelta("50min")).floor("h"), freq="h"
         )
         have = set(g["time_utc"].dt.floor("h"))
-        nf = set(missing.loc[missing["station_id"] == sid, "time_utc"].dt.floor("h"))
+        # A 404 at one minute stamp says nothing about an hour archived at another.
+        nf = set(missing.loc[missing["station_id"] == sid, "time_utc"].dt.floor("h")) - have
         out.append(
             {
                 "station_id": sid,

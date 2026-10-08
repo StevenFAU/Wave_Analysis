@@ -1,0 +1,72 @@
+name: collector watchdog
+
+# A collector host cannot report that it is switched off, so this check runs
+# on GitHub's side. Every hour it reads the status the primary host publishes
+# to the dashboard-data branch and opens an issue (label collector-alert) when
+# no archiver run or status push has happened for 3 h, or no offsite sync for
+# 30 h. The issue body is refreshed hourly and the issue is closed when the
+# host reports again. Checks and limits: src/wave_analysis/dashboard/watchdog.py.
+# GitHub disables scheduled workflows in a public repository after 60 days
+# without activity; the hourly dashboard-data pushes count as activity.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: collector-watchdog
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: read the published status
+        run: |
+          git fetch --depth 1 origin dashboard-data
+          git show FETCH_HEAD:status.json > "$RUNNER_TEMP/status.json"
+      - name: check freshness
+        id: check
+        run: |
+          set +e
+          title=$(PYTHONPATH=src python -m wave_analysis.dashboard.watchdog \
+            "$RUNNER_TEMP/status.json" --report "$RUNNER_TEMP/report.md")
+          code=$?
+          set -e
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "title=$title" >> "$GITHUB_OUTPUT"
+          [ -f "$RUNNER_TEMP/report.md" ] && cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
+          [ "$code" -le 1 ]
+      - name: open or refresh the alert issue
+        if: steps.check.outputs.code == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: ${{ steps.check.outputs.title }}
+        run: |
+          gh label create collector-alert --color B60205 \
+            --description "Opened by the collector watchdog workflow" 2>/dev/null || true
+          n=$(gh issue list --label collector-alert --state open --json number --jq '.[0].number // empty')
+          if [ -z "$n" ]; then
+            gh issue create --title "$TITLE" --label collector-alert --body-file "$RUNNER_TEMP/report.md"
+          else
+            gh issue edit "$n" --title "$TITLE" --body-file "$RUNNER_TEMP/report.md"
+          fi
+      - name: close the alert issue after recovery
+        if: steps.check.outputs.code == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          for n in $(gh issue list --label collector-alert --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "$(printf 'Recovered.\n\n'; cat "$RUNNER_TEMP/report.md")"
+          done

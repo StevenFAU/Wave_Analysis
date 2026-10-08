@@ -579,3 +579,60 @@ def test_cli_dashboard_catalog(tmp_path, capsys):
         "wave-analysis/"
     )
     assert "datasets" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------- #
+# Collector watchdog
+# --------------------------------------------------------------------------- #
+
+_WATCHED = {
+    "generated_at": "2026-10-08T12:54:09Z",
+    "collector": {"last_run": "2026-10-08T12:42:09Z", "runs": []},
+    "archive": {"last_image": "2026-10-08T11:10:00Z"},
+    "offsite": {"last_sync": "2026-10-08T08:18:56Z"},
+}
+
+
+def test_watchdog_flags_each_stale_timestamp():
+    import datetime as dt
+
+    from wave_analysis.dashboard.watchdog import alert_title, check_status, loss_deadline
+
+    def at(s: str) -> dt.datetime:
+        return dt.datetime.fromisoformat(s).replace(tzinfo=dt.UTC)
+
+    assert all(c.ok for c in check_status(_WATCHED, at("2026-10-08 15:40")))
+    late = check_status(_WATCHED, at("2026-10-08 15:50"))  # 3.1 h after the last run
+    assert [c.name for c in late if not c.ok] == ["collector"]
+    day = check_status(_WATCHED, at("2026-10-09 14:30"))
+    assert [c.name for c in day if not c.ok] == ["collector", "publisher", "offsite"]
+    assert alert_title(day) == (
+        "Collector watchdog: collector, publisher, offsite silent since 2026-10-08 08:18 UTC"
+    )
+    # the 12:10 image is the first not archived; it leaves the 70 h window at 10:10 + 3 d
+    assert loss_deadline(_WATCHED) == at("2026-10-11 10:10")
+    # a missing or unreadable timestamp is a failure, not a pass
+    broken = {**_WATCHED, "offsite": {"last_sync": None}, "generated_at": "garbage"}
+    bad = check_status(broken, at("2026-10-08 13:00"))
+    assert [c.name for c in bad if not c.ok] == ["publisher", "offsite"]
+    assert alert_title(bad) == "Collector watchdog: publisher, offsite silent"
+
+
+def test_watchdog_cli_exit_codes_and_report(tmp_path, capsys, monkeypatch):
+    from wave_analysis.dashboard.watchdog import main as watchdog
+
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    status = tmp_path / "status.json"
+    status.write_text(json.dumps(_WATCHED))
+    report = tmp_path / "report.md"
+    assert watchdog([str(status), "--now", "2026-10-08T13:00Z", "--report", str(report)]) == 0
+    assert capsys.readouterr().out.strip() == "healthy"
+    assert "lost for good" not in report.read_text()
+    assert watchdog([str(status), "--now", "2026-10-09T02:00Z", "--report", str(report)]) == 1
+    assert capsys.readouterr().out.startswith("Collector watchdog: collector, publisher silent")
+    text = report.read_text()
+    assert "**2026-10-11 10:10 UTC** (56 h from now)" in text
+    assert "github.com/StevenFAU/Wave_Analysis/blob/main/docs/operations" in text
+    status.write_text("[]")
+    assert watchdog([str(status)]) == 2
+    assert watchdog([str(tmp_path / "missing.json")]) == 2

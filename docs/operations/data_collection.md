@@ -84,7 +84,10 @@ uv run wave-analysis ndbc cameras --backfill-hours 0
 **Recovery.** If the host was down for less than about 3 days, the next run recovers
 every image still on the server. If it was down longer, images older than 72 h
 are gone. The ledger shows exactly which hours are missing, and the spectra for
-those hours can still be downloaded later.
+those hours can still be downloaded later. The backfill fetches the oldest
+hours first, across all cameras, because those are the next to be deleted.
+After a long outage, let the first run finish (about 1 s per image, so close
+to 1.5 h for a full 70 h backfill) before rebooting or shutting down.
 
 ### A second collector host
 
@@ -188,11 +191,36 @@ in this repository.
 |---|---|---|
 | 2026-09-29 20:41 to 2026-10-01 12:18 | No collector run for about 40 h (host down) | Recovered by the 70 h backfill: the 12:18 run took 55 min and archived 3,101 images (219 never published). The dashboard snapshot of 12:52 was taken mid-run and briefly showed the Pacific stations empty for 2026-09-30 |
 | 2026-10-01 13:13 to 23:38 | No collector run for about 10 h (host down again) | Recovered by the 23:38 backfill (615 images). Seven-day coverage as of 23:49: 12,874 archived, 83 never published, and 164 gaps, all at 2026-10-01 21:00 and 22:00 UTC (78 stations each). The next two runs (2026-10-02 00:42 and 01:41) filled them: at 01:45 the 3-day window had no unexplained gap. Separately, station 46061's camera stopped publishing on 2026-09-29 |
-| Since installation | Offsite copy never ran (`offsite.last_sync` null as of 2026-10-02) | The archive exists on one disk |
+| 2026-10-04 20:43 to 2026-10-08 00:32 | No collector run for about 76 h (host powered off). The first two recovery runs (00:32 and 01:10) were cut short by a reboot and a shutdown; a run from 03:43 to 04:32 and the new second host (02:10 to 03:50) finished the backfill | **638 camera-hours lost for good:** every station from 2026-10-04 20:00 to 2026-10-05 02:00 (7 h × 78 stations, older than the 70 h window when collection resumed), plus 51 stations at 03:00 and 41 at 04:00. Those 92 were inside the window, but the interrupted runs walked each station newest-first and never reached them; the backfill now fetches the oldest hours first. Dashboard seven-day coverage as of 2026-10-08 12:42: 12,166 archived, 147 never published, 637 gaps |
+| Until 2026-10-08 | No offsite copy (`offsite.last_sync` null) | Resolved: the first upload to R2 (11.4 GiB, 58,975 files) finished 2026-10-08 06:12; daily since |
 
-Both outages were recovered only because each lasted less than the 70 h
-backfill window. The archive is only as safe as the collector host. See P0
-in the [collection plan](collection_plan.md).
+The first two outages were recovered only because each lasted less than the
+70 h backfill window; the third was not. See P0 in the
+[collection plan](collection_plan.md).
+
+## Alerts
+
+`.github/workflows/collector-watchdog.yml` runs hourly on GitHub, not on a
+collector host, because a host that is switched off cannot report it. It
+reads `status.json` from the `dashboard-data` branch and opens an issue
+labelled `collector-alert` when:
+
+- no buoy-camera archiver run (`collector.last_run`) for more than **3 h**;
+- no dashboard status push (`generated_at`) for more than **3 h**;
+- no offsite sync (`offsite.last_sync`) for more than **30 h**.
+
+The issue gives the time at which images start to be lost for good (the
+newest archived image + 71 h, the edge of the 70 h backfill window). It is
+refreshed hourly and closed when the host reports again. GitHub notifies the
+repository owner of new issues, by email if notifications are set to email.
+Only the primary host publishes the status, so the alert means "the primary
+host is quiet", even if a second host is still collecting. Run the check by
+hand with:
+
+```bash
+git fetch origin dashboard-data && git show FETCH_HEAD:status.json > /tmp/status.json
+uv run python -m wave_analysis.dashboard.watchdog /tmp/status.json
+```
 
 ## Verifying integrity
 

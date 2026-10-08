@@ -25,12 +25,24 @@ separately (`docs/REPRODUCIBILITY.md`).
   compares raw files by size, and copies ledgers with `--update`.
   `scripts/install_collectors.sh --secondary` installs the archiver without
   the single-writer jobs ([data collection](docs/operations/data_collection.md#a-second-collector-host)).
+- A collector watchdog (`.github/workflows/collector-watchdog.yml`,
+  `dashboard.watchdog`): hourly on GitHub, it opens an issue labelled
+  `collector-alert` when the published status shows no archiver run or status
+  push for 3 h or no offsite sync for 30 h, says when images start to be lost
+  for good, and closes the issue on recovery ([alerts](docs/operations/data_collection.md#alerts)).
 
 ### Fixed (2026-10-08)
 - `buoycam.known_missing_urls` read the last three ledger files rather than
   the last three months, which would skip months once several hosts write
   ledgers.
 - The offsite-sync unit finds an rclone installed in `~/.local/bin`.
+- The buoy-camera backfill fetches the oldest missing hours first across all
+  cameras, instead of each camera newest-first. After the 76 h outage of
+  2026-10-04, two recovery runs cut short by a reboot never reached 92
+  camera-hours that were still on the server.
+- `scripts/buoycam_coverage.py` counted an hour as never published when one
+  minute stamp returned 404 even though the image was archived at another
+  (765 reported against 161 real over 8 days). Its gap count was correct.
 
 ### Added (2026-10-01)
 - `processing.synchronize.label_from_candidates`: one label per image from

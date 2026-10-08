@@ -1,6 +1,6 @@
 # Data Collection Plan: Gaps, Priorities and Next Steps
 
-Status: **2026-10-01**. This page says which research gaps the data collection
+Status: **2026-10-01**, P0 and P1 updated 2026-10-08. This page says which research gaps the data collection
 is meant to close, what each data stream contributes, the order of work, and
 the specification of a self-collected site. Gap IDs refer to
 [research_gaps.md](../literature/research_gaps.md).
@@ -32,7 +32,7 @@ for the first paper), then **G-6, G-5 and G-9** (need new sensors).
 
 | Stream | Imagery | Reference and distance | G-1 | G-3 | G-10 | G-4 | G-6 | G-5 | G-9 | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
-| NDBC buoy cameras | 6-view stills, hourly, day and night | Same hull, 0 km | ● | ● | ● | ● | | | ○ horizon | Collecting; **at risk** (see P0) |
+| NDBC buoy cameras | 6-view stills, hourly, day and night | Same hull, 0 km | ● | ● | ● | ● | | | ○ horizon | Collecting on two hosts with an offsite copy; 638 camera-hours lost 2026-10-04/05 (see P0) |
 | PacIOOS Waimea Bay | 2 shore views, hourly, daytime, 2009–2013 | CDIP 106, 6.3 km, same exposure | ● | ○ one site | ○ | ○ | | | | Paired; labels per ADR 0010 |
 | WebCOOS stills | 1 per 30 min, daylight | CDIP 433 / 243, 19–22 km, open coast | ● | ○ | ○ | | | | | Collecting since 2026-07 |
 | WebCOOS video | Clips, 5–20 fps | as above | ○ | | | | ● | | | Pilot proposed ([webcoos.md](../datasets/webcoos.md)) |
@@ -48,27 +48,32 @@ Each item says why, what, when it is done, and what it depends on.
 ### P0. Protect the stream that cannot be re-collected (now)
 
 NDBC deletes superseded buoy-camera images after about 72 h, and nobody else
-archives them. In the first week:
-
-- the collector host was **down twice**: about 40 h (2026-09-29 20:41 to
-  2026-10-01 12:18 UTC) and about 10 h (2026-10-01 13:13 to 23:38). Both were
-  recovered by the 70 h backfill, but only because they were shorter than the
-  retention window ([incidents](data_collection.md#incidents));
-- **the offsite copy has never run** (`offsite.last_sync` is null), so the
-  archive exists on one disk.
+archives them. In the first two weeks the collector host was **down three
+times** ([incidents](data_collection.md#incidents)): about 40 h and 10 h
+(2026-09-29 to 10-01, both recovered by the 70 h backfill) and about 76 h
+(2026-10-04 20:43 to 10-08 00:32 UTC), which **lost 638 camera-hours for
+good** (about 8 h of the whole network).
 
 Actions:
 
-1. Check coverage after every outage:
-   `uv run python scripts/buoycam_coverage.py --days 3`.
-2. Set up the offsite copy ([data collection](data_collection.md), *Setting up
-   R2*), or ask FAU Research Computing for an allocation.
-3. Move the collectors to an always-on host (university server or a small
-   cloud VM) and add an alert when no run has completed for 3 h. An outage
-   longer than about 3 days loses images permanently.
+1. ✅ Check coverage after every outage:
+   `uv run python scripts/buoycam_coverage.py --days 4`.
+2. ✅ Offsite copy: Cloudflare R2 since 2026-10-08, synced daily
+   ([data collection](data_collection.md#setting-up-r2-one-time-done-by-the-account-owner)).
+3. ✅ Second collector host (a laptop) since 2026-10-08: an image is lost only
+   if both hosts are down past the backfill window
+   ([a second collector host](data_collection.md#a-second-collector-host)).
+4. ✅ Backfill fetches the oldest hours first, so an interrupted recovery
+   loses nothing it could have saved (2026-10-08).
+5. ✅ Alert when no run has completed for 3 h: a GitHub Actions watchdog
+   opens an issue ([alerts](data_collection.md#alerts), 2026-10-08).
+6. Still open: an **always-on host** (university server or a small cloud VM).
+   A laptop helps only while it is awake and logged in, and the desktop
+   dual-boots, so time in the other system is collector downtime.
 
 **Done when** two weeks pass without a gap that is not `not_published`, and
-`offsite.last_sync` is less than a day old.
+`offsite.last_sync` is less than a day old. The two weeks restart on
+2026-10-08.
 
 ### P1. First benchmark: Waimea Bay (2–3 weeks)
 

@@ -240,12 +240,19 @@ def backfill_candidates(
     image's minute first. An hour is skipped if any candidate is already on
     disk; candidates already known to be missing are dropped. ``hours`` must
     stay below :data:`RETENTION_HOURS`.
+
+    Hours are returned **oldest first across all cameras**, so the images
+    closest to deletion are fetched first. After the 76 h outage of 2026-10-04,
+    a recovery that walked each camera newest-first was cut short by a
+    reboot and lost the oldest hours it had not yet reached (see
+    ``docs/operations/data_collection.md#incidents``). Within an hour, cameras
+    keep their listing order.
     """
     if hours >= RETENTION_HOURS:
         raise ValueError(f"backfill window must be < {RETENTION_HOURS} h retention, got {hours}")
     skip = set(skip_urls)
     oldest = now - pd.Timedelta(hours=hours)
-    out: list[tuple[str, tuple[str, ...]]] = []
+    out: list[tuple[pd.Timestamp, str, tuple[str, ...]]] = []
     for row in cameras.itertuples(index=False):
         name = str(row.latest_image or "")
         if not _NAME.match(name):
@@ -259,9 +266,10 @@ def backfill_candidates(
             if not any(image_path(dest_root, sid, n).exists() for n in names):
                 todo = tuple(n for n in names if f"{BUOYCAM_IMAGE_URL}/{n}" not in skip)
                 if todo:
-                    out.append((sid, todo))
+                    out.append((hour, sid, todo))
             hour -= pd.Timedelta(hours=1)
-    return out
+    out.sort(key=lambda item: item[0])  # stable: listing order within an hour
+    return [(sid, todo) for _, sid, todo in out]
 
 
 def backfill_cameras(
