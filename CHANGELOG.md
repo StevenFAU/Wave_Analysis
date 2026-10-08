@@ -45,6 +45,10 @@ separately (`docs/REPRODUCIBILITY.md`).
   with lidar, stereo of extreme waves in sea ice); camera networks with
   archives to request; label-only sources; and searches that found nothing.
 
+- The WebCOOS collector also archives eleven beachfront cameras within 25 km
+  of a directional wave buoy (`NEAR_BUOY_CAMERAS`); `webcoos download` accepts
+  camera sets as `@yin2025` and `@near_buoy`.
+
 ### Fixed (2026-10-08)
 - `buoycam.known_missing_urls` read the last three ledger files rather than
   the last three months, which would skip months once several hosts write

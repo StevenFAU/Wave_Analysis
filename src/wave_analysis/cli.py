@@ -516,11 +516,17 @@ def _cmd_webcoos_download(args: argparse.Namespace) -> int:
         camera_table,
         check_age,
         element_table,
+        expand_cameras,
         ledger_path,
         select_on_grid,
         write_listing,
     )
 
+    try:
+        cameras = expand_cameras(args.cameras)
+    except KeyError as exc:
+        print(exc.args[0], file=sys.stderr)
+        return 2
     dest = Path(args.out) if args.out else data_dir("raw") / "webcoos"
     dest.mkdir(parents=True, exist_ok=True)
     end = pd.Timestamp(args.end or pd.Timestamp.now(tz="UTC"))
@@ -536,12 +542,12 @@ def _cmd_webcoos_download(args: argparse.Namespace) -> int:
             return 0
         with _webcoos_client(args) as client:
             cams = camera_table(client.assets()).set_index("camera")
-            unknown = sorted(set(args.cameras) - set(cams.index))
+            unknown = sorted(set(cameras) - set(cams.index))
             if unknown:
                 print(f"unknown cameras {unknown}", file=sys.stderr)
                 return 2
             selections = {}
-            for cam in args.cameras:
+            for cam in cameras:
                 service = cams.loc[cam, "stills_service"]
                 if not isinstance(service, str):
                     log(f"{cam}: no stills service; skipped")
@@ -949,7 +955,11 @@ def build_parser() -> argparse.ArgumentParser:
     winv.add_argument("--min-interval", type=float, default=1.0)
     winv.set_defaults(func=_cmd_webcoos_inventory)
     wdl = wc.add_parser("download", help="archive one-minute stills thinned to a time grid")
-    wdl.add_argument("cameras", nargs="+", help="camera slugs, e.g. currituck_hampton_inn")
+    wdl.add_argument(
+        "cameras",
+        nargs="+",
+        help="camera slugs (e.g. currituck_hampton_inn) or sets: @yin2025, @near_buoy",
+    )
     wdl.add_argument("--start", help="UTC start (default: --end minus --lookback)")
     wdl.add_argument("--lookback", default="1D", help="window when --start is not given (1D)")
     wdl.add_argument("--end", help="UTC end (default: now)")

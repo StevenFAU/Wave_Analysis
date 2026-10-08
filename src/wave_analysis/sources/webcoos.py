@@ -42,7 +42,7 @@ from __future__ import annotations
 import os
 import stat
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -87,6 +87,32 @@ YIN2025_CAMERAS = (
     "oakisland_west",
 )
 
+#: Beachfront cameras within 25 km of a buoy that publishes directional spectra,
+#: chosen on 2026-10-08 from the 86-camera list and one midday still of each
+#: (``docs/literature/data_source_scan_2026-10.md``). Views of harbours, river
+#: mouths and the inside of Grays Harbor (``kahului_*``, ``ferrybeach_north``,
+#: ``campellis_south``, ``oceanshores_*``) were left out: their water is sheltered
+#: from the sea state the buoy measures.
+NEAR_BUOY_CAMERAS = (
+    "crescent_city",  # NDBC 46027, 19.8 km
+    "currituck_sailfish",  # NDBC 44056 (Duck FRF), 17.8 km
+    "masonboro_inlet",  # CDIP 150 (41110), 10.2 km; ocean between the inlet jetties
+    "oceancity",  # CDIP 263 (44084), 19.7 km
+    "pgtalabama_south",  # NDBC 42012, 23.3 km; burned-in time overlay
+    "pgtalabama_west",  # NDBC 42012, 23.3 km; burned-in time overlay
+    "san_elijo",  # CDIP 262 (46274), 5.8 km
+    "stinson",  # NDBC 46026, 23.8 km
+    "vabeach_hamptonos",  # CDIP 147 (44099), 23.8 km
+    "westport_north",  # CDIP 036 (46211), 9.5 km
+    "westport_south",  # CDIP 036 (46211), 9.5 km
+)
+
+#: Named camera sets, used on the command line as ``@name``.
+CAMERA_SETS: dict[str, tuple[str, ...]] = {
+    "yin2025": YIN2025_CAMERAS,
+    "near_buoy": NEAR_BUOY_CAMERAS,
+}
+
 ACKNOWLEDGEMENT = (
     '"SECOORA is acknowledged for leading the WebCOOS program, which collected '
     '[images of interest] in the WebCOOS dataset in this study," citing WebCOOS as '
@@ -95,6 +121,19 @@ ACKNOWLEDGEMENT = (
 
 LISTINGS_DIR = "_listings"
 MANIFESTS_DIR = "_manifests"
+
+
+def expand_cameras(names: Iterable[str]) -> list[str]:
+    """Camera slugs with ``@set`` names (:data:`CAMERA_SETS`) expanded, in order, once each."""
+    out: list[str] = []
+    for name in names:
+        if name.startswith("@"):
+            if name[1:] not in CAMERA_SETS:
+                raise KeyError(f"unknown camera set {name!r}; choose from {sorted(CAMERA_SETS)}")
+            out.extend(CAMERA_SETS[name[1:]])
+        else:
+            out.append(name)
+    return list(dict.fromkeys(out))
 
 
 class TokenError(RuntimeError):

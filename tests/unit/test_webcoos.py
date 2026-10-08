@@ -325,3 +325,35 @@ def test_download_command_skips_a_camera_without_stills(tmp_path: Path, monkeypa
     assert "offline_cam: 0 stills listed" in out
     assert "oakisland_west: 1 indexed, 0 already archived, 1 downloaded" in out
     assert len(list((tmp_path / "oakisland_west").rglob("*.jpg"))) == 1
+
+
+def test_camera_sets_expand_in_order_without_repeats():
+    from wave_analysis.sources.webcoos import (
+        CAMERA_SETS,
+        NEAR_BUOY_CAMERAS,
+        YIN2025_CAMERAS,
+        expand_cameras,
+    )
+
+    assert expand_cameras(["@yin2025"]) == list(YIN2025_CAMERAS)
+    both = expand_cameras(["@yin2025", "@near_buoy", "san_elijo"])
+    assert both == [*YIN2025_CAMERAS, *NEAR_BUOY_CAMERAS]  # san_elijo already in the set
+    assert not set(YIN2025_CAMERAS) & set(NEAR_BUOY_CAMERAS)
+    assert expand_cameras(["oakisland_west", "@yin2025"])[0] == "oakisland_west"
+    with pytest.raises(KeyError, match="unknown camera set"):
+        expand_cameras(["@nope"])
+    assert set(CAMERA_SETS) == {"yin2025", "near_buoy"}
+
+
+def test_download_command_rejects_an_unknown_camera_set(capsys):
+    from wave_analysis.cli import main
+
+    assert main(["webcoos", "download", "@nope", "--list-only"]) == 2
+    assert "unknown camera set" in capsys.readouterr().err
+
+
+def test_collector_unit_uses_the_camera_sets():
+    from wave_analysis.config import repo_root
+
+    unit = (repo_root() / "deploy/systemd/wave-analysis-webcoos.service").read_text()
+    assert "webcoos download @yin2025 @near_buoy --lookback 3D" in unit

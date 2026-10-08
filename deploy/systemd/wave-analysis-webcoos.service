@@ -3,7 +3,7 @@
 # which replaces @REPO@ with the repository path. The API token is read from
 # ~/.config/wave-analysis/webcoos_token (mode 600).
 [Unit]
-Description=Wave_Analysis: archive WebCOOS stills of the Yin et al. (2025) cameras (30-min grid)
+Description=Wave_Analysis: archive WebCOOS stills (Yin et al. 2025 cameras and beachfront cameras near wave buoys; 30-min grid)
 Wants=network-online.target
 After=network-online.target
 
@@ -14,7 +14,8 @@ WorkingDirectory=@REPO@
 # steady-state run lists ~3 days of elements (one page per camera) and fetches
 # the new images only. Recent data only: WebCOOS asks to be contacted before
 # large downloads of data older than 90 days.
-ExecStart=@REPO@/.venv/bin/wave-analysis webcoos download currituck_hampton_inn jennette_north jennette_south oakisland_east oakisland_west --lookback 3D
+# Camera sets: sources/webcoos.py (YIN2025_CAMERAS, NEAR_BUOY_CAMERAS).
+ExecStart=@REPO@/.venv/bin/wave-analysis webcoos download @yin2025 @near_buoy --lookback 3D
 Nice=10
 IOSchedulingClass=idle
 TimeoutStartSec=1h

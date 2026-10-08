@@ -27,7 +27,28 @@ Positions are from the API; distances from the camera-site registry.
 within 25 km of a buoy that publishes directional spectra, several with
 multi-year archives (for example `currituck_sailfish` from 2022,
 `masonboro_inlet` from 2023, and `cocoabeach`, Florida, 2023-05 to 2024-09
-beside CDIP 143). See the [data source scan](../literature/data_source_scan_2026-10.md#2-webcoos-beyond-the-five-yin-et-al-cameras-q). CDIP 200's
+beside CDIP 143). See the [data source scan](../literature/data_source_scan_2026-10.md#2-webcoos-beyond-the-five-yin-et-al-cameras-q).
+
+**Collected since 2026-10-08 (`@near_buoy`).** Eleven beachfront cameras whose
+midday view shows open surf, chosen from those within 25 km of a buoy that
+publishes directional spectra (`NEAR_BUOY_CAMERAS` in
+`sources/webcoos.py`, with each buoy and distance):
+
+| Camera | Buoy, km | Camera | Buoy, km |
+|---|---|---|---|
+| `san_elijo` | CDIP 262 (46274), 5.8 | `crescent_city` | NDBC 46027, 19.8 |
+| `westport_north`, `westport_south` | CDIP 036 (46211), 9.5 | `oceancity` | CDIP 263 (44084), 19.7 |
+| `masonboro_inlet` | CDIP 150 (41110), 10.2 | `pgtalabama_south`, `pgtalabama_west` | NDBC 42012, 23.3 |
+| `currituck_sailfish` | NDBC 44056 (Duck FRF), 17.8 | `stinson` | NDBC 46026, 23.8 |
+| | | `vabeach_hamptonos` | CDIP 147 (44099), 23.8 |
+
+Left out after looking at a midday still: `oceanshores_east`/`_west` (inside
+Grays Harbor), `kahului_road`/`_harbor` (Kahului Harbor), `ferrybeach_north`
+(river mouth behind a jetty) and `campellis_south` (harbour). The
+`pgtalabama_*` stills carry a burned-in time overlay at the top left; mask it.
+The hourly collector runs `webcoos download @yin2025 @near_buoy --lookback 3D`;
+the last 85 days of the new cameras were backfilled once, inside the 90-day
+guideline. CDIP 200's
 historic record ends on 2026-07-20 and it had no realtime file on 2026-09-26,
 so recent Oak Island images have no nearby buoy until it is back. Stills exist
 in daylight only (about 300–700 a day per camera).
