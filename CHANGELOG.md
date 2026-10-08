@@ -38,6 +38,13 @@ separately (`docs/REPRODUCIBILITY.md`).
   window-mean and nearest labels, with day-bootstrap intervals and paired
   comparisons ([results](docs/datasets/pacioos_beachcam.md#benchmark-v0-splits-and-baselines-2026-10-08)).
 
+- A data source scan ([docs/literature/data_source_scan_2026-10.md](docs/literature/data_source_scan_2026-10.md)):
+  WebCOOS now lists 86 cameras, 41 within 25 km of a directional wave buoy,
+  with stills inventories for twelve; three open datasets for the sensor gaps
+  (ship-based stereo with ship motion and wave buoys, surf-zone thermal IR
+  with lidar, stereo of extreme waves in sea ice); camera networks with
+  archives to request; label-only sources; and searches that found nothing.
+
 ### Fixed (2026-10-08)
 - `buoycam.known_missing_urls` read the last three ledger files rather than
   the last three months, which would skip months once several hosts write

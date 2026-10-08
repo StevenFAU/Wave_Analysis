@@ -97,6 +97,10 @@ Next: the first learned image model on the same splits.
 
 ### P2. WebCOOS permission and video pilot (send this week)
 
+Draft written 2026-10-08; not yet sent. WebCOOS now has 86 cameras, so the
+request also covers the historical stills of four more cameras near wave
+buoys ([data source scan](../literature/data_source_scan_2026-10.md)).
+
 One email to webcoos@secoora.org covering: (a) historical stills 2021–2026 at
 one per 30 min (about 4 GB per camera-year), (b) the video archive inventory
 and a 2–4 week pilot of clips synchronised with CDIP records on two cameras,

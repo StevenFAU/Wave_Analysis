@@ -258,7 +258,8 @@ contribution.
 ## 5. Public data for training and evaluation
 
 Registry entries (`data/registry/datasets.yaml`) record access, licence, and
-verification status for each source below.
+verification status for each source below. Sources found later are in the
+[data source scan of 2026-10-08](data_source_scan_2026-10.md).
 
 ### 5.1 Tier 1: imagery paired with in-situ wave instruments
 

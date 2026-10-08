@@ -19,7 +19,15 @@ views used in the literature, which those papers lacked.
 | `oakisland_east` | Oak Island, NC (33.9126, −78.2243) | 2022-01-01 → present; 977 k, 295 GB | CDIP 200 / 41108, 28.9 km |
 | `oakisland_west` | Oak Island, NC (33.9126, −78.2243) | 2021-12-03 → present; 921 k, 289 GB | CDIP 200 / 41108, 28.9 km |
 
-Positions are from the API; distances from the camera-site registry. CDIP 200's
+Positions are from the API; distances from the camera-site registry.
+`jennette_north` has had no stills since 2026-09-16 and is listed as archived;
+`jennette_south` resumed by 2026-10-08.
+
+**Beyond these five (2026-10-08).** WebCOOS now lists 86 cameras, 41 of them
+within 25 km of a buoy that publishes directional spectra, several with
+multi-year archives (for example `currituck_sailfish` from 2022,
+`masonboro_inlet` from 2023, and `cocoabeach`, Florida, 2023-05 to 2024-09
+beside CDIP 143). See the [data source scan](../literature/data_source_scan_2026-10.md#2-webcoos-beyond-the-five-yin-et-al-cameras-q). CDIP 200's
 historic record ends on 2026-07-20 and it had no realtime file on 2026-09-26,
 so recent Oak Island images have no nearby buoy until it is back. Stills exist
 in daylight only (about 300–700 a day per camera).

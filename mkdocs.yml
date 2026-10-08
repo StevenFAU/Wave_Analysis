@@ -58,6 +58,7 @@ nav:
       - Public dashboard: operations/dashboard.md
   - Literature:
       - Landscape review: literature/landscape_review.md
+      - Data source scan (2026-10): literature/data_source_scan_2026-10.md
       - Matrix: literature/literature_matrix.md
       - Research gaps: literature/research_gaps.md
       - Source verification: literature/source_verification.md
