@@ -1,0 +1,47 @@
+# First historical benchmark: Waimea Bay beach cameras vs CDIP 106 (P1 in
+# docs/operations/collection_plan.md). Read by scripts/waimea_benchmark.py.
+# Question: how well can H_s at CDIP 106 be estimated, and how much of that is
+# already possible without looking at the image?
+name: waimea_cdip106_v0
+description: >
+  PacIOOS beachcam_003 and beachcam_004 (Waimea Bay, 2009-2013) paired with
+  CDIP 106 (6.3 km offshore). Splits by HST day across both cameras; non-vision
+  baselines (climatology, persistence, ERA5) and ridge regression on image
+  statistics, reported under the window-mean and nearest label rules (ADR 0010).
+task:
+  id_col: sample_id
+  # Paired images only: trusted caption time and a CDIP record centred within
+  # 30 min. The other 1,450 indexed images stay in the exclusion ledger.
+  filters:
+    - {column: paired, op: eq, value: true}
+    - {column: features_ok, op: eq, value: true}
+  labels:
+    window_mean: Hs_label_m      # ADR 0010 primary
+    nearest: Hs_nearest_m        # Q-M7 sensitivity
+split:
+  # Both cameras of one HST day always fall in the same partition: they share
+  # a label, so splitting them would leak.
+  day: {protocol: iid_grouped, group_col: hst_day, fractions: [0.7, 0.15, 0.15], seed: 0}
+  # Robustness check: swells last 2-4 days, so neighbouring days are correlated
+  # across a day split. ISO weeks (HST) remove most of that.
+  week: {protocol: iid_grouped, group_col: hst_week, fractions: [0.7, 0.15, 0.15], seed: 0}
+  # Cross-time: train 2009-2011, validate 2012, test 2013 (HST years), with a
+  # 72 h embargo after each boundary.
+  year:
+    protocol: cross_time
+    val_start: "2012-01-01T10:00:00Z"    # 2012-01-01 00:00 HST
+    test_start: "2013-01-01T10:00:00Z"   # 2013-01-01 00:00 HST
+    embargo: 72h
+    group_col: hst_day
+  audit:
+    group_cols: [hst_day]
+    time_col: time_utc
+    min_gap: 6h          # across cameras: both share the label
+baselines:
+  persistence_lags_h: [1, 3, 24]   # last CDIP 106 record centred at least this long before
+  persistence_max_age: 1h
+  ridge_alphas: {start: -2, stop: 5, num: 15}   # log10 grid, chosen on val per camera
+evaluation:
+  bootstrap: {group_col: hst_day, n_boot: 1000, alpha: 0.05, seed: 0}
+  sea_state_edges: [0, 1, 2, 3, 4, .inf]
+seed: 0
