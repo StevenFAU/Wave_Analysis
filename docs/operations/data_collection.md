@@ -11,7 +11,7 @@ to check that it is working. The rationale is in
 |---|---|---|---|
 | `wave-analysis ndbc cameras` | hourly, minute 40 | ~72 h per image | every new buoy-camera image and the listing JSON; backfills the last 70 h |
 | `wave-analysis ndbc download --camera-stations --realtime --gzip` | 1st and 15th of each month, 03:20 | 45-day rolling file | `.txt`, `.spec`, `.data_spec`, `.swdir`, `.swdir2`, `.swr1`, `.swr2` for every camera station |
-| `scripts/sync_offsite.sh` (optional) | daily, 04:15 | n/a | append-only copy of `data/raw/` to object storage; writes `data/raw/.offsite_last_sync` |
+| `scripts/sync_offsite.sh` (optional) | daily, 04:15 | n/a | append-only exchange of `data/raw/` with object storage: pushes this host's files, pulls other hosts' files; writes `data/raw/.offsite_last_sync` |
 | `scripts/publish_dashboard.sh` (optional) | hourly, minute 52 | n/a | archive status and recent sea state for the [dashboard](dashboard.md) (`--dashboard` installs it) |
 | `wave-analysis webcoos download … --lookback 3D` (optional) | hourly, minute 25 | multi-year, but downloads of data older than 90 days need WebCOOS's agreement | one still per 30 min (daylight) from the five Yin et al. (2025) cameras; needs the API token ([WebCOOS](../datasets/webcoos.md); `--webcoos` installs it) |
 
@@ -86,6 +86,36 @@ every image still on the server. If it was down longer, images older than 72 h
 are gone. The ledger shows exactly which hours are missing, and the spectra for
 those hours can still be downloaded later.
 
+### A second collector host
+
+A second machine running the camera archiver means an image is lost only if
+both hosts are down for longer than the backfill window. Each host archives
+independently, and the hosts exchange files through the offsite remote
+(`scripts/sync_offsite.sh`), so after a sync each holds the union.
+
+- **Ledgers are per host:** `_manifests/<YYYY-MM>.<host>.csv`, with the host
+  name from `WAVE_ANALYSIS_HOST` or else the system host name. Ledgers written
+  before 2026-10-08 are `<YYYY-MM>.csv`. Readers take every file. An image
+  fetched by both hosts has a row in each ledger; the dashboard counts images
+  on disk and matches ledger rows to them by file name, but its list of
+  collector runs mixes the two hosts.
+- **The sync pushes, then pulls.** Images are compared by size, because the
+  two hosts fetch the same image at different times and their modification
+  times differ. A file with the same name and a different size stops the sync
+  with an error. Ledgers are copied with `--update`, which is safe because each
+  has a single writer.
+- **Single-writer jobs stay on the primary host.** The realtime snapshots
+  (`_manifests/realtime.csv`), WebCOOS (`_manifests/<camera>.csv`) and the
+  dashboard publisher (the `dashboard-data` branch) each have one writer. The
+  second host receives their files through the sync. The dashboard shows the
+  second host's images after the next sync on the primary host.
+
+On the second host, after `uv sync` and the R2 setup below:
+
+```bash
+scripts/install_collectors.sh --secondary --sync
+```
+
 ## Storage plan
 
 Three tiers, following the 3-2-1 rule (three copies, two media, one offsite):
@@ -93,9 +123,11 @@ Three tiers, following the 3-2-1 rule (three copies, two media, one offsite):
 1. **Working copy:** `data/raw/` on the collector host. Point
    `WAVE_ANALYSIS_DATA` at another disk to move it.
 2. **Offsite copy:** S3-compatible object storage, updated daily by
-   `scripts/sync_offsite.sh`. Pass 1 uses `rclone copy --immutable`, so
-   existing remote objects are never overwritten and local deletions are
-   never propagated. Pass 2 updates the growing monthly ledgers.
+   `scripts/sync_offsite.sh`. Raw files are pushed and pulled with
+   `rclone copy --immutable`, so existing objects are never overwritten on
+   either side and deletions are never propagated. The growing ledgers are
+   copied with `--update`. The same remote is how collector hosts share
+   images ([a second collector host](#a-second-collector-host)).
 3. **Citable releases:** frozen snapshots on Zenodo with DOIs (for example,
    quarterly), packed as monthly tar shards because a record allows at most
    100 files and 50 GB. NOAA imagery is a U.S. Government work, so
@@ -143,7 +175,8 @@ file even when usage stays within the free tier.
    mkdir -p ~/.config/wave-analysis
    echo 'WAVE_ANALYSIS_REMOTE=r2:wave-analysis-raw' > ~/.config/wave-analysis/sync.env
    WAVE_ANALYSIS_REMOTE=r2:wave-analysis-raw scripts/sync_offsite.sh --dry-run
-   scripts/install_collectors.sh --sync
+   scripts/install_collectors.sh --sync               # primary host
+   scripts/install_collectors.sh --secondary --sync   # a second collector host
    ```
 
 Credentials stay in rclone's config (`~/.config/rclone/rclone.conf`) and never

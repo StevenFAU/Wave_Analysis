@@ -50,15 +50,20 @@ Archive layout
 --------------
 ``<root>/<station>/<YYYY>/<MM>/<file>.jpg`` for images,
 ``<root>/_listings/buoycams_<stamp>.json`` for listing snapshots, and
-``<root>/_manifests/<YYYY-MM>.csv`` for the per-request ledger (monthly
+``<root>/_manifests/<YYYY-MM>.<host>.csv`` for the per-request ledger (monthly
 partitions, kept with the archive rather than in Git because it grows by
-~2,000 rows a day; see ADR 0008).
+~2,000 rows a day; see ADR 0008). Each collector host writes its own ledger,
+so archives collected on several hosts merge by copying files
+(``scripts/sync_offsite.sh``). Ledgers written before 2026-10-08 are named
+``<YYYY-MM>.csv``; readers take every ``*.csv``.
 """
 
 from __future__ import annotations
 
 import csv
+import os
 import re
+import socket
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
@@ -128,20 +133,40 @@ def image_file_name(camera_code: str, time_utc: pd.Timestamp) -> str:
     return f"{camera_code}_{time_utc:%Y_%m_%d_%H%M}.jpg"
 
 
-def manifest_path(dest_root: Path, when: pd.Timestamp | None = None) -> Path:
-    """Monthly manifest partition for requests made at ``when`` (default: now)."""
+def collector_host() -> str:
+    """Name of this collector host as used in ledger file names.
+
+    ``WAVE_ANALYSIS_HOST`` overrides the system host name. The result is
+    lower-cased and reduced to letters, digits and ``-``.
+    """
+    name = os.environ.get("WAVE_ANALYSIS_HOST") or socket.gethostname()
+    return re.sub(r"[^a-z0-9-]+", "-", name.lower()).strip("-") or "unknown"
+
+
+def manifest_path(
+    dest_root: Path, when: pd.Timestamp | None = None, host: str | None = None
+) -> Path:
+    """Monthly manifest partition of this host for requests made at ``when`` (default: now).
+
+    One file per host and month, so two hosts never append to the same ledger.
+    """
     when = pd.Timestamp(utcnow()) if when is None else when
-    return dest_root / MANIFESTS_DIR / f"{when:%Y-%m}.csv"
+    return dest_root / MANIFESTS_DIR / f"{when:%Y-%m}.{host or collector_host()}.csv"
 
 
 def known_missing_urls(dest_root: Path) -> set[str]:
     """Image URLs already recorded as ``not_found`` in the archive manifests.
 
     A 404 for an hour *earlier* than a camera's latest listed image means that
-    image was never published, so it is not requested again.
+    image was never published, so it is not requested again. Ledgers of the
+    last three months are read, from every host.
     """
     urls: set[str] = set()
-    for p in sorted((dest_root / MANIFESTS_DIR).glob("*.csv"))[-3:]:
+    ledgers = sorted((dest_root / MANIFESTS_DIR).glob("*.csv"))
+    recent = sorted({p.name[:7] for p in ledgers})[-3:]
+    for p in ledgers:
+        if p.name[:7] not in recent:
+            continue
         with p.open(newline="", encoding="utf-8") as fh:
             for row in csv.DictReader(fh):
                 if row["product"] == "buoycam:image" and row["status"] == "not_found":

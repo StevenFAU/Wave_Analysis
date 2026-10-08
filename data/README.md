@@ -22,7 +22,7 @@ directories.
 | `raw/pacioos/beachcam/` | ❌ | PacIOOS beach-camera images mirroring ERDDAP's `files/` tree, `_index/` snapshots and `_manifests/<dataset>.csv` ledgers (kept with the archive) |
 | `raw/era5/<site>/` | ❌ | ERA5 monthly netCDF files as returned by the CDS, each with its `.request.json`; requests in `manifests/raw/era5.csv` |
 | `raw/webcoos/` | ❌ | WebCOOS stills by camera and UTC date, `_listings/` of each run's selection, `_manifests/<camera>.csv` ledgers |
-| `raw/ndbc/buoycam/` | ❌ | Camera archive: `<station>/<YYYY>/<MM>/*.jpg`, `_listings/`, `_manifests/<YYYY-MM>.csv` (ledger kept with the archive, ADR 0008) |
+| `raw/ndbc/buoycam/` | ❌ | Camera archive: `<station>/<YYYY>/<MM>/*.jpg`, `_listings/`, `_manifests/<YYYY-MM>.<host>.csv` (one ledger per collector host, kept with the archive, ADR 0008) |
 | `interim/` | ❌ | Scratch; also the dashboard's rolling sea-state cache (`interim/dashboard/seastate/`) |
 | `processed/` | ❌ | Standardized Parquet tables (`processed/<source>/<station>/`, each with a provenance record) |
 

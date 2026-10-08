@@ -322,6 +322,39 @@ def test_buoycam_archive_run_records_gaps(tmp_path: Path):
     assert requested == ["buoycams.php"]  # nothing re-requested, including the 404 hour
 
 
+def test_buoycam_ledger_is_named_per_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from wave_analysis.sources.ndbc.buoycam import collector_host, manifest_path
+
+    now = pd.Timestamp("2026-10-08 02:00", tz="UTC")
+    monkeypatch.setenv("WAVE_ANALYSIS_HOST", "Lab Desktop_2")
+    assert collector_host() == "lab-desktop-2"
+    assert manifest_path(tmp_path, now).name == "2026-10.lab-desktop-2.csv"
+    assert manifest_path(tmp_path, now, host="laptop").name == "2026-10.laptop.csv"
+
+
+def test_known_missing_urls_reads_every_host_for_three_months(tmp_path: Path):
+    """Two hosts give several ledgers per month; the window is months, not files."""
+    from wave_analysis.ingest.manifest import EntryStatus, ManifestEntry, write_manifest
+    from wave_analysis.sources.ndbc.buoycam import known_missing_urls
+
+    def missing(ledger: str) -> str:
+        url = f"https://www.ndbc.noaa.gov/images/buoycam/Z24A_{ledger}.jpg"
+        entry = ManifestEntry(
+            source_id="ndbc",
+            product="buoycam:image",
+            station_id="41010",
+            url=url,
+            status=EntryStatus.NOT_FOUND,
+            retrieved_at=pd.Timestamp("2026-10-08 02:00", tz="UTC"),
+        )
+        write_manifest([entry], tmp_path / "_manifests" / f"{ledger}.csv")
+        return url
+
+    missing("2026-07.a")
+    kept = {missing(n) for n in ("2026-08", "2026-09.b", "2026-10.a", "2026-10.b")}
+    assert known_missing_urls(tmp_path) == kept
+
+
 def test_split_views_removes_caption():
     from wave_analysis.sources.ndbc.buoycam import caption_band_rows, split_views
 

@@ -1,4 +1,5 @@
-# Daily offsite copy of data/raw to an rclone remote (e.g. Cloudflare R2).
+# Daily exchange of data/raw with an rclone remote (e.g. Cloudflare R2): the
+# offsite copy, and how collector hosts share images (pushes, then pulls).
 # Needs WAVE_ANALYSIS_REMOTE, e.g. "r2:wave-analysis-raw", in
 # ~/.config/wave-analysis/sync.env (see docs/operations/data_collection.md).
 [Unit]
@@ -10,6 +11,8 @@ After=network-online.target
 Type=oneshot
 WorkingDirectory=@REPO@
 EnvironmentFile=%h/.config/wave-analysis/sync.env
+# rclone may be installed per user (e.g. ~/.local/bin), which systemd's PATH lacks.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=@REPO@/scripts/sync_offsite.sh
 Nice=10
 IOSchedulingClass=idle

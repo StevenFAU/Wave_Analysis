@@ -17,6 +17,21 @@ separately (`docs/REPRODUCIBILITY.md`).
   as the Fort Pierce Inlet shoreline; it is the approximate campus position on
   the lagoon.
 
+### Added (2026-10-08)
+- A second collector host. Buoy-camera ledgers are named per host
+  (`_manifests/<YYYY-MM>.<host>.csv`, `buoycam.collector_host`,
+  `WAVE_ANALYSIS_HOST`), so two hosts can archive the same images.
+  `scripts/sync_offsite.sh` now pulls other hosts' files after pushing,
+  compares raw files by size, and copies ledgers with `--update`.
+  `scripts/install_collectors.sh --secondary` installs the archiver without
+  the single-writer jobs ([data collection](docs/operations/data_collection.md#a-second-collector-host)).
+
+### Fixed (2026-10-08)
+- `buoycam.known_missing_urls` read the last three ledger files rather than
+  the last three months, which would skip months once several hosts write
+  ledgers.
+- The offsite-sync unit finds an rclone installed in `~/.local/bin`.
+
 ### Added (2026-10-01)
 - `processing.synchronize.label_from_candidates`: one label per image from
   `pair_window` candidates with a named rule (`nearest`, `interpolate`,
