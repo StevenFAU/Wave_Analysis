@@ -802,6 +802,10 @@ datasets:
         Each file is checked against the repository's size and MD5 when downloaded (data/manifests/raw/external.csv).
         WaveriderSpectra: 263 records from buoys 3 and 4, 64 frequencies x 91 directions, Hm0 1.05-7.19 m;
         SWIFT: 2,522 bursts, Hs 1.05-7.53 m. Raw stereo frames are not included (on request from the authors).
+        Listed without extracting: 55 five-minute bursts (the readme says 52) and 10 full captures,
+        2014-12-28 to 2015-01-11; each one-minute ZGrid file holds elevation (zgrid) and radiance (imgrid) on the
+        same 161 x 161 grid, so every frame pairs an image with a measured surface. The ~20,000 JPEGs are
+        processing plots, not camera frames.
 
   - dataset_id: carini_duck2016_ir_lidar
     name: Surf-zone thermal IR and lidar wave profiles, Duck 2016 (Carini et al.)
@@ -824,13 +828,18 @@ datasets:
     phase: v0.4.0
     doc: docs/datasets/external_research_datasets.md
     verification:
-      status: documented
+      status: verified
       date: 2026-10-08
       evidence: [https://digital.lib.washington.edu/server/api/core/items/f701cfb2-bba6-447f-936e-df7dba9e9811/bundles]
       notes: >
         Lidar line scans fused with tower- and pier-mounted thermal IR; wave conditions from the FRF ADOP in
         3.5 m depth. The modality list lacks 'lidar'; the wave profiles come from a line-scanning lidar.
-        Two .mat files (2.8 and 3.5 GB) for different papers; see the readmes.
+        Two .mat files (2.8 and 3.5 GB) for different papers; both downloaded and matching the repository's
+        MD5s (data/manifests/raw/external.csv). lidarIR_sharedData.mat (MATLAB v5): 1,782 tracked waves from
+        53 runs, 1,674 manually typed (1,113 non-breaking, 291 steady state, 233 spilling, 37 plunging onset).
+        SurfZoneWavesAtOnsetBreaking.mat (v7.3, HDF5): IR stacks of 1,501 and 2,968 frames at 640 x 480 with
+        breaking masks, and FRF ADOP Hs 0.33-2.52 m, 2016-10-27 to 11-11. Time bases mix epoch seconds and
+        MATLAB datenums.
 
   - dataset_id: alberello_2017_agulhas_wass
     name: WASS stereo reconstructions from the S.A. Agulhas II, Antarctic marginal ice zone, July 2017

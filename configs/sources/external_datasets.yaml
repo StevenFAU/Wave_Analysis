@@ -22,7 +22,7 @@ datasets:
     content: >-
       R/V Thomas G. Thompson, North Pacific, Dec 2014 - Jan 2015. Gridded stereo
       surface elevation and radiance (one-minute bursts, 40 m x 40 m at 0.25 m,
-      5 or 7.5 Hz) from 52 five-minute and 10 full captures, with camera motion
+      5 or 7.5 Hz) from 55 five-minute (the readme says 52) and 10 full captures, with camera motion
       from a Novatel SPAN-IGM IMU; SWIFT drifter and Datawell Waverider spectra;
       ship data; MATLAB analysis code; results and plots. Raw frames on request.
     files:

@@ -56,6 +56,9 @@ separately (`docs/REPRODUCIBILITY.md`).
   out zips by email. Registry entries and a doc
   ([research datasets](docs/datasets/external_research_datasets.md)) for the
   ship-based stereo, Duck thermal IR + lidar, and Agulhas II WASS datasets.
+  The two UW datasets (31.2 GB) are downloaded and match the repository's
+  MD5s; their contents are described from inspection, including that the
+  five-minute stereo archive has 55 bursts where its readme says 52.
 
 ### Fixed (2026-10-08)
 - `buoycam.known_missing_urls` read the last three ledger files rather than
