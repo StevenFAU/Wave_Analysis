@@ -26,3 +26,10 @@ does not show.
 No public dataset combining these was found during project review. A
 self-collected radiometric-thermal + wave-buoy dataset would be novel. See
 `docs/literature/research_gaps.md` (G-5).
+
+The closest public record, found on 2026-10-08, is Carini et al.'s Duck 2016
+dataset: surf-zone thermal IR fused with line-scanning lidar wave profiles,
+with wave conditions from an FRF ADOP in 3.5 m depth, over two days
+([research datasets](external_research_datasets.md#carini-et-al-duck-2016-thermal-ir-and-lidar)).
+Whether its IR products are radiometric is not stated in the readmes; it is a
+method check, not a training set.

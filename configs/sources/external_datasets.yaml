@@ -1,0 +1,110 @@
+# Published research datasets held in permanent repositories (found by the
+# data source scan of 2026-10-08, docs/literature/data_source_scan_2026-10.md).
+# scripts/download_external.py fetches every file with a URL into
+# data/external/<id>/, checks its size and the repository's MD5, and records
+# each request in data/manifests/raw/external.csv. data/external/ is not in the
+# offsite sync: the repository is the backup, and the files are re-downloadable.
+# File lists, sizes and MD5s were taken from the repositories' own APIs on
+# 2026-10-08 (DSpace REST for UW ResearchWorks, the EDS object list for AADC).
+datasets:
+
+  - id: schwendeman_thomson_2017_ship_stereo
+    title: >-
+      Data to accompany the article "Sharp-crested Breaking Surface Waves Observed
+      from a Ship-Based Stereo Video System"
+    creators: [Schwendeman, Michael, Thomson, Jim]
+    year: 2017
+    repository: UW ResearchWorks (University of Washington)
+    landing: http://hdl.handle.net/1773/38314
+    article: https://doi.org/10.1175/JPO-D-16-0187.1
+    license: CC BY 3.0 US
+    gaps: [G-6, G-9]
+    content: >-
+      R/V Thomas G. Thompson, North Pacific, Dec 2014 - Jan 2015. Gridded stereo
+      surface elevation and radiance (one-minute bursts, 40 m x 40 m at 0.25 m,
+      5 or 7.5 Hz) from 52 five-minute and 10 full captures, with camera motion
+      from a Novatel SPAN-IGM IMU; SWIFT drifter and Datawell Waverider spectra;
+      ship data; MATLAB analysis code; results and plots. Raw frames on request.
+    files:
+      - {name: readme.txt, size_bytes: 6587, md5: 631d89b6547154e2b35ac07406586e96,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/83e3b10c-f47f-4c0c-9f5e-a339a6bd0b9b/content"}
+      - {name: DataDescription.txt, size_bytes: 7112, md5: 261be61d2e43580c694c3b5dc87abd8c,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/afc602a1-0b30-43d5-b338-665ea5cc2c3f/content"}
+      - {name: license.txt, size_bytes: 1640, md5: 07d64d4cbaa5673c015d838d95410814,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/fb8be175-b3e6-4972-8120-8fa0b58454fa/content"}
+      - {name: WaveriderSpectra_TGT2015.mat, size_bytes: 10980335, md5: 38960c57db5576dc8fd076a290460900,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/2797cc07-d532-4e25-8bbe-1e316adcfa60/content"}
+      - {name: SWIFTdata_TGT2015.mat, size_bytes: 8067045, md5: c5aa78cb52e56ea4e49bf36411755f0c,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/3f36bf3e-84b3-46be-afab-5c16ba2be944/content"}
+      - {name: ShipData_TGT2015.mat, size_bytes: 39593371, md5: 2a0e566041b9ccf138e7acb41fe718c0,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/58d401c7-d803-492b-a623-0d484afb770c/content"}
+      - {name: StereoAnalysisCodes_JPO.zip, size_bytes: 38182, md5: bdfc7b1257989208aedb0703c734e360,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/7813fc3e-ffaf-45bb-8eff-3dd9aec5b426/content"}
+      - {name: StereoXYZData_FiveMin.zip, size_bytes: 8243582154, md5: 7b179896db841f68d2747b4d824ae9fb,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/946959d7-1bb4-42dc-b8a6-4910862579f4/content"}
+      - {name: StereoXYZData_FullCapture.zip, size_bytes: 9644868227, md5: f9d34dacf6c573d2aea4608d868b88ac,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/2f77c53d-57a2-4728-988f-77bf4d6d49f0/content"}
+      - {name: ResultsAndPlots_JPO.zip, size_bytes: 6842702764, md5: c1fb1d9ca1a433b67ce5b9537621f3e2,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/883a7062-d75b-40bd-9035-b3e53dc7f19d/content"}
+
+  - id: carini_duck2016_ir_lidar
+    title: >-
+      Dataset to support "Surf Zone Waves at the Onset of Breaking 1. LIDAR and IR
+      Data Fusion Method"
+    creators: [Carini, Roxanne J.]
+    year: 2020
+    repository: UW ResearchWorks (University of Washington)
+    landing: http://hdl.handle.net/1773/46586
+    license: CC BY
+    gaps: [G-5]
+    content: >-
+      USACE FRF, Duck NC, 7-8 Nov 2016. Line-scanning lidar wave profiles fused with
+      tower- and pier-mounted thermal IR imagery of surf-zone waves; wave conditions
+      from the FRF ADOP in 3.5 m depth and the end-of-pier tide gauge; bathymetry
+      surveys of 5 and 18 Nov 2016. SurfZoneWavesAtOnsetBreaking.mat (readme of
+      2020-03-17) supports Carini et al. (2021a, b) in JGR Oceans;
+      lidarIR_sharedData.mat (readme of 2018-08-03) supports the breaker-type
+      manuscript 2018JC014441 (tracked waves with height, period, manual breaker
+      type).
+    files:
+      - {name: ReadMe_SurfZoneWavesAtOnsetBreaking.rtf, size_bytes: 29037, md5: df53551b8f6738b4ed964d5ed7f51869,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/2289845e-de46-487b-84e6-04f77d51522a/content"}
+      - {name: ReadMe_lidarIR_sharedData.txt, size_bytes: 2111, md5: b13127c530158130b8524fcfa1145134,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/5dbf74ad-a194-48b6-8f16-005d1d26950c/content"}
+      - {name: SurfZoneWavesAtOnsetBreaking.mat, size_bytes: 2847180386, md5: c53ada632f71d31a724ee4893c86e759,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/f6481e57-5239-49f1-ae17-54f906c65503/content"}
+      - {name: lidarIR_sharedData.mat, size_bytes: 3509494306, md5: 69ac9c4e8a5398653d94c5bab8fa31ce,
+         url: "https://digital.lib.washington.edu/server/api/core/bitstreams/7f9c23eb-654c-4706-adb8-1d7be96b504f/content"}
+
+  - id: alberello_2017_agulhas_wass
+    title: >-
+      Wave acquisition stereo-camera system measurements (WASS) from a voyage of the
+      S.A. Agulhas II, July 2017
+    creators: [Alberello, A., Bennetts, L., Onorato, M., Vichi, M., Machutchon, K., Eayrs, C.,
+               Ntamba Ntamba, B., Benetazzo, A., Bergamasco, F., Nelli, F., Pattani, R.,
+               Clarke, H., Toffoli, A.]
+    year: 2021
+    repository: Australian Antarctic Data Centre
+    landing: https://doi.org/10.26179/Q9BD-5F74
+    license: CC BY 4.0
+    gaps: [G-6]
+    content: >-
+      Antarctic marginal ice zone (62 S, 30 E), 4 July 2017, during an explosive
+      polar cyclone. Two 2448 x 2048 monochrome cameras at 2 Hz on the port side;
+      reconstructed surface elevation (mm) on a 1 m grid, one NetCDF file per
+      acquisition.
+    access_note: >-
+      AADC releases files only after an email address is submitted on
+      https://data.aad.gov.au/dataset/571cdc2c-c810-4996-ae82-b79dc25a894e/download
+      (under 2 GB: the zip download starts and a one-time link is emailed). No
+      direct URLs or checksums are published; the object list gives the sizes.
+    files:
+      - {name: AAS_4434_AGULHAS_WASS_2017.xml, size_bytes: 13267}
+      - {name: LICENSE, size_bytes: 265}
+      - {name: README, size_bytes: 3075}
+      - {name: wass__20170704_0805.nc, size_bytes: 217864868}
+      - {name: wass__20170704_0845.nc, size_bytes: 221143748}
+      - {name: wass__20170704_0925.nc, size_bytes: 178518308}
+      - {name: wass__20170704_1000.nc, size_bytes: 420608948}
+      - {name: wass__20170704_1105.nc, size_bytes: 296618708}
+      - {name: wass__20170704_1150.nc, size_bytes: 255450548}

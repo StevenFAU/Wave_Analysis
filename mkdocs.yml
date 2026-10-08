@@ -52,6 +52,7 @@ nav:
       - Satellite SAR: datasets/satellite_sar.md
       - Multispectral: datasets/multispectral.md
       - Thermal IR: datasets/thermal_ir.md
+      - Research datasets (stereo, IR): datasets/external_research_datasets.md
   - Operations:
       - Continuous data collection: operations/data_collection.md
       - Collection plan: operations/collection_plan.md

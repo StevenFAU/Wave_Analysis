@@ -49,3 +49,6 @@ references/papers/*.pdf
 .idea/
 .vscode/
 *.swp
+
+# --- Published research datasets (re-downloadable; scripts/download_external.py) ---
+data/external/**

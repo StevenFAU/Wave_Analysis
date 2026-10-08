@@ -49,6 +49,14 @@ separately (`docs/REPRODUCIBILITY.md`).
   of a directional wave buoy (`NEAR_BUOY_CAMERAS`); `webcoos download` accepts
   camera sets as `@yin2025` and `@near_buoy`.
 
+- `scripts/download_external.py` and `configs/sources/external_datasets.yaml`:
+  published research datasets go to `data/external/<id>/`, checked against
+  the repository's sizes and MD5s and recorded in
+  `data/manifests/raw/external.csv`; `--from-zip` for repositories that hand
+  out zips by email. Registry entries and a doc
+  ([research datasets](docs/datasets/external_research_datasets.md)) for the
+  ship-based stereo, Duck thermal IR + lidar, and Agulhas II WASS datasets.
+
 ### Fixed (2026-10-08)
 - `buoycam.known_missing_urls` read the last three ledger files rather than
   the last three months, which would skip months once several hosts write

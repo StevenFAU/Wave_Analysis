@@ -23,6 +23,7 @@ directories.
 | `raw/era5/<site>/` | ❌ | ERA5 monthly netCDF files as returned by the CDS, each with its `.request.json`; requests in `manifests/raw/era5.csv` |
 | `raw/webcoos/` | ❌ | WebCOOS stills by camera and UTC date, `_listings/` of each run's selection, `_manifests/<camera>.csv` ledgers |
 | `raw/ndbc/buoycam/` | ❌ | Camera archive: `<station>/<YYYY>/<MM>/*.jpg`, `_listings/`, `_manifests/<YYYY-MM>.<host>.csv` (one ledger per collector host, kept with the archive, ADR 0008) |
+| `external/<id>/` | ❌ | Published research datasets as downloaded by `scripts/download_external.py` (`configs/sources/external_datasets.yaml`), each with a `SOURCE.yaml`; requests in `manifests/raw/external.csv`. Not in the offsite sync: the repositories are the backup |
 | `interim/` | ❌ | Scratch; also the dashboard's rolling sea-state cache (`interim/dashboard/seastate/`) |
 | `processed/` | ❌ | Standardized Parquet tables (`processed/<source>/<station>/`, each with a provenance record) |
 

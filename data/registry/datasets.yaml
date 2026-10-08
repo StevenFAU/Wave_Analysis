@@ -766,3 +766,94 @@ datasets:
     phase: v0.4.0
     doc: docs/datasets/satellite_sar.md
     verification: {status: candidate, notes: "Reported vs buoys: bias 0.11 m, RMSE 0.43 m (0.25-0.35 m near nadir)."}
+
+  # ---------------------------------------------------------------------------
+  # Added by the data source scan, 2026-10-08 (docs/literature/data_source_scan_2026-10.md).
+  # Downloaded with scripts/download_external.py (configs/sources/external_datasets.yaml).
+  # ---------------------------------------------------------------------------
+
+  - dataset_id: schwendeman_thomson_2017_ship_stereo
+    name: Ship-based stereo video with ship motion, SWIFT and Waverider data (Schwendeman & Thomson 2017)
+    provider: University of Washington Applied Physics Laboratory (UW ResearchWorks)
+    modalities: [stereo, imu, in_situ_wave, wind, meteorological]
+    intended_roles: [reference, input]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints: [http://hdl.handle.net/1773/38314]
+    data_types: [reconstructed_surface_elevation, surface_radiance, platform_motion,
+                 directional_wave_spectra, drifter_wave_spectra, ship_meteorology]
+    temporal: {coverage: "2014-12-28 to 2015-01-12 (Waverider); stereo bursts of 1 min at 5 or 7.5 Hz"}
+    spatial:
+      platform_types: [ship, drifting_buoy]
+      coverage: "North Pacific, R/V Thomas G. Thompson"
+    formats: [mat, zip, jpg]
+    documentation: [http://hdl.handle.net/1773/38314, https://doi.org/10.1175/JPO-D-16-0187.1]
+    citation: "Schwendeman, M. & Thomson, J. (2017). Data to accompany the article 'Sharp-crested Breaking Surface Waves Observed from a Ship-Based Stereo Video System'. UW ResearchWorks, hdl:1773/38314."
+    license: {status: CC-BY-3.0-US, url: https://creativecommons.org/licenses/by/3.0/us/}
+    phase: v0.4.0
+    doc: docs/datasets/external_research_datasets.md
+    verification:
+      status: verified
+      date: 2026-10-08
+      evidence: [https://digital.lib.washington.edu/server/api/core/items/970ce35d-41c7-4e7d-b5eb-6bc6a5cf053a/bundles]
+      notes: >
+        Each file is checked against the repository's size and MD5 when downloaded (data/manifests/raw/external.csv).
+        WaveriderSpectra: 263 records from buoys 3 and 4, 64 frequencies x 91 directions, Hm0 1.05-7.19 m;
+        SWIFT: 2,522 bursts, Hs 1.05-7.53 m. Raw stereo frames are not included (on request from the authors).
+
+  - dataset_id: carini_duck2016_ir_lidar
+    name: Surf-zone thermal IR and lidar wave profiles, Duck 2016 (Carini et al.)
+    provider: University of Washington (UW ResearchWorks), data from the USACE Field Research Facility
+    modalities: [thermal_ir, acoustic, bathymetry]
+    intended_roles: [reference, input]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints: [http://hdl.handle.net/1773/46586]
+    data_types: [ir_imagery_products, lidar_wave_profiles, tracked_wave_statistics, breaker_type_labels,
+                 wave_conditions, bathymetry_surveys]
+    temporal: {coverage: "7-8 November 2016"}
+    spatial: {platform_types: [fixed_station], coverage: "USACE FRF, Duck NC (tower and pier)"}
+    formats: [mat, rtf, txt]
+    documentation: [http://hdl.handle.net/1773/46586]
+    citation: "Carini, R. J. (2020). Dataset to support 'Surf Zone Waves at the Onset of Breaking 1. LIDAR and IR Data Fusion Method'. UW ResearchWorks, hdl:1773/46586."
+    license: {status: CC-BY, notes: "CC BY per the repository record."}
+    phase: v0.4.0
+    doc: docs/datasets/external_research_datasets.md
+    verification:
+      status: documented
+      date: 2026-10-08
+      evidence: [https://digital.lib.washington.edu/server/api/core/items/f701cfb2-bba6-447f-936e-df7dba9e9811/bundles]
+      notes: >
+        Lidar line scans fused with tower- and pier-mounted thermal IR; wave conditions from the FRF ADOP in
+        3.5 m depth. The modality list lacks 'lidar'; the wave profiles come from a line-scanning lidar.
+        Two .mat files (2.8 and 3.5 GB) for different papers; see the readmes.
+
+  - dataset_id: alberello_2017_agulhas_wass
+    name: WASS stereo reconstructions from the S.A. Agulhas II, Antarctic marginal ice zone, July 2017
+    provider: Australian Antarctic Data Centre (Alberello, Bennetts, Toffoli et al.)
+    modalities: [stereo]
+    intended_roles: [reference]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints: [https://doi.org/10.26179/Q9BD-5F74]
+      rate_limit_guidance: "Files are released after an email address is submitted on the AADC download page."
+    data_types: [reconstructed_surface_elevation]
+    temporal: {coverage: "2017-07-04, six acquisitions, 2 Hz"}
+    spatial: {platform_types: [ship], coverage: "Antarctic marginal ice zone, about 62 S 30 E"}
+    formats: [netcdf]
+    documentation: [https://doi.org/10.26179/Q9BD-5F74]
+    citation: "Alberello, A. et al. (2021). Wave acquisition stereo-camera system measurements (WASS) from a voyage of the S.A. Agulhas II, July 2017. Australian Antarctic Data Centre. doi:10.26179/Q9BD-5F74"
+    license: {status: CC-BY-4.0, url: https://creativecommons.org/licenses/by/4.0/}
+    phase: v0.4.0
+    doc: docs/datasets/external_research_datasets.md
+    verification:
+      status: documented
+      date: 2026-10-08
+      evidence: [https://data.aad.gov.au/eds/api/dataset/5241]
+      notes: "9 objects, 1,590,221,735 bytes (six NetCDF files, README, LICENSE, XML metadata)."

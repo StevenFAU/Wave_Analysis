@@ -213,16 +213,18 @@ So that nobody repeats these searches:
 
 ## 7. Recommended next steps
 
-1. **Extend the WebCOOS collector** to the near-buoy cameras, within the 90-day
-   guideline: `san_elijo`, `masonboro_inlet`, `currituck_sailfish`,
-   `westport_north/south`, `oceanshores_east/west`, `kahului_road`,
-   `crescent_city`, `ferrybeach_north`, `oceancity`, `vabeach_hamptonos`. Check
-   each view for exposure first.
-2. **Add the historical stills of `cocoabeach`, `masonboro_inlet`,
-   `currituck_sailfish` (from 2022) and `ferrybeach_north` (from 2025-02)** to
-   the WebCOOS permission request (P2).
-3. **Download the three open validation datasets** (§3.1-3.3) for P6 and the
-   G-5/G-9 method checks. Together they are a few GB.
+1. ✅ **Extend the WebCOOS collector** to the near-buoy cameras (2026-10-08).
+   After a midday still of each, eleven with open surf were added
+   (`NEAR_BUOY_CAMERAS`, [WebCOOS](../datasets/webcoos.md)); `oceanshores_*`,
+   `kahului_*`, `ferrybeach_north` and `campellis_south` look at sheltered
+   water and were left out. `cocoabeach` (Florida) shows open surf.
+2. **Add the historical stills of `cocoabeach`, `masonboro_inlet` and
+   `currituck_sailfish` (from 2022)** to the WebCOOS permission request (P2;
+   done in the draft).
+3. **Download the three open validation datasets** (§3.1-3.3): 32.7 GB in all
+   (24.8 + 6.4 + 1.6 GB), started 2026-10-08
+   ([research datasets](../datasets/external_research_datasets.md)). The AADC
+   one needs an email address submitted on its download page.
 4. **Requests:** Western Australia DoT (camera archive), Schwendeman and
    Thomson (raw stereo frames), SOCIB (SIRENA video and licence), GLERL (bulk
    webcam images), Cam-Era.
