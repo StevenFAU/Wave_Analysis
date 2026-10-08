@@ -1,0 +1,128 @@
+artifact_id: waimea_cdip106_v0
+created_at: '2026-10-08T14:07:22.598676Z'
+git:
+  commit: 0b56b2c3898cbe28486ee3b118ee69515c7f7ba3
+  branch: main
+  dirty: false
+pipeline:
+  command: python scripts/waimea_benchmark.py
+  config:
+    name: waimea_cdip106_v0
+    description: 'PacIOOS beachcam_003 and beachcam_004 (Waimea Bay, 2009-2013) paired
+      with CDIP 106 (6.3 km offshore). Splits by HST day across both cameras; non-vision
+      baselines (climatology, persistence, ERA5) and ridge regression on image statistics,
+      reported under the window-mean and nearest label rules (ADR 0010).
+
+      '
+    task:
+      id_col: sample_id
+      filters:
+      - column: paired
+        op: eq
+        value: true
+      - column: features_ok
+        op: eq
+        value: true
+      labels:
+        window_mean: Hs_label_m
+        nearest: Hs_nearest_m
+    split:
+      day:
+        protocol: iid_grouped
+        group_col: hst_day
+        fractions:
+        - 0.7
+        - 0.15
+        - 0.15
+        seed: 0
+      week:
+        protocol: iid_grouped
+        group_col: hst_week
+        fractions:
+        - 0.7
+        - 0.15
+        - 0.15
+        seed: 0
+      year:
+        protocol: cross_time
+        val_start: '2012-01-01T10:00:00Z'
+        test_start: '2013-01-01T10:00:00Z'
+        embargo: 72h
+        group_col: hst_day
+      audit:
+        group_cols:
+        - hst_day
+        time_col: time_utc
+        min_gap: 6h
+    baselines:
+      persistence_lags_h:
+      - 1
+      - 3
+      - 24
+      persistence_max_age: 1h
+      ridge_alphas:
+        start: -2
+        stop: 5
+        num: 15
+    evaluation:
+      bootstrap:
+        group_col: hst_day
+        n_boot: 1000
+        alpha: 0.05
+        seed: 0
+      sea_state_edges:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - .inf
+    seed: 0
+  config_sha256: 55b36ff6983cc58072430524ba934a0c40178229d6663ef9763b27db8ed42db7
+software:
+  python: 3.12.13
+  platform: Linux-7.0.0-38-generic-x86_64-with-glibc2.43
+  wave_analysis: 0.1.0.dev0
+  packages:
+    numpy: 2.5.3
+    pandas: 3.0.6
+    scipy: 1.18.1
+    pyarrow: 25.0.1
+    pydantic: 2.13.5
+    httpx: 0.28.1
+    torch: 2.14.0+cpu
+    xarray: 2026.7.0
+input_files:
+- path: configs/experiments/waimea_hs_v0.yaml
+  sha256: b43330507337bc7a0d39a1c2fb2a9d9af2082e981e071f3ca419d2216d176fd4
+- path: data/processed/pairs/waimea_cdip106/samples.parquet
+  sha256: 82c11c19d2c1b8ed8c9332565b92e57102c0b0cbeb12d8203efaadccbd857462
+- path: data/interim/waimea_audit/images.parquet
+  sha256: 738af27079cde0464fa6f5d46e6dfb9e5eefb1ab14655881bb2d312f139c2968
+- path: data/interim/waimea_audit/features.npz
+  sha256: 28d75374efaf275962ba0da53e125a11b65cfd534da18f5e488cf83434c33d0a
+- path: data/processed/cdip/106/bulk_2009-01-01_2014-01-01.parquet
+  sha256: 5e6010a684c30e6a181b45d9aa3b7747631c1dc2217162d39e3eaa33e843e24f
+- path: data/processed/era5/pacioos_waimea/bulk_2009-01_2013-12.parquet
+  sha256: 7240ee24bdc1dcbb7cad80fd2f8d07fcd7744072051dc8e609ca3c389f7e04e9
+upstream_manifests: []
+output_files:
+- path: data/processed/benchmarks/waimea_cdip106_v0/manifest.parquet
+  sha256: afd679226beea0040c88527690ad3189bd4be4a9b0123c23bfba875854b04187
+- path: data/processed/benchmarks/waimea_cdip106_v0/manifest.csv
+  sha256: 670e744f350d97367bc14e6381ccc36e44474da26a2541b481caec5e9575ea48
+- path: data/processed/benchmarks/waimea_cdip106_v0/manifest.exclusions.csv
+  sha256: f3fecb7a461ce3e5072c75ff50b81c84d776015a355e5834d697c0ee2bebdca5
+- path: data/processed/benchmarks/waimea_cdip106_v0/predictions.parquet
+  sha256: c571da56e5bb2495968f1c128b2c9518d9c708ffb2cc3551a22df0ebe2f5e400
+- path: data/processed/benchmarks/waimea_cdip106_v0/results.csv
+  sha256: e344fc7e591d4df5795b5ffa9fee6408bca3d175814bdf66e531bd6f6846034f
+- path: data/processed/benchmarks/waimea_cdip106_v0/strata.csv
+  sha256: cb480504c1cb1d5c651469b005986d34af60cde03efbaebbc16d231f48771099
+- path: data/processed/benchmarks/waimea_cdip106_v0/comparisons.csv
+  sha256: 9591ef171550a3a195409bb85430b61305ad7d3d78aa7cbfa633fd5a804353d8
+- path: data/processed/benchmarks/waimea_cdip106_v0/summary.json
+  sha256: f68a5fbc9067f8cc08d4b4b1dff0812bbd34e6092081587f09acc5bf51ee2d94
+- path: data/manifests/ml/waimea_cdip106_v0.days.csv
+  sha256: 9f8f8aa41eb6e2159a3238aac3f48df814634e25b92a222dfa2777e24df0ad63
+notes: P1 of docs/operations/collection_plan.md; results in docs/datasets/pacioos_beachcam.md.

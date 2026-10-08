@@ -31,6 +31,13 @@ separately (`docs/REPRODUCIBILITY.md`).
   push for 3 h or no offsite sync for 30 h, says when images start to be lost
   for good, and closes the issue on recovery ([alerts](docs/operations/data_collection.md#alerts)).
 
+- The first Waimea Bay benchmark (`scripts/waimea_benchmark.py`,
+  `configs/experiments/waimea_hs_v0.yaml`): a manifest of the 16,404 paired
+  images with splits by HST day, ISO week and year, a leakage audit, and
+  climatology, persistence, ERA5 and image-ridge baselines under the
+  window-mean and nearest labels, with day-bootstrap intervals and paired
+  comparisons ([results](docs/datasets/pacioos_beachcam.md#benchmark-v0-splits-and-baselines-2026-10-08)).
+
 ### Fixed (2026-10-08)
 - `buoycam.known_missing_urls` read the last three ledger files rather than
   the last three months, which would skip months once several hosts write

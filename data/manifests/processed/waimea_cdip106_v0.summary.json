@@ -1,0 +1,234 @@
+{
+ "population": {
+  "indexed": 17854,
+  "in_manifest": 16404,
+  "excluded_by": {
+   "paired eq True": 1450
+  },
+  "days": 800,
+  "weeks": 129,
+  "by_camera": {
+   "beachcam_004": 8230,
+   "beachcam_003": 8174
+  }
+ },
+ "daily_mean_Hs_lag1_correlation": 0.671,
+ "splits": {
+  "day": {
+   "train": 11469,
+   "val": 2468,
+   "test": 2467
+  },
+  "week": {
+   "train": 11423,
+   "test": 2536,
+   "val": 2445
+  },
+  "year": {
+   "train": 9286,
+   "val": 5168,
+   "test": 1930,
+   "excluded": 20
+  }
+ },
+ "split_params": {
+  "day": {
+   "group_col": [
+    "hst_day"
+   ],
+   "fractions": [
+    0.7,
+    0.15,
+    0.15
+   ],
+   "seed": 0
+  },
+  "week": {
+   "group_col": [
+    "hst_week"
+   ],
+   "fractions": [
+    0.7,
+    0.15,
+    0.15
+   ],
+   "seed": 0
+  },
+  "year": {
+   "val_start": "2012-01-01 10:00:00+00:00",
+   "test_start": "2013-01-01 10:00:00+00:00",
+   "embargo": "3 days 00:00:00",
+   "group_col": "hst_day"
+  }
+ },
+ "audit": {
+  "day": {
+   "ok": true,
+   "shared_groups": {
+    "hst_day": 0
+   },
+   "temporal_neighbours_within_min_gap": 0,
+   "min_train_test_gap_h": 12.88,
+   "test_days": 120,
+   "test_days_next_to_a_train_day": 114,
+   "test_images_with_a_train_image_within_4_dhash_bits": 1643,
+   "test_images": 2467
+  },
+  "week": {
+   "ok": true,
+   "shared_groups": {
+    "hst_day": 0,
+    "hst_week": 0
+   },
+   "temporal_neighbours_within_min_gap": 0,
+   "min_train_test_gap_h": 12.88,
+   "test_days": 121,
+   "test_days_next_to_a_train_day": 22,
+   "test_images_with_a_train_image_within_4_dhash_bits": 1602,
+   "test_images": 2536
+  },
+  "year": {
+   "ok": true,
+   "shared_groups": {
+    "hst_day": 0
+   },
+   "temporal_neighbours_within_min_gap": 0,
+   "min_train_test_gap_h": 8906.48,
+   "test_days": 91,
+   "test_days_next_to_a_train_day": 0,
+   "test_images_with_a_train_image_within_4_dhash_bits": 955,
+   "test_images": 1930
+  }
+ },
+ "dhash_same_camera_different_days": {
+  "beachcam_003": {
+   "pairs": 19972,
+   "dhash_bits_quantiles": {
+    "0.05": 9.0,
+    "0.5": 16.0,
+    "0.95": 25.0
+   },
+   "fraction_within_4_bits": 0.002
+  },
+  "beachcam_004": {
+   "pairs": 19960,
+   "dhash_bits_quantiles": {
+    "0.05": 8.0,
+    "0.5": 16.0,
+    "0.95": 27.0
+   },
+   "fraction_within_4_bits": 0.004
+  }
+ },
+ "fits": {
+  "day/window_mean": {
+   "era5_linear": {
+    "intercept": -0.5183,
+    "slope": 1.0279
+   },
+   "ridge_whitewater_alpha": {
+    "beachcam_003": 0.01,
+    "beachcam_004": 0.01
+   },
+   "ridge_blocks_alpha": {
+    "beachcam_003": 100.0,
+    "beachcam_004": 31.622776601683793
+   },
+   "era5_linear+ridge_blocks_alpha": {
+    "beachcam_003": 31.622776601683793,
+    "beachcam_004": 31.622776601683793
+   }
+  },
+  "day/nearest": {
+   "era5_linear": {
+    "intercept": -0.5166,
+    "slope": 1.0269
+   },
+   "ridge_whitewater_alpha": {
+    "beachcam_003": 0.01,
+    "beachcam_004": 100.0
+   },
+   "ridge_blocks_alpha": {
+    "beachcam_003": 100.0,
+    "beachcam_004": 31.622776601683793
+   },
+   "era5_linear+ridge_blocks_alpha": {
+    "beachcam_003": 31.622776601683793,
+    "beachcam_004": 31.622776601683793
+   }
+  },
+  "week/window_mean": {
+   "era5_linear": {
+    "intercept": -0.5405,
+    "slope": 1.0353
+   },
+   "ridge_whitewater_alpha": {
+    "beachcam_003": 0.01,
+    "beachcam_004": 100000.0
+   },
+   "ridge_blocks_alpha": {
+    "beachcam_003": 3162.2776601683795,
+    "beachcam_004": 100.0
+   },
+   "era5_linear+ridge_blocks_alpha": {
+    "beachcam_003": 3162.2776601683795,
+    "beachcam_004": 100.0
+   }
+  },
+  "week/nearest": {
+   "era5_linear": {
+    "intercept": -0.5407,
+    "slope": 1.035
+   },
+   "ridge_whitewater_alpha": {
+    "beachcam_003": 0.01,
+    "beachcam_004": 100000.0
+   },
+   "ridge_blocks_alpha": {
+    "beachcam_003": 3162.2776601683795,
+    "beachcam_004": 100.0
+   },
+   "era5_linear+ridge_blocks_alpha": {
+    "beachcam_003": 3162.2776601683795,
+    "beachcam_004": 316.22776601683796
+   }
+  },
+  "year/window_mean": {
+   "era5_linear": {
+    "intercept": -0.57,
+    "slope": 1.047
+   },
+   "ridge_whitewater_alpha": {
+    "beachcam_003": 0.01,
+    "beachcam_004": 3162.2776601683795
+   },
+   "ridge_blocks_alpha": {
+    "beachcam_003": 10000.0,
+    "beachcam_004": 100.0
+   },
+   "era5_linear+ridge_blocks_alpha": {
+    "beachcam_003": 100000.0,
+    "beachcam_004": 3162.2776601683795
+   }
+  },
+  "year/nearest": {
+   "era5_linear": {
+    "intercept": -0.5684,
+    "slope": 1.0457
+   },
+   "ridge_whitewater_alpha": {
+    "beachcam_003": 0.01,
+    "beachcam_004": 3162.2776601683795
+   },
+   "ridge_blocks_alpha": {
+    "beachcam_003": 10000.0,
+    "beachcam_004": 100.0
+   },
+   "era5_linear+ridge_blocks_alpha": {
+    "beachcam_003": 100000.0,
+    "beachcam_004": 1000.0
+   }
+  }
+ },
+ "era5_grid_point": "22.0N 158.0W, 40.2 km from the cameras"
+}

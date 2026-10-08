@@ -31,13 +31,17 @@ Priorities from the [landscape review](literature/landscape_review.md) §7:
 - **PacIOOS Waimea benchmark:** `beachcam_003/004` (2009–2013, 17,854 images)
   paired with CDIP 106 (6.3 km). ✅ Archive complete, audited and paired; ✅
   label rule decided (ADR 0010, `label_from_candidates`); ✅ labels added to
-  the pairing. Next: splits by day across both cameras, baselines.
+  the pairing. ✅ Splits by HST day, ISO week and year, leakage-audited;
+  baselines (climatology, persistence, ERA5, image ridge) under both label
+  rules (`scripts/waimea_benchmark.py`, 2026-10-08). Next: a learned image
+  model on the same splits.
 - ✅ **Reference representativeness (G-10):** buoy-pair agreement against
   distance and exposure for 2023 (`scripts/buoy_pair_agreement.py`). Next: the
   same check for each camera site's reference where a neighbour exists.
 - **Collection robustness (P0 in the
-  [collection plan](operations/collection_plan.md)):** always-on collector
-  host, offsite copy, alert on missed runs.
+  [collection plan](operations/collection_plan.md)):** ✅ offsite copy (R2),
+  second collector host, oldest-first backfill and missed-run alert
+  (2026-10-08). Still to do: an always-on collector host.
 - **USGS CoastCam adapter:** NIMS S3 snapshots and data-release IO/EO
   calibration. Pair with CDIP 214, 156, 221, and 121, and with the Dorado Spotter
   (five sites for leave-site-out tests).

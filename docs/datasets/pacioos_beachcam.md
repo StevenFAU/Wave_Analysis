@@ -249,14 +249,113 @@ median 3 cm (90 %: 10 cm; 99 %: 25 cm), and the two records spread by a median
 3.9 % of H_s (90 %: 10 %), matching the record noise above. Every count outside
 the summary's `label` block is unchanged from 2026-09-27.
 
+## Benchmark v0: splits and baselines (2026-10-08)
+
+`scripts/waimea_benchmark.py` with `configs/experiments/waimea_hs_v0.yaml`.
+Outputs in `data/processed/benchmarks/waimea_cdip106_v0/`; the per-day split
+table is `data/manifests/ml/waimea_cdip106_v0.days.csv`, and the results,
+strata, comparisons, summary and provenance are copied to
+`data/manifests/processed/waimea_cdip106_v0.*`.
+
+**Population.** The 16,404 paired images (8,174 + 8,230) on 800 HST days. The
+other 1,450 indexed images are in the exclusion ledger.
+
+**Splits.** Each one keeps both cameras of a day together, because they share a label.
+
+| Protocol | Unit | Train / val / test images | Test days |
+|---|---|---|---|
+| `day` | HST day, 70/15/15 by images, seed 0 | 11,469 / 2,468 / 2,467 | 120 |
+| `week` | ISO week (HST) | 11,423 / 2,445 / 2,536 | 121 |
+| `year` | train 2009-2011, val 2012, test 2013; 72 h embargo (20 images) | 9,286 / 5,168 / 1,930 | 91 |
+
+**Leakage audit.** All three pass: no day (or week) is in two partitions, and
+no train and test images are closer than 6 h across both cameras. The
+smallest train-test gap is 12.9 h, the night between two days. Two things
+the audit cannot settle:
+- **Neighbouring days.** Daily mean H_s has a lag-1-day correlation of 0.67,
+  because swells last several days. In the `day` split, 114 of 120 test days
+  sit next to a training day; in the `week` split, 22 of 121. The image
+  baseline scores the same under both (R² 0.66 and 0.69), so day adjacency
+  does not visibly inflate it.
+- **Image hashes are not a leakage test here.** Two images of one camera on
+  different days are a median 16 bits apart (64-bit dHash), and 0.2-0.4 % of
+  such pairs are within 4 bits. With about 5,700 training images per camera,
+  almost every test image has such a match by chance (1,643 of 2,467). For a
+  fixed camera, a near-identical hash means a similar calm sea, not the same
+  event.
+
+**Baselines.** Each is fitted on train + val (val chooses the ridge penalty,
+one model per camera) and scored on test, with 95 % intervals from a
+bootstrap over HST days. `persistence_kh` is the last CDIP 106 record centred
+at least k h before the image: what a buoy that stopped k hours ago would
+give. ERA5 is the nearest sea point, 40 km offshore. `ridge_blocks` uses the
+16 × 16 white-fraction and mean-luma blocks of `waimea_extract.py` (caption
+excluded). `ridge_whitewater` uses only the white fraction of the water
+blocks.
+
+Test RMSE (m) and R², window-mean label (ADR 0010):
+
+| Baseline | `day` RMSE [95 % CI] | `day` R² | `week` RMSE | `week` R² | `year` RMSE | `year` R² |
+|---|---|---|---|---|---|---|
+| Training mean | 0.69 [0.54, 0.86] | 0.00 | 0.78 | −0.01 | 0.76 | −0.46 |
+| Climatology by month | 0.58 [0.45, 0.74] | 0.28 | 0.68 | 0.23 | 0.39 | 0.61 |
+| Persistence, 24 h | 0.58 [0.46, 0.70] | 0.30 | 0.63 | 0.33 | 0.39 | 0.61 |
+| Persistence, 3 h | 0.18 [0.15, 0.20] | 0.94 | 0.20 | 0.93 | 0.13 | 0.96 |
+| Persistence, 1 h | 0.13 [0.11, 0.14] | 0.97 | 0.14 | 0.97 | 0.09 | 0.98 |
+| ERA5, raw | 0.55 [0.50, 0.60] | 0.36 | 0.54 | 0.52 | 0.46 | 0.47 |
+| ERA5, linear correction | 0.30 [0.25, 0.35] | 0.81 | 0.33 | 0.82 | 0.23 | 0.86 |
+| Ridge, water-block white fraction | 0.67 [0.55, 0.82] | 0.05 | 0.76 | 0.04 | 0.72 | −0.33 |
+| **Ridge, image blocks** | **0.40 [0.35, 0.46]** | **0.66** | 0.43 | 0.69 | 0.36 | 0.67 |
+| ERA5 corrected + image ridge on its residual | 0.26 [0.23, 0.30] | 0.86 | 0.30 | 0.85 | 0.25 | 0.85 |
+| *Nearest label vs window-mean label* | *0.06* | *0.99* | *0.07* | *0.99* | *0.05* | *0.99* |
+
+Paired differences in RMSE (m, candidate minus reference, bootstrap over the
+same days; negative means the candidate is better):
+
+| Candidate vs reference | `day` | `week` | `year` |
+|---|---|---|---|
+| ERA5 + image vs ERA5 | **−0.041 [−0.064, −0.017]** | −0.028 [−0.045, −0.011] | +0.012 [−0.004, +0.027] |
+| Image blocks vs ERA5 | +0.099 [+0.042, +0.165] | +0.099 [+0.041, +0.152] | +0.127 [+0.086, +0.166] |
+| Image blocks vs climatology | −0.182 [−0.285, −0.086] | −0.248 [−0.340, −0.148] | −0.029 [−0.076, +0.015] |
+
+What this says:
+- **The corrected ERA5 nowcast is the baseline to beat.** Raw ERA5
+  over-predicts by 0.40-0.46 m (bias). The correction fitted on training data
+  (about H_s = 1.03 × ERA5 − 0.52 m) brings RMSE to 0.23-0.33 m.
+- **Image statistics alone do not beat it.** The block ridge is 0.10-0.13 m
+  worse in every split. It beats climatology on held-out days and weeks, but
+  not on a held-out year.
+- **Within the same years, the image adds to the nowcast.** Modelling ERA5's
+  residual from the image lowers RMSE by 0.03-0.04 m on held-out days and
+  weeks. This is a first, partial answer to Q-M6.
+- **On 2013, the image adds nothing.** The ERA5 + image model is no better
+  than ERA5 alone, and the image-only model no better than climatology.
+  Image statistics learned in 2009-2011 do not carry over to 2013. Not yet
+  diagnosed; candidates are scene changes (sand, vegetation, exposure) and
+  2013's partial seasonal coverage. Any learned model must be reported on
+  this split as well as on held-out days.
+- **The label rule barely matters at this accuracy (Q-M7).** Under the
+  nearest-record label, RMSE changes by less than 0.01 m for every baseline
+  except persistence (+0.015 to +0.020 m). The two labels differ by 0.05-0.07
+  m RMSE, far below the errors of any model that does not use the buoy.
+- **Errors grow with wave height** (`*.strata.csv`). The day-split test has
+  only 2 days (34 images) at 4 m or more, so results above 4 m rest on very
+  few events. On those 34 images, ERA5 corrected under-predicts by 0.85 m and
+  the image ridge by 1.15 m.
+- **Persistence is not a camera competitor.** It shows how predictable the
+  label is when the buoy itself is available: a buoy 1 h out of date gives
+  0.09-0.14 m.
+
 ## Next steps
 
-- Splits by **HST day across both cameras**, never by image
-  (`datasets.splits`). Consecutive hours of one swell are strongly correlated,
-  and the two cameras at the same hour share a label: putting `beachcam_003`
-  in training and `beachcam_004` in test on the same day is leakage. A
-  cross-camera test (train on one view, test on the other) must also hold out
-  the days.
-- Mask the caption band (rows 1232-1253) before training.
+- First learned image model on these splits, scored against the table above
+  on both `day` and `year`. Mask the caption band (rows 1232-1253) before
+  training.
+- Diagnose the 2013 drift: per-year image statistics, and retrain with 2012
+  in training (`year` uses it for validation only).
+- Day splits are fine for the baselines, but report `week` beside `day` for
+  learned models, which can exploit neighbouring days more than a ridge can.
+- A cross-camera test (train on one view, test on the other) must also hold
+  out the days.
 - Image-quality features for strata or exclusion (fog, rain drops on the lens,
   glare), recorded in the manifest builder's ledger.

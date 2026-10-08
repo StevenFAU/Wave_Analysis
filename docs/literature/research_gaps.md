@@ -77,10 +77,14 @@ so that commits and results can reference them.
   waves from hull pitch and roll? (Horizon tracking: Schwendeman & Thomson 2015.)
 - **Q-M6** Does predicting the residual (buoy − WIS/WW3/ERA5 nowcast) from
   imagery beat direct regression, and does any camera model beat the nowcast
-  at all?
+  at all? *First result (Waimea baselines, 2026-10-08): residual ridge on image
+  statistics beats both direct regression and the corrected ERA5 nowcast on
+  held-out days (by 0.04 m RMSE), but not on a held-out year.*
 - **Q-M7** How much do benchmark results depend on the label rule (nearest,
   interpolated, window mean; ADR 0010)? A large difference means the label,
-  not the model, limits accuracy.
+  not the model, limits accuracy. *First result (Waimea, 2026-10-08): under
+  0.01 m RMSE for every baseline that does not use the buoy; the two labels
+  differ by 0.05-0.07 m RMSE.*
 
 ### Generalisation
 - **Q-G1** Can a model trained on one coast transfer to South Florida?
