@@ -126,12 +126,155 @@ historical request below.
 ## Historical data
 
 The 2021–2026 archive (4.0 million stills and 1.9 TB for the four cameras whose
-inventory returned) is exactly what the 90-day guideline covers. Thinned to one
-still per 30 minutes in daylight it is about 8,000–9,000 stills per camera-year
-(21–25 a day in the first test) and roughly 4 GB. Before any such
-download, email webcoos@secoora.org with the purpose, cameras, period, cadence
-and volume, and the acknowledgement that will be used; record their answer in
-this document.
+inventory returned) is exactly what the 90-day guideline covers, so we asked
+WebCOOS first.
+
+**WebCOOS's answer (Josh Rhoades, email of 2026-10-09).** Bulk requests
+should go to their **on-premise archive**, not the API or S3:
+`https://stage-ams.srv.axds.co/archive/jpg/<group>/<camera>/<YYYY>/<MM>/<DD>/*.jpg`.
+They gave a `wget --mirror` example limited to `--wait=1s --limit-rate=20m`,
+and asked to be told when the transfer starts so they can monitor it. What
+the WebCOOS/SECOORA acknowledgement should look like was passed to two
+colleagues; record their answer here when it comes.
+
+| Camera | Group | Years in the archive (2026-10-09) |
+|---|---|---|
+| `currituck_hampton_inn` | `noaa` | 2022–2026 |
+| `currituck_sailfish` | `noaa` | 2022–2026 |
+| `jennette_north` | `noaa` | 2022–2026 |
+| `jennette_south` | `noaa` | 2022–2026 |
+| `oakisland_east` | `uncw` | 2021–2026 |
+| `oakisland_west` | `uncw` | 2021–2026 |
+| `masonboro_inlet` | `uncw` | 2023–2026 |
+| `cocoabeach` | `uncw` | 2023–2024 |
+
+The archive is an nginx directory listing with exact sizes. It holds the same
+files as S3: the 15 stills the collector had for 2026-09-21 at
+`currituck_hampton_inn` have the same names and sizes there, and one checked
+has the same SHA-256. File names carry the capture time to the second (equal
+to the API's capture time for all 43,999 stills listed up to 2026-10-09).
+
+Other products under `/archive/<product>/<group>/<camera>/`, one day at
+`currituck_hampton_inn` (2026-09-21) for scale:
+
+| Product | Content | That day | Years |
+|---|---|---|---|
+| `jpg` | stills, every 1–2 min in daylight | 369 files, 176 MB (0.48 MB each) | 2021/2023 → |
+| `timex` | time exposure (mean) of one 10-min video clip (`timex.<camera>-<stamp>Z.jpg`) | 41 files, 20 MB (0.50 MB) | 2024 → (`currituck_hampton_inn` from 2024-03-13; cocoabeach 2024–2025) |
+| `brt` | brightest value of each pixel over the same clip | 41 files, 36 MB (0.89 MB) | 2024 → (cocoabeach 2024–2025) |
+| `mp4` | video clips, mostly 10 min | 102 files, 5.2 GB (51 MB) | not checked |
+| `15-second-timex` | — | none that day | not checked |
+
+`annotation/` and `jsonl/` were not examined. The cameras record from about
+sunrise to sunset (stills 07:09–19:09 EDT, video from 06:48, on 2026-09-21);
+there are no night images to collect.
+
+**What `timex` and `brt` are** (worked out from the archive, 2026-10-09; the
+files carry no metadata):
+
+- **They are made from one video clip each.** On 2026-09-21 all 41 `timex`
+  and `brt` time stamps equal the start of an `mp4` clip. Only the full clips
+  have them: the next clip starts 9.8–10.6 min later, while the 60 clips
+  without them are 2–10 min apart (median 4.9). A full clip is 600.0 s at
+  20 fps, 12,000 frames (from the `mp4` header). So a `timex` or `brt`
+  covers the **10 minutes starting at its time stamp**, and its listing time
+  (about 11 minutes later) is when it was written.
+- **`brt` is the brightest value of each pixel over the clip, `timex` its
+  time average.** At `currituck_hampton_inn` on 2024-03-14, `brt` is at
+  least as bright as the `timex` of the same clip at 100 % of pixels (two
+  clips; JPEG tolerance 8 levels), but only at 86 % against the `timex` of a
+  clip 30 minutes later. `timex` is smoother than a still (mean
+  neighbouring-pixel difference 4.9 vs 7.3 grey levels) at the same mean
+  brightness (103); `brt` is brighter (122) and sharper (9.1), as breaking
+  crests would make it. A maximum and a high percentile cannot be told apart
+  this way.
+- **The stills are frames of the same video**, extracted with ffmpeg (their
+  JPEG comment is `Lavc58.134.100`), at the same 2688×1520 size.
+
+### What we collect, and why
+
+One image per buoy record, of each product, for every year and camera; then a
+small sample at full cadence to test whether more images per record help:
+
+| Part | Command (`--product`, `--every`) | Size |
+|---|---|---|
+| Stills every 30 min, all years, 8 cameras | `stills`, `30min` | ~150 GB, ~290,000 files |
+| `timex` and `brt` every 30 min, 2024 on | `timex` / `brt`, `30min` | ~150–200 GB, ~215,000 files |
+| Test sample: every `timex`/`brt` for one month, 8 cameras; every still for one month at `currituck_hampton_inn` and `jennette_south` | `--every all --start … --end …` | ~25 GB, ~40,000 files |
+
+About 325–375 GB and ten days at WebCOOS's pace (the `timex` files of March
+2024 are 2688×1520 and 0.7–0.9 MB, larger than in 2026). The reasons:
+
+- **Labels, not images, limit training.** A wave record is a 1600-s statistic
+  every 30 min. More images inside a record share its label: they are not
+  independent examples, and they cannot beat the label's own noise
+  (consecutive records differ by a median 4 %; one record's 90 % CI is
+  −10/+15 %, [wave parameters](../methodology/wave_parameters.md)).
+- **What is scarce is conditions and places.** Large waves are rare (27 days
+  with H_s ≥ 4 m in five Waimea years), and models fail on new sites
+  (Kamagata et al. 2026: held-out R² = 0.107). Years and cameras address that;
+  extra frames per half hour do not.
+- **Time exposures are a different input, not more of the same.** A still is
+  one instant of a 27-minute statistic. `timex` averages 10 minutes and `brt`
+  keeps where waves broke, so they integrate over many waves as the buoy does.
+  No machine-learning study in the [landscape review](../literature/landscape_review.md)
+  uses them as input. Whether they beat stills is an experiment: all three
+  products exist for 2024–2026, so they can be compared on the same labels,
+  cameras and splits.
+- **Density can be bought later.** The sample measures whether averaging
+  several images per record helps. If it does, a rerun with `--every 10min`
+  (or `all`) fetches only the images not yet held, since the 30-minute grid
+  times are part of the denser grid. The archive stays at WebCOOS.
+
+Not collected: every still (2.5–4 TB, months at this pace, mostly
+near-duplicates), every `timex`/`brt` (another ~300 GB of the same labels,
+until the sample says otherwise), and video in bulk (~5 GB per camera-day,
+about 60 TB; see the pilot below). The sample month is chosen from the buoy
+records so that it spans calm and storm conditions.
+
+```bash
+# after telling WebCOOS that the transfer starts (stills, then timex, then brt):
+systemd-run --user --collect --unit wave-analysis-webcoos-historical \
+    --working-directory="$PWD" "$PWD/scripts/webcoos_historical.sh"
+journalctl --user -u wave-analysis-webcoos-historical -f    # one line per camera-month
+# the sample, afterwards, the same way, e.g.:
+#   .venv/bin/wave-analysis webcoos historical <cameras> --product timex --every all \
+#       --start 2025-01-01 --end 2025-02-01 --historical-approved
+```
+
+A transient unit stops at a reboot (and at logout without lingering); rerun
+the same command to resume.
+
+`historical` does not mirror whole days. It lists each day directory, keeps one
+image per 30 minutes as `download` does (`--every`, `--tolerance`, `--offset`;
+grid times are split by month, each getting one image; `--every all` keeps
+every image), skips images already archived (same name and size, e.g. fetched
+from S3 by the hourly collector), and fetches the rest. Stills go to
+`data/raw/webcoos/`, the other products to `data/raw/webcoos_timex/` and
+`data/raw/webcoos_brt/` with the same layout.
+
+- **Pace:** one request at a time; at least `--wait` (1 s, the minimum) after
+  each response before the next request; each file at no more than 20 MiB/s.
+- **Resumable:** rerun the same command. Each whole past month's listing is
+  saved once to `_listings/onprem/<camera>/<YYYY-MM>.csv` (with `listed_at`)
+  and reused, so a rerun does not list those days again (`--relist` does).
+- **Ledger:** `_manifests/<camera>.<host>.csv`, separate from the hourly
+  collector's `<camera>.csv`, so every ledger has one writer when hosts exchange
+  the archive.
+- **One run at a time:** a lock next to the product roots
+  (`data/raw/.webcoos-historical.lock`) keeps a second historical run, of any
+  product, from opening a second connection. The hourly collector has its
+  own lock and keeps running.
+- `--list-only` lists and reports what would be fetched; `--limit N` stops
+  after N new stills per camera.
+
+**Volume.** Up to 2026-10-09 the hourly collector kept 21–27 stills a day per
+camera at 0.26–0.90 MB each (mean by camera). The eight cameras have about 33
+camera-years of stills (about 22 of `timex`/`brt`). At about 1.4 s a file
+(1 s wait plus transfer, measured 2026-10-09) the plan above takes about ten
+days, plus about nine hours of listings. A first test (2022-01-10 to
+2022-01-12, `currituck_hampton_inn`) listed 364 stills, kept 12 on the grid
+and fetched 3 as expected.
 
 ## Video archive (pilot, not yet collected)
 
@@ -153,7 +296,8 @@ Plan:
    bitrate, and how far back the archive goes (Q-D9).
 2. **Ask WebCOOS** in the same email as the historical stills request:
    purpose, cameras, clip cadence, volume, and whether derived datasets may
-   include frames.
+   include frames. The on-premise archive has an `mp4/` tree next to `jpg/`
+   (seen 2026-10-09); ask whether the pilot should use it.
 3. **Pilot** on two cameras whose reference buoy is online:
    `currituck_hampton_inn` (CDIP 433) and `jennette_south` (CDIP 243;
    buoy-pair check: CDIP 243 and Oregon Inlet, 29 km apart on the same coast,

@@ -16,6 +16,8 @@ id                     Ledger                                          Items
 =====================  ==============================================  ==========
 ``pacioos_waimea``     ``raw/pacioos/beachcam/_manifests/*.csv``        images
 ``webcoos``            ``raw/webcoos/_manifests/*.csv``                 images
+``webcoos_timex``      ``raw/webcoos_timex/_manifests/*.csv``           images
+``webcoos_brt``        ``raw/webcoos_brt/_manifests/*.csv``             images
 ``era5_waves``         ``manifests/raw/era5.csv``                       months
 ``cdip``               ``manifests/raw/cdip.csv``                       files
 ``ndbc_history``       ``manifests/raw/ndbc.csv``                       files
@@ -191,19 +193,54 @@ def pacioos_waimea(inputs: CollectionInputs) -> dict[str, Any] | None:
 
 
 def webcoos(inputs: CollectionInputs) -> dict[str, Any] | None:
-    """WebCOOS one-minute stills thinned to a time grid (hourly collector)."""
+    """WebCOOS one-minute stills thinned to a time grid (hourly collector and past years).
+
+    Each camera part says whether the hourly collector takes it (it writes
+    ``<camera>.csv``); cameras fetched only from the historical archive
+    (``<camera>.<host>.csv``) are not expected to be current.
+    """
     root = inputs.raw_root / "webcoos"
     ledgers = sorted((root / "_manifests").glob("*.csv"))
     if not ledgers:
         return None
+    hourly = {p.stem for p in ledgers if "." not in p.stem}
+    entry = _image_collection(read_ledgers(ledgers), scan_files(root, ".jpg"))
+    for part in entry["parts"]:
+        part["hourly"] = part["id"] in hourly
     return {
         "id": "webcoos",
         "dataset_id": "webcoos",
         "name": "WebCOOS coastal cameras",
         "provider": "WebCOOS / SECOORA",
         "mode": "hourly",
+        **entry,
+    }
+
+
+def _webcoos_product(inputs: CollectionInputs, product: str, name: str) -> dict[str, Any] | None:
+    """A 10-minute WebCOOS product downloaded from the on-premise archive."""
+    root = inputs.raw_root / f"webcoos_{product}"
+    ledgers = sorted((root / "_manifests").glob("*.csv"))
+    if not ledgers:
+        return None
+    return {
+        "id": f"webcoos_{product}",
+        "dataset_id": "webcoos",
+        "name": name,
+        "provider": "WebCOOS / SECOORA",
+        "mode": "on_request",
         **_image_collection(read_ledgers(ledgers), scan_files(root, ".jpg")),
     }
+
+
+def webcoos_timex(inputs: CollectionInputs) -> dict[str, Any] | None:
+    """WebCOOS time exposures: the mean of each 10-minute video clip."""
+    return _webcoos_product(inputs, "timex", "WebCOOS time exposures (10 min)")
+
+
+def webcoos_brt(inputs: CollectionInputs) -> dict[str, Any] | None:
+    """WebCOOS brightest-pixel images: the maximum of each 10-minute video clip."""
+    return _webcoos_product(inputs, "brt", "WebCOOS brightest-pixel images (10 min)")
 
 
 def era5_waves(inputs: CollectionInputs) -> dict[str, Any] | None:
@@ -423,7 +460,16 @@ def _nc_coverage(path: Path) -> tuple[str | None, str | None]:
 def build_collections(inputs: CollectionInputs) -> list[dict[str, Any]]:
     """Every collection present on this host (see module docstring)."""
     out = []
-    for build in (pacioos_waimea, webcoos, era5_waves, cdip, ndbc_history, external):
+    for build in (
+        pacioos_waimea,
+        webcoos,
+        webcoos_timex,
+        webcoos_brt,
+        era5_waves,
+        cdip,
+        ndbc_history,
+        external,
+    ):
         entry = build(inputs)
         if entry is not None:
             out.append(entry)

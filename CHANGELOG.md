@@ -17,6 +17,27 @@ separately (`docs/REPRODUCIBILITY.md`).
   as the Fort Pierce Inlet shoreline; it is the approximate campus position on
   the lagoon.
 
+### Added (2026-10-09)
+- `wave-analysis webcoos historical`: past years of WebCOOS stills from the
+  on-premise archive WebCOOS pointed us to (email of 2026-10-09), thinned to
+  one per 30 min like `download`, at the pace they asked for (`Downloader`
+  gains `min_gap_s` and `max_bytes_per_s`, wget's `--wait` and
+  `--limit-rate`). Skips stills already archived, saves each past month's
+  listing once, and writes a per-host ledger (`_manifests/<camera>.<host>.csv`).
+  `--product timex|brt` fetches WebCOOS's 10-minute time exposures and
+  brightest-pixel images (to `raw/webcoos_timex/`, `raw/webcoos_brt/`), and
+  `--every all` keeps every image. `collector_host` moved to `ingest.archive`.
+- `scripts/webcoos_historical.sh`: the agreed WebCOOS download (stills, then
+  `timex`, then `brt`, every 30 min, eight cameras) in one resumable run.
+- Dashboard collections `webcoos_timex` and `webcoos_brt`; WebCOOS cameras
+  fetched only from the archive are not reported as stalled.
+- `WAVE_ANALYSIS_SYNC_PULL_SKIP`: top-level collections a host leaves out of
+  the pull (the laptop skips the WebCOOS history).
+
+### Changed (2026-10-09)
+- `scripts/sync_offsite.sh` skips lock and partial files at any depth,
+  including the top level, and selects ledgers with ordered `--filter` rules.
+
 ### Added (2026-10-08)
 - A data inventory: `data/registry/data_dictionary.yaml` says what each
   collection is for (pictures, labels, context, model, our tables,

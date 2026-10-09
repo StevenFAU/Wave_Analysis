@@ -110,6 +110,13 @@ and a 2–4 week pilot of clips synchronised with CDIP records on two cameras,
 **Done when** the answer is recorded in `webcoos.md` and the pilot's measured
 volume sets the long-term cadence.
 
+*2026-10-09:* WebCOOS answered: bulk stills from their on-premise archive at
+`wget --wait=1s --limit-rate=20m`, with a note to them when the transfer
+starts ([webcoos.md](../datasets/webcoos.md#historical-data)). Plan
+(~325 GB): stills every 30 min for all years, `timex` and `brt` every 30 min
+from 2024, and a one-month full-cadence sample to test whether more images
+per record help. The video questions are still open.
+
 ### P3. USGS CoastCam adapter (v0.2–0.3, 3–6 weeks)
 
 Five calibrated sites on four coasts make the first genuine leave-site-out

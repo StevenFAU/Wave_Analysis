@@ -9,6 +9,9 @@ resumes where it stopped and a deleted or truncated file is fetched again.
 
 from __future__ import annotations
 
+import os
+import re
+import socket
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -19,6 +22,16 @@ from wave_analysis.ingest.manifest import EntryStatus, ManifestEntry, read_manif
 
 #: Receiver for manifest entries as they are produced.
 Sink = Callable[[list[ManifestEntry]], object]
+
+
+def collector_host() -> str:
+    """Name of this collector host as used in ledger file names.
+
+    ``WAVE_ANALYSIS_HOST`` overrides the system host name. The result is
+    lower-cased and reduced to letters, digits and ``-``.
+    """
+    name = os.environ.get("WAVE_ANALYSIS_HOST") or socket.gethostname()
+    return re.sub(r"[^a-z0-9-]+", "-", name.lower()).strip("-") or "unknown"
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,9 @@ from wave_analysis.ingest.manifest import read_manifest, write_manifest
 from wave_analysis.sources.webcoos import (
     API_BASE,
     HISTORICAL_SAMPLE_LIMIT,
+    ONPREM_BASE,
     HistoricalAccessError,
+    OnPremArchive,
     TokenError,
     WebCOOSClient,
     archive_stills,
@@ -24,7 +26,12 @@ from wave_analysis.sources.webcoos import (
     ledger_path,
     load_token,
     local_path,
+    month_index_path,
+    onprem_stills,
+    parse_listing,
+    select_between,
     select_on_grid,
+    still_time,
 )
 
 TOKEN = "test-token-0123456789"
@@ -357,3 +364,225 @@ def test_collector_unit_uses_the_camera_sets():
 
     unit = (repo_root() / "deploy/systemd/wave-analysis-webcoos.service").read_text()
     assert "webcoos download @yin2025 @near_buoy --lookback 3D" in unit
+
+
+# --------------------------------------------------------------------------- #
+# On-premise archive
+# --------------------------------------------------------------------------- #
+COCOA = f"{ONPREM_BASE}/jpg/uncw/cocoabeach/"
+
+
+def nginx_index(path: str, entries: dict[str, int | None]) -> str:
+    """An nginx autoindex page; ``None`` marks a directory."""
+    rows = ['<a href="../">../</a>']
+    for name, size in entries.items():
+        href = f"{name}/" if size is None else name
+        rows.append(
+            f'<a href="{href}">{href}</a>{" " * max(1, 51 - len(href))}'
+            f"01-Dec-2023 11:52 {'-' if size is None else size:>19}"
+        )
+    body = "\n".join(rows)
+    return f"<html><head><title>Index of {path}</title></head><body><h1>Index of {path}</h1><hr><pre>{body}\n</pre><hr></body></html>"
+
+
+def still(t: str, cam: str = "cocoabeach") -> str:
+    return f"{cam}-{pd.Timestamp(t):%Y-%m-%d-%H%M%S}Z.jpg"
+
+
+#: A small archive: stills on 2023-01-31 and 2023-02-01, around midnight UTC.
+TREE = {
+    COCOA: {"2023": None, "cocoabeach.jpg": 9},
+    f"{COCOA}2023/": {"01": None, "02": None},
+    f"{COCOA}2023/01/": {"30": None, "31": None},
+    f"{COCOA}2023/01/30/": {still("2023-01-30T15:00:10"): 5},
+    f"{COCOA}2023/01/31/": {
+        still("2023-01-31T23:29:50"): 5,
+        still("2023-01-31T23:58:00"): 5,
+        "cocoabeach.jpg_exiftool_tmp": 7,
+    },
+    f"{COCOA}2023/02/": {"01": None},
+    f"{COCOA}2023/02/01/": {still("2023-02-01T00:01:00"): 5, still("2023-02-01T00:30:20"): 5},
+}
+
+
+def tree_handler(requests: list[httpx.Request]):
+    def handler(req: httpx.Request) -> httpx.Response:
+        requests.append(req)
+        url = str(req.url)
+        if url in TREE:
+            return httpx.Response(200, text=nginx_index(req.url.path, TREE[url]))
+        if url.endswith(".jpg"):
+            return httpx.Response(200, content=b"jpeg!")
+        return httpx.Response(404)
+
+    return handler
+
+
+def test_parse_listing_reads_nginx_index():
+    df = parse_listing(nginx_index("/x/", {"2023": None, "a.jpg": 12, "a b.jpg": 3}))
+    assert list(df["name"]) == ["2023", "a.jpg", "a b.jpg"]
+    assert list(df["is_dir"]) == [True, False, False]
+    assert pd.isna(df["size_bytes"].iloc[0]) and list(df["size_bytes"].iloc[1:]) == [12, 3]
+    assert parse_listing("").empty
+
+
+def test_onprem_stills_take_the_time_from_the_name_and_skip_other_files():
+    listing = parse_listing(
+        nginx_index("/d/", TREE[f"{COCOA}2023/01/31/"] | {still("2023-01-31T12:00:00", "other"): 1})
+    )
+    df = onprem_stills(listing, "cocoabeach", f"{COCOA}2023/01/31/")
+    assert list(df["time_utc"]) == [
+        pd.Timestamp("2023-01-31T23:29:50Z"),
+        pd.Timestamp("2023-01-31T23:58:00Z"),
+    ]
+    assert df["url"].iloc[0] == f"{COCOA}2023/01/31/cocoabeach-2023-01-31-232950Z.jpg"
+    assert list(df["size_bytes"]) == [5, 5]
+
+
+def test_onprem_archive_lists_only_the_days_in_range_and_sends_no_token():
+    requests: list[httpx.Request] = []
+    with Downloader(min_interval_s=0, transport=httpx.MockTransport(tree_handler(requests))) as dl:
+        arc = OnPremArchive(dl)
+        months = arc.months(
+            "cocoabeach", pd.Timestamp("2023-01-31", tz="UTC"), pd.Timestamp("2023-02-02", tz="UTC")
+        )
+        assert [str(m) for m in months] == ["2023-01", "2023-02"]
+        jan = arc.month_stills("cocoabeach", months[0], start=pd.Timestamp("2023-01-31", tz="UTC"))
+        assert len(jan) == 2
+        with pytest.raises(ValueError):
+            arc.listing("https://elsewhere.example/archive/")
+        with pytest.raises(ValueError):
+            arc.camera_url("unknown_cam")
+    listed = [str(r.url) for r in requests]
+    assert f"{COCOA}2023/01/31/" in listed and f"{COCOA}2023/01/30/" not in listed
+    assert all("authorization" not in r.headers for r in requests)
+
+
+def test_select_between_gives_each_grid_time_one_still_across_months():
+    t = [
+        "2023-01-31T23:29:50Z",
+        "2023-01-31T23:58:00Z",
+        "2023-02-01T00:01:00Z",
+        "2023-02-01T00:30:20Z",
+    ]
+    els = element_table([element("cam", x) for x in t], "cam")
+    feb = pd.Timestamp("2023-02-01", tz="UTC")
+    jan = select_between(els[els["time_utc"] < feb], pd.Timestamp("2023-01-01", tz="UTC"), feb)
+    after = select_between(els[els["time_utc"] >= feb], feb, pd.Timestamp("2023-03-01", tz="UTC"))
+    grid = list(jan["grid_time"]) + list(after["grid_time"])
+    assert len(grid) == len(set(grid)) == 3  # 23:30, 00:00 (once), 00:30
+    assert after["time_utc"].iloc[0] == pd.Timestamp("2023-02-01T00:01:00Z")
+
+
+def test_ledger_path_per_host(tmp_path: Path):
+    assert ledger_path(tmp_path, "cam").name == "cam.csv"
+    assert ledger_path(tmp_path, "cam", "otacon").name == "cam.otacon.csv"
+    with pytest.raises(ValueError):
+        ledger_path(tmp_path, "cam", "../x")
+
+
+def test_historical_command(tmp_path: Path, monkeypatch, capsys):
+    """Needs the approval flag; skips stills already archived; indexes closed months once."""
+    import wave_analysis.cli as cli
+    import wave_analysis.ingest.downloader as downloader_module
+
+    monkeypatch.setenv("WAVE_ANALYSIS_HOST", "Lab-PC")
+    requests: list[httpx.Request] = []
+    transport = httpx.MockTransport(tree_handler(requests))
+    real = downloader_module.Downloader
+    made: list[dict] = []
+
+    def fake_downloader(**kw):
+        made.append(kw)
+        return real(**{**kw, "min_gap_s": 0, "max_bytes_per_s": None, "transport": transport})
+
+    monkeypatch.setattr(downloader_module, "Downloader", fake_downloader)
+    argv = ["webcoos", "historical", "cocoabeach", "--start", "2023-01-01", "--end", "2023-03-01"]
+    argv += ["--out", str(tmp_path)]
+    assert cli.main(argv) == 3 and not requests  # no approval, no request
+
+    # One still was already fetched from S3 by the hourly collector.
+    s3 = local_path(
+        tmp_path, "cocoabeach", still("2023-01-31T23:29:50"), pd.Timestamp("2023-01-31T23:29:50Z")
+    )
+    s3.parent.mkdir(parents=True)
+    s3.write_bytes(b"jpeg!")
+    assert cli.main([*argv, "--historical-approved"]) == 0
+    assert made[0]["min_gap_s"] >= 1.0 and made[0]["max_bytes_per_s"] <= 20 * 2**20
+    out = capsys.readouterr().out
+    assert "cocoabeach 2023-01: 3 images, 2 on the 30min grid, 1 already archived" in out
+    files = sorted(p.name for p in (tmp_path / "cocoabeach").rglob("*.jpg"))
+    assert files == [
+        "cocoabeach-2023-01-30-150010Z.jpg",
+        "cocoabeach-2023-01-31-232950Z.jpg",
+        "cocoabeach-2023-02-01-000100Z.jpg",
+        "cocoabeach-2023-02-01-003020Z.jpg",
+    ]
+    ledger = tmp_path / "_manifests" / "cocoabeach.lab-pc.csv"
+    assert ledger.exists() and not (tmp_path / "_manifests" / "cocoabeach.csv").exists()
+    assert len(list(read_manifest(ledger))) == 3
+    assert month_index_path(tmp_path, "cocoabeach", pd.Period("2023-01", "M")).exists()
+
+    # A second run reads the saved month listings and fetches nothing.
+    requests.clear()
+    assert cli.main([*argv, "--historical-approved"]) == 0
+    assert [str(r.url) for r in requests] == [COCOA, f"{COCOA}2023/"]
+    assert len(list(read_manifest(ledger))) == 3
+
+
+TIMEX = f"{ONPREM_BASE}/timex/uncw/cocoabeach/"
+TIMEX_TREE = {
+    TIMEX: {"2024": None},
+    f"{TIMEX}2024/": {"03": None},
+    f"{TIMEX}2024/03/": {"05": None},
+    f"{TIMEX}2024/03/05/": {
+        "timex." + still("2024-03-05T15:00:09"): 6,
+        "timex." + still("2024-03-05T15:10:09"): 6,
+        "timex." + still("2024-03-05T15:20:09"): 6,
+        "brt." + still("2024-03-05T15:00:09"): 9,  # another product: ignored
+        still("2024-03-05T15:00:30"): 5,  # a still: ignored
+    },
+}
+
+
+def test_timex_names_carry_the_product_prefix():
+    assert still_time("timex.cam-2024-03-05-150009Z.jpg", "cam", "timex.") == pd.Timestamp(
+        "2024-03-05T15:00:09Z"
+    )
+    assert still_time("cam-2024-03-05-150009Z.jpg", "cam", "timex.") is None
+    assert still_time("brt.cam-2024-03-05-150009Z.jpg", "cam", "timex.") is None
+
+
+def test_historical_timex_every_image(tmp_path: Path, monkeypatch, capsys):
+    import wave_analysis.cli as cli
+    import wave_analysis.ingest.downloader as downloader_module
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        url = str(req.url)
+        if url in TIMEX_TREE:
+            return httpx.Response(200, text=nginx_index(req.url.path, TIMEX_TREE[url]))
+        if url.endswith(".jpg"):
+            return httpx.Response(200, content=b"timex!")
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    real = downloader_module.Downloader
+    monkeypatch.setattr(
+        downloader_module,
+        "Downloader",
+        lambda **kw: real(
+            **{**kw, "min_gap_s": 0, "max_bytes_per_s": None, "transport": transport}
+        ),
+    )
+    out = tmp_path / "webcoos_timex"
+    argv = ["webcoos", "historical", "cocoabeach", "--product", "timex", "--every", "all"]
+    rc = cli.main([*argv, "--start", "2024-03-01", "--out", str(out), "--historical-approved"])
+    assert rc == 0
+    files = sorted(p.name for p in out.rglob("*.jpg"))
+    assert files == [
+        "timex.cocoabeach-2024-03-05-150009Z.jpg",
+        "timex.cocoabeach-2024-03-05-151009Z.jpg",
+        "timex.cocoabeach-2024-03-05-152009Z.jpg",
+    ]
+    assert "3 images, 3 kept (all), 0 already archived" in capsys.readouterr().out
+    assert cli.main([*argv, "--product", "nope", "--out", str(out), "--historical-approved"]) == 2

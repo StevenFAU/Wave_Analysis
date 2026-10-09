@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 from pathlib import Path
 
 import httpx
@@ -180,3 +181,53 @@ def test_body_dropped_on_every_attempt_is_a_recorded_failure(tmp_path: Path):
     e = dl.fetch("https://x/y", tmp_path / "y", source_id="t", product="p")
     assert e.status == EntryStatus.FAILED and "connection dropped" in (e.note or "")
     assert not (tmp_path / "y").exists() and not list(tmp_path.glob(".partial-*"))
+
+
+class _FakeClock:
+    """Stands in for the ``time`` module: ``sleep`` advances ``monotonic``."""
+
+    def __init__(self) -> None:
+        self.now = 100.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, s: float) -> None:
+        self.now += max(s, 0.0)
+
+
+def test_min_gap_counts_from_the_end_of_the_previous_request(tmp_path: Path, monkeypatch):
+    import wave_analysis.ingest.downloader as downloader_module
+
+    clock = _FakeClock()
+    monkeypatch.setattr(downloader_module, "time", clock)
+    starts: list[float] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        starts.append(clock.now)
+        clock.now += 0.4  # transfer time
+        return httpx.Response(200, content=b"x")
+
+    dl = Downloader(min_interval_s=0, min_gap_s=1.0, transport=httpx.MockTransport(handler))
+    dl.fetch("https://x/a", tmp_path / "a", source_id="t", product="p")
+    dl.get("https://x/b")
+    dl.fetch("https://x/c", tmp_path / "c", source_id="t", product="p")
+    # wget --wait=1: a second after each response, not after each request start.
+    assert [round(b - a, 6) for a, b in itertools.pairwise(starts)] == [1.4, 1.4]
+
+
+def test_max_bytes_per_s_caps_the_average_rate(tmp_path: Path, monkeypatch):
+    import wave_analysis.ingest.downloader as downloader_module
+
+    clock = _FakeClock()
+    monkeypatch.setattr(downloader_module, "time", clock)
+    body = b"\0" * (3 * (1 << 20))
+    dl = Downloader(
+        min_interval_s=0,
+        max_bytes_per_s=1 << 20,
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, content=body)),
+    )
+    t0 = clock.now
+    e = dl.fetch("https://x/big", tmp_path / "big", source_id="t", product="p")
+    assert e.status == EntryStatus.VERIFIED and e.size_bytes == len(body)
+    assert clock.now - t0 == pytest.approx(3.0)

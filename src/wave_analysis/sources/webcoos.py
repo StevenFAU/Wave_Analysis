@@ -35,17 +35,31 @@ Usage guidelines (https://webcoos.org/usage-guidelines, read 2026-09-26)
   90 days need an explicit ``historical_approved`` flag.
 * Research publications acknowledge SECOORA (:data:`ACKNOWLEDGEMENT`) and cite
   "WebCOOS [year(s) of imagery]".
+
+On-premise archive (email from WebCOOS, 2026-10-09)
+---------------------------------------------------
+For bulk historical downloads WebCOOS asked us to use their on-premise archive
+(:data:`ONPREM_BASE`) instead of the API and S3, at most at the pace of
+``wget --wait=1s --limit-rate=20m``, and to tell them when a transfer starts.
+It is an nginx directory listing,
+``<product>/<group>/<camera>/<YYYY>/<MM>/<DD>/*.jpg``. The ``jpg`` stills have
+the same file names and bytes as S3 (checked 2026-10-09). ``timex`` and ``brt``
+(from 2024) are the mean and the brightest value of each pixel over the
+10-minute video clip starting at their time stamp, named
+``timex.<camera>-<stamp>Z.jpg``. :class:`OnPremArchive` walks it; no token is
+needed.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import stat
 import time
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 import httpx
 import numpy as np
@@ -121,6 +135,39 @@ ACKNOWLEDGEMENT = (
 
 LISTINGS_DIR = "_listings"
 MANIFESTS_DIR = "_manifests"
+
+#: WebCOOS's on-premise archive, for bulk historical downloads.
+ONPREM_BASE = "https://stage-ams.srv.axds.co/archive"
+
+#: Products of the on-premise archive: name -> (directory, file-name prefix).
+#: ``stills`` are the one-minute stills (frames of the video). ``timex`` (the
+#: time average) and ``brt`` (the brightest value of each pixel) are made from
+#: the 10-minute video clip that starts at their time stamp (see
+#: ``docs/datasets/webcoos.md``).
+ONPREM_PRODUCTS: dict[str, tuple[str, str]] = {
+    "stills": ("jpg", ""),
+    "timex": ("timex", "timex."),
+    "brt": ("brt", "brt."),
+}
+
+#: Group directory of each camera in the on-premise archive (as given by WebCOOS).
+ONPREM_GROUPS: dict[str, str] = {
+    "currituck_hampton_inn": "noaa",
+    "currituck_sailfish": "noaa",
+    "jennette_north": "noaa",
+    "jennette_south": "noaa",
+    "oakisland_east": "uncw",
+    "oakisland_west": "uncw",
+    "masonboro_inlet": "uncw",
+    "cocoabeach": "uncw",
+}
+
+#: Pace WebCOOS asked for: ``wget --wait=1s --limit-rate=20m`` (wget's m is MiB).
+ONPREM_WAIT_S = 1.0
+ONPREM_MAX_BYTES_PER_S = 20 * 2**20
+
+#: Month indexes of the on-premise archive, under ``_listings/``.
+ONPREM_INDEX_DIR = "onprem"
 
 
 def expand_cameras(names: Iterable[str]) -> list[str]:
@@ -448,11 +495,18 @@ def local_path(dest_root: Path, camera: str, name: str, time_utc: pd.Timestamp) 
     return dest_root / camera / f"{t:%Y}" / f"{t:%m}" / f"{t:%d}" / name
 
 
-def ledger_path(dest_root: Path, camera: str) -> Path:
-    """Per-camera request ledger."""
+def ledger_path(dest_root: Path, camera: str, host: str | None = None) -> Path:
+    """Per-camera request ledger; with ``host``, that host's own (``<camera>.<host>.csv``).
+
+    The hourly collector writes ``<camera>.csv`` on one host. Other writers,
+    such as a historical download, use a ledger named for their host, so that
+    every ledger has a single writer when hosts exchange the archive.
+    """
     if "/" in camera or camera.startswith("."):
         raise ValueError(f"unsafe camera name {camera!r}")
-    return dest_root / MANIFESTS_DIR / f"{camera}.csv"
+    if host is not None and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", host):
+        raise ValueError(f"unsafe host name {host!r}")
+    return dest_root / MANIFESTS_DIR / (f"{camera}.{host}.csv" if host else f"{camera}.csv")
 
 
 def archive_stills(
@@ -461,6 +515,7 @@ def archive_stills(
     dest_root: Path,
     *,
     sink: Sink,
+    ledger: Path | None = None,
     limit: int | None = None,
     progress: Any = None,
     progress_every: int = 200,
@@ -468,6 +523,7 @@ def archive_stills(
     """Download selected stills of one camera that are not yet archived.
 
     ``downloader`` must not carry the API token: the files are public.
+    ``ledger`` (default :func:`ledger_path`) must be the file ``sink`` writes.
     """
     cameras = selected["camera"].unique()
     if len(cameras) != 1:
@@ -495,7 +551,7 @@ def archive_stills(
     return archive.archive_files(
         downloader,
         items,
-        ledger=ledger_path(dest_root, camera),
+        ledger=ledger or ledger_path(dest_root, camera),
         path_for=lambda url: paths.get(url, unknown),
         source_id=DATASET_ID,
         collection=camera,
@@ -513,6 +569,229 @@ def write_listing(selected: pd.DataFrame, dest_root: Path, camera: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     selected.to_csv(path, index=False)
     return path
+
+
+def on_disk(selected: pd.DataFrame, dest_root: Path) -> pd.Series:
+    """Whether each selected still is already archived: same file name and size.
+
+    Stills fetched from S3 by the hourly collector, or by another host and
+    exchanged, are the same files as in the on-premise archive.
+    """
+    have = []
+    for cam, name, t, size in zip(
+        selected["camera"],
+        selected["name"],
+        selected["time_utc"],
+        selected["size_bytes"],
+        strict=True,
+    ):
+        p = local_path(dest_root, str(cam), str(name), t)
+        have.append(p.exists() and (pd.isna(size) or p.stat().st_size == int(size)))
+    return pd.Series(have, index=selected.index, dtype=bool)
+
+
+# --------------------------------------------------------------------------- #
+# On-premise archive
+# --------------------------------------------------------------------------- #
+
+_LISTING_ROW = re.compile(
+    r'<a href="(?P<href>[^"]+)">[^<]*</a>\s+'
+    r"(?P<modified>\d{2}-[A-Za-z]{3}-\d{4} \d{2}:\d{2})\s+(?P<size>\d+|-)"
+)
+_STILL_NAME = re.compile(r"^(?P<camera>.+)-(?P<stamp>\d{4}-\d{2}-\d{2}-\d{6})Z\.jpg$")
+
+
+def parse_listing(html: str) -> pd.DataFrame:
+    """Entries of an nginx directory listing: ``name``, ``is_dir`` and ``size_bytes``.
+
+    nginx lists exact sizes in bytes, and none for directories. The parent
+    link and any name that is not a plain file or directory name are dropped.
+    """
+    rows = []
+    for m in _LISTING_ROW.finditer(html):
+        href = unquote(m["href"])
+        name = href.removesuffix("/")
+        if not name or "/" in name or name.startswith("."):
+            continue
+        size = None if m["size"] == "-" else int(m["size"])
+        rows.append({"name": name, "is_dir": href.endswith("/"), "size_bytes": size})
+    out = pd.DataFrame(rows, columns=["name", "is_dir", "size_bytes"])
+    out["is_dir"] = out["is_dir"].astype(bool)
+    out["size_bytes"] = out["size_bytes"].astype("Int64")
+    return out
+
+
+def still_time(name: str, camera: str, prefix: str = "") -> pd.Timestamp | None:
+    """Capture time (UTC) in the name of one of ``camera``'s images, else ``None``.
+
+    The name carries the capture time to the second: it equalled the API's
+    capture time for all 43,999 stills listed by the collector up to 2026-10-09.
+    ``prefix`` is the product's (e.g. ``timex.``; see :data:`ONPREM_PRODUCTS`).
+    """
+    if not name.startswith(prefix):
+        return None
+    m = _STILL_NAME.match(name[len(prefix) :])
+    if m is None or m["camera"] != camera:
+        return None
+    return pd.Timestamp(pd.to_datetime(m["stamp"], format="%Y-%m-%d-%H%M%S", utc=True))
+
+
+def onprem_stills(
+    listing: pd.DataFrame, camera: str, day_url: str, prefix: str = ""
+) -> pd.DataFrame:
+    """The images in a day directory's listing, as an :func:`element_table`.
+
+    Other files (e.g. ``<camera>.jpg``, editing leftovers) are ignored.
+    """
+    rows = []
+    for name, is_dir, size in zip(
+        listing["name"], listing["is_dir"], listing["size_bytes"], strict=True
+    ):
+        t = None if is_dir else still_time(str(name), camera, prefix)
+        if t is not None:
+            rows.append(
+                {
+                    "camera": camera,
+                    "time_utc": t,
+                    "name": name,
+                    "url": f"{day_url}{name}",
+                    "size_bytes": size,
+                    "element_id": None,
+                }
+            )
+    out = pd.DataFrame(
+        rows, columns=["camera", "time_utc", "name", "url", "size_bytes", "element_id"]
+    )
+    out["time_utc"] = pd.to_datetime(out["time_utc"], utc=True)
+    out["size_bytes"] = out["size_bytes"].astype("Int64")
+    return out.sort_values("time_utc").reset_index(drop=True)
+
+
+class OnPremArchive:
+    """Walks one product of WebCOOS's on-premise archive (no token), paced by ``downloader``.
+
+    Use one :class:`~wave_analysis.ingest.downloader.Downloader` for listings
+    and files, so that its wait applies to every request.
+    """
+
+    def __init__(
+        self, downloader: Downloader, product: str = "stills", base: str = ONPREM_BASE
+    ) -> None:
+        if product not in ONPREM_PRODUCTS:
+            raise ValueError(f"unknown product {product!r}; known: {', '.join(ONPREM_PRODUCTS)}")
+        self.downloader = downloader
+        self.base = base.rstrip("/")
+        self.directory, self.prefix = ONPREM_PRODUCTS[product]
+
+    def camera_url(self, camera: str) -> str:
+        """Directory of a camera."""
+        group = ONPREM_GROUPS.get(camera)
+        if group is None:
+            raise ValueError(
+                f"no on-premise path known for {camera!r}; known: {', '.join(ONPREM_GROUPS)}"
+            )
+        return f"{self.base}/{self.directory}/{group}/{camera}/"
+
+    def listing(self, url: str) -> pd.DataFrame:
+        """A directory's entries; none if it does not exist (HTTP 404)."""
+        if not url.startswith(f"{self.base}/"):
+            raise ValueError(f"not in the on-premise archive: {url}")
+        resp = self.downloader.get(url)
+        if resp.status_code == 404:
+            return parse_listing("")
+        resp.raise_for_status()
+        return parse_listing(resp.text)
+
+    def _subdirs(self, url: str, digits: int) -> list[str]:
+        df = self.listing(url)
+        names = df.loc[df["is_dir"], "name"]
+        return sorted(n for n in names if n.isdigit() and len(n) == digits)
+
+    def months(
+        self, camera: str, start: pd.Timestamp | None = None, end: pd.Timestamp | None = None
+    ) -> list[pd.Period]:
+        """Months with a directory for ``camera`` that overlap ``[start, end)``."""
+        lo = None if start is None else _utc(start).tz_localize(None)
+        hi = None if end is None else _utc(end).tz_localize(None)
+        root = self.camera_url(camera)
+        out = []
+        for y in self._subdirs(root, 4):
+            if (lo is not None and int(y) < lo.year) or (hi is not None and int(y) > hi.year):
+                continue
+            for m in self._subdirs(f"{root}{y}/", 2):
+                p = pd.Period(f"{y}-{m}", "M")
+                if (lo is None or p.end_time >= lo) and (hi is None or p.start_time < hi):
+                    out.append(p)
+        return out
+
+    def month_stills(
+        self,
+        camera: str,
+        month: pd.Period,
+        *,
+        start: pd.Timestamp | None = None,
+        end: pd.Timestamp | None = None,
+        progress: Callable[[str], object] | None = None,
+    ) -> pd.DataFrame:
+        """Stills of ``camera`` in ``month``, listing each day that overlaps ``[start, end)``."""
+        url = f"{self.camera_url(camera)}{month.strftime('%Y/%m')}/"
+        lo = None if start is None else _utc(start).tz_localize(None)
+        hi = None if end is None else _utc(end).tz_localize(None)
+        frames = []
+        for d in self._subdirs(url, 2):
+            day = pd.Timestamp(f"{month.strftime('%Y-%m')}-{d}")
+            if (lo is not None and day + pd.Timedelta("1D") <= lo) or (
+                hi is not None and day >= hi
+            ):
+                continue
+            day_url = f"{url}{d}/"
+            frames.append(onprem_stills(self.listing(day_url), camera, day_url, self.prefix))
+            if progress is not None:
+                progress(d)
+        if not frames:
+            return onprem_stills(parse_listing(""), camera, url, self.prefix)
+        return pd.concat(frames, ignore_index=True).sort_values("time_utc", ignore_index=True)
+
+
+def month_index_path(dest_root: Path, camera: str, month: pd.Period) -> Path:
+    """Saved listing of a camera's month in the on-premise archive."""
+    if "/" in camera or camera.startswith("."):
+        raise ValueError(f"unsafe camera name {camera!r}")
+    return dest_root / LISTINGS_DIR / ONPREM_INDEX_DIR / camera / f"{month.strftime('%Y-%m')}.csv"
+
+
+def read_month_index(path: Path) -> pd.DataFrame:
+    """A saved month listing (see :func:`write_month_index`)."""
+    df = pd.read_csv(path, dtype={"name": str, "url": str, "camera": str})
+    df["time_utc"] = pd.to_datetime(df["time_utc"], utc=True, format="ISO8601")
+    df["size_bytes"] = df["size_bytes"].astype("Int64")
+    df["element_id"] = None
+    return df
+
+
+def write_month_index(stills: pd.DataFrame, path: Path, listed_at: pd.Timestamp) -> None:
+    """Save a closed month's listing, written once (atomically) and never changed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".partial-{path.name}")
+    stills.drop(columns="element_id").assign(listed_at=_iso(listed_at)).to_csv(tmp, index=False)
+    os.replace(tmp, path)
+
+
+def select_between(
+    elements: pd.DataFrame,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    **grid: Any,
+) -> pd.DataFrame:
+    """:func:`select_on_grid` keeping the grid times in ``[start, end)``.
+
+    Selecting a month at a time this way gives each grid time one still, as
+    one selection over the whole range would. Only at a boundary can the still
+    differ from the nearest one (the nearest may lie in the other piece).
+    """
+    sel = select_on_grid(elements, **grid)
+    keep = (sel["grid_time"] >= _utc(start)) & (sel["grid_time"] < _utc(end))
+    return sel[keep].reset_index(drop=True)
 
 
 def _ns(t: pd.DatetimeIndex) -> np.ndarray[Any, np.dtype[np.int64]]:

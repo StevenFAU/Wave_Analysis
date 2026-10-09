@@ -22,10 +22,12 @@ Commands
 ``pacioos beachcam``
     Archive the PacIOOS beach-camera images (default: the Waimea Bay pair,
     2009-2013) from ERDDAP, with a per-request ledger; resumable.
-``webcoos cameras | inventory | download``
+``webcoos cameras | inventory | download | historical``
     List WebCOOS cameras; show a camera's still-image inventory; archive
     one-minute stills thinned to a time grid (token from
-    ``$WEBCOOS_API_TOKEN`` or ``~/.config/wave-analysis/webcoos_token``).
+    ``$WEBCOOS_API_TOKEN`` or ``~/.config/wave-analysis/webcoos_token``);
+    archive past years the same way from WebCOOS's on-premise archive
+    (no token; only as agreed with WebCOOS).
 ``era5 download | standardize``
     Request ERA5 ocean-wave parameters, one month per request, for a box around
     camera sites (``data/registry/camera_sites.yaml``) from the Copernicus CDS
@@ -613,6 +615,161 @@ def _cmd_webcoos_download(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def _cmd_webcoos_historical(args: argparse.Namespace) -> int:
+    import httpx
+
+    from wave_analysis.ingest.archive import collector_host
+    from wave_analysis.ingest.downloader import Downloader
+    from wave_analysis.ingest.manifest import write_manifest
+    from wave_analysis.sources.webcoos import (
+        ACKNOWLEDGEMENT,
+        CONTACT,
+        ONPREM_GROUPS,
+        ONPREM_MAX_BYTES_PER_S,
+        ONPREM_PRODUCTS,
+        ONPREM_WAIT_S,
+        OnPremArchive,
+        archive_stills,
+        ledger_path,
+        month_index_path,
+        on_disk,
+        read_month_index,
+        select_between,
+        write_month_index,
+    )
+
+    if not args.historical_approved:
+        print(
+            "refused: bulk downloads of past years need WebCOOS's agreement and a note to "
+            f"them when the transfer starts ({CONTACT}). Then rerun with --historical-approved.",
+            file=sys.stderr,
+        )
+        return 3
+    unknown = sorted(set(args.cameras) - set(ONPREM_GROUPS))
+    if unknown:
+        print(f"unknown cameras {unknown}; known: {', '.join(ONPREM_GROUPS)}", file=sys.stderr)
+        return 2
+    if args.wait < ONPREM_WAIT_S:
+        print(f"--wait must be at least {ONPREM_WAIT_S} s (WebCOOS's request)", file=sys.stderr)
+        return 2
+    if args.product not in ONPREM_PRODUCTS:
+        print(
+            f"unknown product {args.product!r}; known: {', '.join(ONPREM_PRODUCTS)}",
+            file=sys.stderr,
+        )
+        return 2
+    root = "webcoos" if args.product == "stills" else f"webcoos_{args.product}"
+    dest = Path(args.out) if args.out else data_dir("raw") / root
+    dest.mkdir(parents=True, exist_ok=True)
+    now = pd.Timestamp.now(tz="UTC")
+    start = pd.Timestamp(args.start, tz="UTC") if args.start else None
+    end = pd.Timestamp(args.end, tz="UTC") if args.end else now
+    grid = {"every": args.every, "tolerance": args.tolerance, "offset": args.offset}
+    if args.every != "all":
+        pd.Timedelta(args.every)  # fail early on a bad step
+    kept = "kept (all)" if args.every == "all" else f"on the {args.every} grid"
+    host = collector_host()
+
+    def log(msg: str) -> None:
+        print(f"{pd.Timestamp.now(tz='UTC'):%Y-%m-%dT%H:%M:%SZ} {msg}", flush=True)
+
+    failed = 0
+    # Not the hourly collector's lock, so that it keeps running. One lock next
+    # to the product roots, so that only one historical run (one connection to
+    # WebCOOS) runs at a time, whatever the product.
+    lock = dest.parent / ".webcoos-historical.lock"
+    with _exclusive_lock(lock) as acquired:
+        if not acquired:
+            print(f"another historical run holds {lock}; skipping")
+            return 0
+        with Downloader(
+            min_interval_s=0, min_gap_s=args.wait, max_bytes_per_s=ONPREM_MAX_BYTES_PER_S
+        ) as dl:
+            archive = OnPremArchive(dl, args.product)
+            for cam in args.cameras:
+                ledger = ledger_path(dest, cam, host)
+                months = archive.months(cam, start, end)
+                if not months:
+                    log(f"{cam}: no months in range")
+                    continue
+                log(
+                    f"{cam} {args.product}: {len(months)} months, {months[0]} to {months[-1]}; "
+                    f"ledger {ledger.name}"
+                )
+                totals = {"listed": 0, "selected": 0, "on_disk": 0, "new": 0, "MB": 0.0}
+                remaining = args.limit
+                for month in months:
+                    a = month.start_time.tz_localize("UTC")
+                    b = (month + 1).start_time.tz_localize("UTC")
+                    whole = (start is None or start <= a) and end >= b
+                    a, b = (a if start is None else max(a, start)), min(b, end)
+                    index = month_index_path(dest, cam, month)
+                    try:
+                        if whole and index.exists() and not args.relist:
+                            stills = read_month_index(index)
+                        else:
+                            listed_at = pd.Timestamp.now(tz="UTC")
+                            stills = archive.month_stills(cam, month, start=a, end=b)
+                            # A whole month is indexed once it has ended (with a day's margin).
+                            if whole and b < listed_at - pd.Timedelta("1D"):
+                                write_month_index(stills, index, listed_at)
+                    except (httpx.HTTPError, OSError) as exc:
+                        log(f"{cam} {month}: listing failed ({exc}); rerun to retry")
+                        failed += 1
+                        continue
+                    window = stills[(stills["time_utc"] >= a) & (stills["time_utc"] < b)]
+                    if args.every == "all":
+                        sel = window.assign(grid_time=window["time_utc"], offset_s=0.0)
+                    else:
+                        sel = select_between(window, a, b, **grid)
+                    have = on_disk(sel, dest)
+                    todo = sel[~have]
+                    totals["listed"] += len(window)
+                    totals["selected"] += len(sel)
+                    totals["on_disk"] += int(have.sum())
+                    msg = (
+                        f"{cam} {month}: {len(window):,} images, {len(sel):,} {kept}, "
+                        f"{int(have.sum()):,} already archived"
+                    )
+                    if args.list_only:
+                        totals["MB"] += float(todo["size_bytes"].sum()) / 1e6
+                        log(
+                            f"{msg}, {len(todo):,} to fetch ({todo['size_bytes'].sum() / 1e6:,.0f} MB)"
+                        )
+                        continue
+                    if todo.empty:
+                        log(f"{msg}, none to fetch")
+                        continue
+                    summary = archive_stills(
+                        dl,
+                        todo,
+                        dest,
+                        ledger=ledger,
+                        sink=functools.partial(write_manifest, path=ledger),
+                        limit=remaining,
+                        progress=lambda s: log(s.line()),
+                    )
+                    if remaining is not None:
+                        remaining -= summary.downloaded + summary.not_found + summary.failed
+                    totals["new"] += summary.downloaded
+                    totals["MB"] += summary.bytes / 1e6
+                    log(f"{msg}; {summary.line()}")
+                    for f in summary.failures[:20]:
+                        log(f"  failed: {f}")
+                    failed += summary.failed
+                    if remaining is not None and remaining <= 0:
+                        log(f"{cam}: --limit reached")
+                        break
+                verb = "to fetch" if args.list_only else "downloaded"
+                log(
+                    f"{cam}: {totals['listed']:,} images, {totals['selected']:,} {kept}, "
+                    f"{totals['on_disk']:,} already archived, {totals['MB']:,.0f} MB {verb}"
+                    + ("" if args.list_only else f" ({totals['new']:,} files)")
+                )
+    log(f"acknowledge in publications: {ACKNOWLEDGEMENT}")
+    return 1 if failed else 0
+
+
 def _era5_sites(names: Sequence[str]) -> dict[str, tuple[float, float]]:
     from wave_analysis.dashboard.catalog import load_camera_sites
 
@@ -977,6 +1134,40 @@ def build_parser() -> argparse.ArgumentParser:
     wdl.add_argument("--out", help="archive root (default: data/raw/webcoos)")
     wdl.add_argument("--min-interval", type=float, default=1.0)
     wdl.set_defaults(func=_cmd_webcoos_download)
+    whi = wc.add_parser(
+        "historical",
+        help="archive past stills from WebCOOS's on-premise archive, thinned to a time grid",
+    )
+    whi.add_argument("cameras", nargs="+", help="camera slugs, e.g. currituck_hampton_inn")
+    whi.add_argument(
+        "--product",
+        default="stills",
+        help="stills (default), timex or brt (10-minute products, from 2024)",
+    )
+    whi.add_argument("--start", help="UTC start (default: the camera's first month)")
+    whi.add_argument("--end", help="UTC end, exclusive (default: now)")
+    whi.add_argument(
+        "--every", default="30min", help="grid step (default 30min), or 'all' for every image"
+    )
+    whi.add_argument("--tolerance", default="5min", help="max distance from a grid time")
+    whi.add_argument("--offset", default="0min", help="grid offset from the hour")
+    whi.add_argument("--limit", type=int, help="at most N new images per camera")
+    whi.add_argument("--list-only", action="store_true", help="list and count; download nothing")
+    whi.add_argument(
+        "--relist", action="store_true", help="list months again instead of using saved listings"
+    )
+    whi.add_argument(
+        "--historical-approved",
+        action="store_true",
+        help="WebCOOS has agreed and has been told that the transfer starts",
+    )
+    whi.add_argument(
+        "--wait", type=float, default=1.0, help="seconds between requests (at least 1)"
+    )
+    whi.add_argument(
+        "--out", help="archive root (default: data/raw/webcoos, webcoos_timex or webcoos_brt)"
+    )
+    whi.set_defaults(func=_cmd_webcoos_historical)
 
     era = sub.add_parser("era5", help="ERA5 reanalysis wave parameters (Copernicus CDS)")
     era_sub = era.add_subparsers(dest="cmd", required=True)

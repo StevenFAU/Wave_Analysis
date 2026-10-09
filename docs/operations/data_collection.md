@@ -111,7 +111,13 @@ independently, and the hosts exchange files through the offsite remote
   (`_manifests/realtime.csv`), WebCOOS (`_manifests/<camera>.csv`) and the
   dashboard publisher (the `dashboard-data` branch) each have one writer. The
   second host receives their files through the sync. The dashboard shows the
-  second host's images after the next sync on the primary host.
+  second host's images after the next sync on the primary host. The WebCOOS
+  historical download (`webcoos historical`) writes `<camera>.<host>.csv`
+  instead, so it can run on either host, though on only one at a time.
+- **A host can skip collections in the pull.** The laptop has no room for
+  the WebCOOS history (about 325 GB), so its `sync.env` has
+  `WAVE_ANALYSIS_SYNC_PULL_SKIP="webcoos webcoos_timex webcoos_brt"`. It still
+  pushes any files of its own in them.
 
 On the second host, after `uv sync` and the R2 setup below:
 

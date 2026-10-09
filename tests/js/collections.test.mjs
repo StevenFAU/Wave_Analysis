@@ -63,6 +63,12 @@ test("cameras without new images are named", () => {
     ["jennette_north", "jennette_south"],
   );
   assert.deepEqual(staleParts({ ...webcoos, mode: "complete" }, NOW), []);
+  // A camera fetched only from the historical archive is not expected to be current.
+  const past = { ...webcoos, parts: [...webcoos.parts, { id: "cocoabeach", last: "2024-12-31T21:00:00Z", hourly: false }] };
+  assert.deepEqual(
+    staleParts(past, NOW).map((p) => p.id),
+    ["jennette_north", "jennette_south"],
+  );
   const notes = collectionNotes(webcoos, NOW);
   assert.ok(notes.includes("No new images since 2026-09-16: jennette_north, jennette_south"));
 });

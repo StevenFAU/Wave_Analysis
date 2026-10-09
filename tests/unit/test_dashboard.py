@@ -394,17 +394,47 @@ def test_collections_count_files_and_check_ledgers(tmp_path):
     (raw / "era5" / "site").mkdir(parents=True)
     (raw / "era5" / "site" / "era5_waves_site_2026-07.nc").write_bytes(b"x" * 7)
 
+    # A camera fetched only from the historical archive, by another host.
+    old_url = "https://onprem.example.invalid/old/2024/01/02/old-2024-01-02-150000Z.jpg"
+    _ledger_rows(
+        wc / "_manifests" / "old.lab-pc.csv",
+        [
+            {"source_id": "webcoos", "product": "image", "station_id": "old",
+             "period": "2024-01-02T15:00:00Z", "url": old_url, "size_bytes": 2,
+             "status": EntryStatus.VERIFIED},
+        ],
+    )  # fmt: skip
+    (wc / "old" / "2024" / "01" / "02").mkdir(parents=True)
+    (wc / "old" / "2024" / "01" / "02" / "old-2024-01-02-150000Z.jpg").write_bytes(b"x" * 2)
+    tx = raw / "webcoos_timex"
+    tx_url = "https://onprem.example.invalid/timex/cam/2024/01/02/timex.cam-2024-01-02-150009Z.jpg"
+    _ledger_rows(
+        tx / "_manifests" / "cam.lab-pc.csv",
+        [
+            {"source_id": "webcoos", "product": "image", "station_id": "cam",
+             "period": "2024-01-02T15:00:09Z", "url": tx_url, "size_bytes": 4,
+             "status": EntryStatus.VERIFIED},
+        ],
+    )  # fmt: skip
+    (tx / "cam" / "2024" / "01" / "02").mkdir(parents=True)
+    (tx / "cam" / "2024" / "01" / "02" / "timex.cam-2024-01-02-150009Z.jpg").write_bytes(b"x" * 4)
+
     out = build_collections(CollectionInputs(raw, man))
     by = {c["id"]: c for c in out}
-    assert list(by) == ["pacioos_waimea", "webcoos", "era5_waves"]  # no CDIP ledger: skipped
+    # no CDIP or brt ledger: skipped
+    assert list(by) == ["pacioos_waimea", "webcoos", "webcoos_timex", "era5_waves"]
     w = by["pacioos_waimea"]
     assert (w["count"], w["bytes"], w["not_found"]) == (2, 10, 1)
     assert w["check"] == {"on_disk": 2, "ledger": 2, "missing_files": 1, "unledgered_files": 1}
     assert (w["first"], w["last"]) == ("2009-02-06T03:00:00Z", "2009-02-06T04:00:00Z")
     assert w["pairing"]["trusted_time"] == 9 and w["pairing"]["paired"] == 7
     c = by["webcoos"]
-    assert c["count"] == 1 and c["failed"] == 0  # the retry succeeded
+    assert c["count"] == 2 and c["failed"] == 0  # the retry succeeded
     assert c["check"]["missing_files"] == c["check"]["unledgered_files"] == 0
+    assert {p["id"]: p["hourly"] for p in c["parts"]} == {"cam": True, "old": False}
+    t = by["webcoos_timex"]
+    assert (t["mode"], t["count"], t["bytes"]) == ("on_request", 1, 4)
+    assert t["check"]["missing_files"] == t["check"]["unledgered_files"] == 0
     e = by["era5_waves"]
     assert e["count"] == 1 and e["states"] == {"final": 1}
     assert e["check"] == {"on_disk": 1, "ledger": 1, "missing_files": 0, "unledgered_files": 0}

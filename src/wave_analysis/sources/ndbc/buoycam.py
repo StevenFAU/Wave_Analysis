@@ -61,9 +61,7 @@ so archives collected on several hosts merge by copying files
 from __future__ import annotations
 
 import csv
-import os
 import re
-import socket
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
@@ -71,6 +69,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
+from wave_analysis.ingest.archive import collector_host
 from wave_analysis.ingest.downloader import Downloader
 from wave_analysis.ingest.manifest import EntryStatus, ManifestEntry, utcnow
 from wave_analysis.sources.ndbc.inventory import parse_buoycams
@@ -131,16 +130,6 @@ def image_path(dest_root: Path, station_id: str, file_name: str) -> Path:
 def image_file_name(camera_code: str, time_utc: pd.Timestamp) -> str:
     """File name NDBC uses for an image of ``camera_code`` stamped ``time_utc``."""
     return f"{camera_code}_{time_utc:%Y_%m_%d_%H%M}.jpg"
-
-
-def collector_host() -> str:
-    """Name of this collector host as used in ledger file names.
-
-    ``WAVE_ANALYSIS_HOST`` overrides the system host name. The result is
-    lower-cased and reduced to letters, digits and ``-``.
-    """
-    name = os.environ.get("WAVE_ANALYSIS_HOST") or socket.gethostname()
-    return re.sub(r"[^a-z0-9-]+", "-", name.lower()).strip("-") or "unknown"
 
 
 def manifest_path(

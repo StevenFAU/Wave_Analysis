@@ -43,10 +43,11 @@ export function countLabel(n, unit) {
   return `${fmtInt(n)} ${n === 1 && singular ? singular : unit}`;
 }
 
-/** Parts (cameras) of an hourly collection whose newest item is older than `days`. */
+/** Parts (cameras) of an hourly collection whose newest item is older than `days`.
+ *  Parts marked `hourly: false` (past years only) are not expected to be current. */
 export function staleParts(c, now = Date.now(), days = 2) {
   if (c.mode !== "hourly" || !c.parts) return [];
-  return c.parts.filter((p) => p.last && now - Date.parse(p.last) > days * DAY_MS);
+  return c.parts.filter((p) => p.hourly !== false && p.last && now - Date.parse(p.last) > days * DAY_MS);
 }
 
 /** Image count and total bytes across collections. */

@@ -43,7 +43,12 @@ class Downloader:
     Parameters
     ----------
     min_interval_s
-        Minimum wall-clock seconds between successive requests.
+        Minimum wall-clock seconds between the starts of successive requests.
+    min_gap_s
+        Minimum seconds between the end of one request and the start of the
+        next (wget's ``--wait``).
+    max_bytes_per_s
+        Cap on the average rate of each download (wget's ``--limit-rate``).
     max_retries
         Retries for connection errors and HTTP 429/5xx.
     timeout_s
@@ -53,12 +58,15 @@ class Downloader:
     """
 
     min_interval_s: float = 1.0
+    min_gap_s: float = 0.0
+    max_bytes_per_s: float | None = None
     max_retries: int = 4
     backoff_s: float = 2.0
     timeout_s: float = 60.0
     transport: httpx.BaseTransport | None = None
     _client: httpx.Client = field(init=False, repr=False)
     _last_request: float = field(default=0.0, init=False, repr=False)
+    _last_end: float = field(default=0.0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._client = httpx.Client(
@@ -80,7 +88,11 @@ class Downloader:
 
     # ------------------------------------------------------------------ #
     def _throttle(self) -> None:
-        wait = self.min_interval_s - (time.monotonic() - self._last_request)
+        now = time.monotonic()
+        wait = max(
+            self.min_interval_s - (now - self._last_request),
+            self.min_gap_s - (now - self._last_end),
+        )
         if wait > 0:
             time.sleep(wait)
         self._last_request = time.monotonic()
@@ -100,6 +112,8 @@ class Downloader:
                 last_exc = httpx.HTTPStatusError(
                     f"HTTP {resp.status_code}", request=resp.request, response=resp
                 )
+            finally:
+                self._last_end = time.monotonic()
             if attempt < self.max_retries:
                 time.sleep(self.backoff_s * 2**attempt)
         assert last_exc is not None
@@ -134,10 +148,15 @@ class Downloader:
                                 else None
                             )
                             write = fh.write if gz is None else gz.write
+                            t0 = time.monotonic()
                             for chunk in resp.iter_bytes(_CHUNK_BYTES):
                                 digest.update(chunk)
                                 size += len(chunk)
                                 write(chunk)
+                                if self.max_bytes_per_s:
+                                    ahead = size / self.max_bytes_per_s - (time.monotonic() - t0)
+                                    if ahead > 0:
+                                        time.sleep(ahead)
                             if gz is not None:
                                 gz.close()
                         return resp, tmp, digest.hexdigest(), size
@@ -154,6 +173,8 @@ class Downloader:
                 if tmp is not None:
                     tmp.unlink(missing_ok=True)
                 raise
+            finally:
+                self._last_end = time.monotonic()
             if attempt < self.max_retries:
                 time.sleep(self.backoff_s * 2**attempt)
         assert last_exc is not None
