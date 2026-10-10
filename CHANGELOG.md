@@ -28,7 +28,9 @@ separately (`docs/REPRODUCIBILITY.md`).
   brightest-pixel images (to `raw/webcoos_timex/`, `raw/webcoos_brt/`), and
   `--every all` keeps every image. `collector_host` moved to `ingest.archive`.
 - `scripts/webcoos_historical.sh`: the agreed WebCOOS download (stills, then
-  `timex`, then `brt`, every 30 min, eight cameras) in one resumable run.
+  `timex`, then `brt`, every 30 min, eight cameras) in one resumable run;
+  `WEBCOOS_PRODUCTS` limits the products. `webcoos historical` stops when the
+  archive's drive has less than `--min-free-gb` free (default 50).
 - Dashboard collections `webcoos_timex` and `webcoos_brt`; WebCOOS cameras
   fetched only from the archive are not reported as stalled.
 - `WAVE_ANALYSIS_SYNC_PULL_SKIP`: top-level collections a host leaves out of
@@ -36,7 +38,8 @@ separately (`docs/REPRODUCIBILITY.md`).
 
 ### Changed (2026-10-09)
 - `scripts/sync_offsite.sh` skips lock and partial files at any depth,
-  including the top level, and selects ledgers with ordered `--filter` rules.
+  including the top level, selects ledgers with ordered `--filter` rules, and
+  follows symlinks (`--copy-links`), so a collection can live on another drive.
 
 ### Added (2026-10-08)
 - A data inventory: `data/registry/data_dictionary.yaml` says what each

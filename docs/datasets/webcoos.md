@@ -237,6 +237,7 @@ records so that it spans calm and storm conditions.
 systemd-run --user --collect --unit wave-analysis-webcoos-historical \
     --working-directory="$PWD" "$PWD/scripts/webcoos_historical.sh"
 journalctl --user -u wave-analysis-webcoos-historical -f    # one line per camera-month
+# one product only: add --setenv=WEBCOOS_PRODUCTS=stills (or "timex brt") to systemd-run
 # the sample, afterwards, the same way, e.g.:
 #   .venv/bin/wave-analysis webcoos historical <cameras> --product timex --every all \
 #       --start 2025-01-01 --end 2025-02-01 --historical-approved
@@ -267,6 +268,13 @@ from S3 by the hourly collector), and fetches the rest. Stills go to
   own lock and keeps running.
 - `--list-only` lists and reports what would be fetched; `--limit N` stops
   after N new stills per camera.
+- **Disk guard:** a run stops (exit code 4) before a camera-month when the
+  archive's drive has less than `--min-free-gb` free (default 50), so it
+  cannot fill the disk the collectors write to.
+- **Another drive:** a product root may be a symlink to a directory on
+  another drive (e.g. `data/raw/webcoos_timex`). The offsite exchange follows
+  it; a run fails, rather than writing elsewhere, if that drive is not
+  mounted.
 
 **Volume.** Up to 2026-10-09 the hourly collector kept 21–27 stills a day per
 camera at 0.26–0.90 MB each (mean by camera). The eight cameras have about 33

@@ -118,6 +118,11 @@ independently, and the hosts exchange files through the offsite remote
   the WebCOOS history (about 325 GB), so its `sync.env` has
   `WAVE_ANALYSIS_SYNC_PULL_SKIP="webcoos webcoos_timex webcoos_brt"`. It still
   pushes any files of its own in them.
+- **A collection can live on another drive.** Make its directory under
+  `data/raw/` a symlink; the sync follows symlinks in both directions
+  (`--copy-links`). If the drive is not mounted the sync fails, so the
+  dashboard's offsite status goes stale instead of the collection being
+  skipped silently.
 
 On the second host, after `uv sync` and the R2 setup below:
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+from collections import namedtuple
 from pathlib import Path
 
 import httpx
@@ -35,6 +37,15 @@ from wave_analysis.sources.webcoos import (
 )
 
 TOKEN = "test-token-0123456789"
+DiskUsage = namedtuple("DiskUsage", "total used free")
+
+
+@pytest.fixture(autouse=True)
+def roomy_disk(monkeypatch):
+    """The historical command stops on a nearly full drive; tests get a roomy one."""
+    monkeypatch.setattr(shutil, "disk_usage", lambda p: DiskUsage(1e12, 0.0, 1e12))
+
+
 S3 = "https://s3.us-west-2.amazonaws.com/webcoos/media/x"
 
 
@@ -586,3 +597,27 @@ def test_historical_timex_every_image(tmp_path: Path, monkeypatch, capsys):
     ]
     assert "3 images, 3 kept (all), 0 already archived" in capsys.readouterr().out
     assert cli.main([*argv, "--product", "nope", "--out", str(out), "--historical-approved"]) == 2
+
+
+def test_historical_stops_when_the_drive_is_nearly_full(tmp_path: Path, monkeypatch, capsys):
+    import wave_analysis.cli as cli
+    import wave_analysis.ingest.downloader as downloader_module
+
+    requests: list[httpx.Request] = []
+    transport = httpx.MockTransport(tree_handler(requests))
+    real = downloader_module.Downloader
+    monkeypatch.setattr(
+        downloader_module,
+        "Downloader",
+        lambda **kw: real(
+            **{**kw, "min_gap_s": 0, "max_bytes_per_s": None, "transport": transport}
+        ),
+    )
+    monkeypatch.setattr(shutil, "disk_usage", lambda p: DiskUsage(100e9, 70e9, 30e9))
+    argv = ["webcoos", "historical", "cocoabeach", "--out", str(tmp_path), "--historical-approved"]
+    assert cli.main(argv) == 4  # 30 GB free, default floor 50 GB
+    assert "30 GB free" in capsys.readouterr().out
+    assert not list(tmp_path.rglob("*.jpg"))
+    assert not any(str(r.url).endswith(".jpg") for r in requests)
+    assert cli.main([*argv, "--min-free-gb", "20"]) == 0
+    assert len(list(tmp_path.rglob("*.jpg"))) == 4

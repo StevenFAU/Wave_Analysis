@@ -616,6 +616,8 @@ def _cmd_webcoos_download(args: argparse.Namespace) -> int:
 
 
 def _cmd_webcoos_historical(args: argparse.Namespace) -> int:
+    import shutil
+
     import httpx
 
     from wave_analysis.ingest.archive import collector_host
@@ -699,6 +701,13 @@ def _cmd_webcoos_historical(args: argparse.Namespace) -> int:
                 totals = {"listed": 0, "selected": 0, "on_disk": 0, "new": 0, "MB": 0.0}
                 remaining = args.limit
                 for month in months:
+                    free_gb = shutil.disk_usage(dest).free / 1e9
+                    if free_gb < args.min_free_gb and not args.list_only:
+                        log(
+                            f"stopping before {cam} {month}: {free_gb:,.0f} GB free on the "
+                            f"drive of {dest}, less than --min-free-gb {args.min_free_gb:g}"
+                        )
+                        return 4
                     a = month.start_time.tz_localize("UTC")
                     b = (month + 1).start_time.tz_localize("UTC")
                     whole = (start is None or start <= a) and end >= b
@@ -1163,6 +1172,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     whi.add_argument(
         "--wait", type=float, default=1.0, help="seconds between requests (at least 1)"
+    )
+    whi.add_argument(
+        "--min-free-gb",
+        type=float,
+        default=50.0,
+        help="stop when the archive's drive has less free space than this (default 50)",
     )
     whi.add_argument(
         "--out", help="archive root (default: data/raw/webcoos, webcoos_timex or webcoos_brt)"

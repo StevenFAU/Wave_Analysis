@@ -16,6 +16,11 @@
 # never "sync"). On success the time is written to data/raw/.offsite_last_sync,
 # which the dashboard reports.
 #
+# A collection may live on another drive behind a symlink (e.g. data/raw/
+# webcoos_timex -> /mnt/Warehouse/...): --copy-links follows it in both
+# directions. If that drive is not mounted, the exchange fails instead of
+# skipping the collection.
+#
 # A host without room for some collections can leave them out of the pull
 # (its own files in them are still pushed), e.g. in sync.env on a laptop:
 #   WAVE_ANALYSIS_SYNC_PULL_SKIP="webcoos webcoos_timex webcoos_brt"
@@ -25,7 +30,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="${WAVE_ANALYSIS_DATA:-$REPO/data}/raw"
 : "${WAVE_ANALYSIS_REMOTE:?set WAVE_ANALYSIS_REMOTE, e.g. r2:wave-analysis-raw}"
 DEST="$WAVE_ANALYSIS_REMOTE/raw"
-COMMON=(--transfers 8 --checkers 16 --fast-list --stats-one-line --stats 5m "$@")
+COMMON=(--transfers 8 --checkers 16 --fast-list --copy-links --stats-one-line --stats 5m "$@")
 # Patterns without a leading / match at any depth. Ledgers use --filter rules,
 # which rclone applies in order after the skip rules (--include would come first).
 RAW=(--immutable --size-only --exclude "**/_manifests/**" --exclude ".*.lock"
