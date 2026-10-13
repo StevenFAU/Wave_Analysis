@@ -136,6 +136,35 @@ def test_manifest_roundtrip_and_latest(tmp_path: Path):
     assert m.read_text().count("source_id,") == 1
 
 
+def test_manifest_path_stays_repo_relative_under_a_linked_collection(tmp_path: Path, monkeypatch):
+    # A collection may be a link to another drive (data/raw/webcoos_timex ->
+    # /mnt/...). Its files are still recorded by their place in the repository,
+    # not by an absolute path on this machine.
+    tmp_path = tmp_path.resolve()
+    repo, drive = tmp_path / "repo", tmp_path / "drive"
+    (repo / "data" / "raw").mkdir(parents=True)
+    (drive / "cam").mkdir(parents=True)
+    (repo / "data" / "raw" / "webcoos_timex").symlink_to(drive, target_is_directory=True)
+    monkeypatch.setenv("WAVE_ANALYSIS_ROOT", str(repo))
+    image = repo / "data" / "raw" / "webcoos_timex" / "cam" / "a.jpg"
+    image.write_bytes(b"x")
+    entry = ManifestEntry(
+        source_id="webcoos",
+        product="timex",
+        url="u",
+        local_path=str(image),
+        sha256="a" * 64,
+        retrieved_at=utcnow(),
+        status=EntryStatus.VERIFIED,
+    )
+    m = write_manifest([entry], tmp_path / "m.csv")
+    assert next(read_manifest(m)).local_path == "data/raw/webcoos_timex/cam/a.jpg"
+    # A file outside the repository keeps its path unchanged.
+    outside = entry.model_copy(update={"local_path": str(drive / "cam" / "a.jpg")})
+    m2 = write_manifest([outside], tmp_path / "m2.csv")
+    assert next(read_manifest(m2)).local_path == str(drive / "cam" / "a.jpg")
+
+
 class _DroppedStream(httpx.SyncByteStream):
     """A body that breaks off after the first chunk."""
 

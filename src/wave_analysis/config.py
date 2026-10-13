@@ -52,11 +52,16 @@ def portable_path(path: str | Path, root: Path | None = None) -> str:
     """Path relative to the repository root when inside it (POSIX separators), else unchanged.
 
     Committed manifests and provenance records must not embed machine-specific
-    absolute paths.
+    absolute paths. The path is tried as written before symbolic links are
+    followed, so a file under a collection that is a link to another drive
+    (``data/raw/webcoos_timex -> /mnt/...``) is still recorded by its place in
+    the repository.
     """
     p = Path(path)
     base = repo_root(root)
-    try:
-        return p.resolve().relative_to(base).as_posix()
-    except ValueError:
-        return str(path)
+    for candidate in (Path(os.path.abspath(p)), p.resolve()):
+        try:
+            return candidate.relative_to(base).as_posix()
+        except ValueError:
+            continue
+    return str(path)
