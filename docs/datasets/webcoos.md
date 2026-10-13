@@ -304,6 +304,13 @@ at 01:15 UTC on the desktop; its first 787 files took 1.53 s each. A first test 
 2022-01-12, `currituck_hampton_inn`) listed 364 stills, kept 12 on the grid
 and fetched 3 as expected.
 
+**Measured pace (first 12 hours, 2026-10-13).** 30 months of
+`currituck_hampton_inn` stills, 20,364 files of 0.67 MB on average: 1.78 s a
+file (the 1 s wait, about 0.4 s for the server to answer and about 0.4 s per
+MB), and 2 to 8 minutes to list a month's day folders (4 on average). The
+collector host adds under 2 s a month, so the pace is set by the agreed wait
+and by the server, and the plan takes about two weeks, not ten days.
+
 ## Video archive (pilot, not yet collected)
 
 Every Yin et al. (2025) camera has a `video-archive` product next to its
