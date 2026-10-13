@@ -48,6 +48,12 @@ the same file names and bytes as S3 (checked 2026-10-09). ``timex`` and ``brt``
 10-minute video clip starting at their time stamp, named
 ``timex.<camera>-<stamp>Z.jpg``. :class:`OnPremArchive` walks it; no token is
 needed.
+
+Some cameras recorded around the clock in earlier years (found 2026-10-12:
+``currituck_hampton_inn``, January 2022). The night frames are dark and
+monochrome, so the historical download keeps only images taken with the sun
+at or above :data:`MIN_SUN_ELEVATION_DEG` (:func:`in_daylight`). The saved
+month listings name every image, so the others can still be fetched later.
 """
 
 from __future__ import annotations
@@ -68,6 +74,7 @@ import pandas as pd
 from wave_analysis.ingest import archive
 from wave_analysis.ingest.archive import ArchiveItem, ArchiveSummary, Sink
 from wave_analysis.ingest.downloader import USER_AGENT, Downloader
+from wave_analysis.processing.solar import solar_position
 
 DATASET_ID = "webcoos"
 API_BASE = "https://app.webcoos.org/webcoos/api/v1"
@@ -161,6 +168,24 @@ ONPREM_GROUPS: dict[str, str] = {
     "masonboro_inlet": "uncw",
     "cocoabeach": "uncw",
 }
+
+#: Position of each camera, (latitude, longitude) in degrees: the asset
+#: location given by the WebCOOS API (read 2026-10-12). Used for the sun's
+#: elevation at capture time.
+ONPREM_POSITIONS: dict[str, tuple[float, float]] = {
+    "currituck_hampton_inn": (36.3779, -75.8258),
+    "currituck_sailfish": (36.3388, -75.8139),
+    "jennette_north": (35.9123, -75.5965),
+    "jennette_south": (35.9063, -75.5942),
+    "oakisland_east": (33.9126, -78.2243),
+    "oakisland_west": (33.9126, -78.2243),
+    "masonboro_inlet": (34.1890, -77.8120),
+    "cocoabeach": (28.3527, -80.6054),
+}
+
+#: Lowest sun for an image to be kept by the historical download: the end of
+#: civil twilight.
+MIN_SUN_ELEVATION_DEG = -6.0
 
 #: Pace WebCOOS asked for: ``wget --wait=1s --limit-rate=20m`` (wget's m is MiB).
 ONPREM_WAIT_S = 1.0
@@ -775,6 +800,24 @@ def write_month_index(stills: pd.DataFrame, path: Path, listed_at: pd.Timestamp)
     tmp = path.with_name(f".partial-{path.name}")
     stills.drop(columns="element_id").assign(listed_at=_iso(listed_at)).to_csv(tmp, index=False)
     os.replace(tmp, path)
+
+
+def in_daylight(
+    stills: pd.DataFrame, camera: str, min_sun_elevation: float = MIN_SUN_ELEVATION_DEG
+) -> pd.Series:
+    """Whether the sun was at or above ``min_sun_elevation`` [deg] when each image was taken.
+
+    The elevation is the geometric one at the camera's position
+    (:data:`ONPREM_POSITIONS`) at the image's time stamp. For ``timex`` and
+    ``brt`` that is the start of their 10-minute clip.
+    """
+    if camera not in ONPREM_POSITIONS:
+        raise ValueError(f"no position for camera {camera!r}")
+    if stills.empty:
+        return pd.Series(False, index=stills.index, dtype=bool)
+    latitude, longitude = ONPREM_POSITIONS[camera]
+    elevation, _ = solar_position(stills["time_utc"].to_numpy(), latitude, longitude)
+    return pd.Series(elevation >= min_sun_elevation, index=stills.index)
 
 
 def select_between(

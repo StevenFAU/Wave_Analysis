@@ -632,6 +632,7 @@ def _cmd_webcoos_historical(args: argparse.Namespace) -> int:
         ONPREM_WAIT_S,
         OnPremArchive,
         archive_stills,
+        in_daylight,
         ledger_path,
         month_index_path,
         on_disk,
@@ -670,6 +671,7 @@ def _cmd_webcoos_historical(args: argparse.Namespace) -> int:
     if args.every != "all":
         pd.Timedelta(args.every)  # fail early on a bad step
     kept = "kept (all)" if args.every == "all" else f"on the {args.every} grid"
+    sun = "" if args.all_hours else f"with the sun above {args.min_sun_elevation:g} deg"
     host = collector_host()
 
     def log(msg: str) -> None:
@@ -696,9 +698,9 @@ def _cmd_webcoos_historical(args: argparse.Namespace) -> int:
                     continue
                 log(
                     f"{cam} {args.product}: {len(months)} months, {months[0]} to {months[-1]}; "
-                    f"ledger {ledger.name}"
+                    f"{'all hours' if args.all_hours else 'images ' + sun}; ledger {ledger.name}"
                 )
-                totals = {"listed": 0, "selected": 0, "on_disk": 0, "new": 0, "MB": 0.0}
+                totals = {"listed": 0, "lit": 0, "selected": 0, "on_disk": 0, "new": 0, "MB": 0.0}
                 remaining = args.limit
                 for month in months:
                     free_gb = shutil.disk_usage(dest).free / 1e9
@@ -727,18 +729,27 @@ def _cmd_webcoos_historical(args: argparse.Namespace) -> int:
                         failed += 1
                         continue
                     window = stills[(stills["time_utc"] >= a) & (stills["time_utc"] < b)]
+                    # Night frames are dropped before thinning, so that a grid
+                    # time near dawn or dusk still gets its nearest lit image.
+                    lit = (
+                        window
+                        if args.all_hours
+                        else window[in_daylight(window, cam, args.min_sun_elevation)]
+                    )
                     if args.every == "all":
-                        sel = window.assign(grid_time=window["time_utc"], offset_s=0.0)
+                        sel = lit.assign(grid_time=lit["time_utc"], offset_s=0.0)
                     else:
-                        sel = select_between(window, a, b, **grid)
+                        sel = select_between(lit, a, b, **grid)
                     have = on_disk(sel, dest)
                     todo = sel[~have]
                     totals["listed"] += len(window)
+                    totals["lit"] += len(lit)
                     totals["selected"] += len(sel)
                     totals["on_disk"] += int(have.sum())
                     msg = (
-                        f"{cam} {month}: {len(window):,} images, {len(sel):,} {kept}, "
-                        f"{int(have.sum()):,} already archived"
+                        f"{cam} {month}: {len(window):,} images, "
+                        + ("" if args.all_hours else f"{len(lit):,} {sun}, ")
+                        + f"{len(sel):,} {kept}, {int(have.sum()):,} already archived"
                     )
                     if args.list_only:
                         totals["MB"] += float(todo["size_bytes"].sum()) / 1e6
@@ -771,7 +782,9 @@ def _cmd_webcoos_historical(args: argparse.Namespace) -> int:
                         break
                 verb = "to fetch" if args.list_only else "downloaded"
                 log(
-                    f"{cam}: {totals['listed']:,} images, {totals['selected']:,} {kept}, "
+                    f"{cam}: {totals['listed']:,} images, "
+                    + ("" if args.all_hours else f"{totals['lit']:,} {sun}, ")
+                    + f"{totals['selected']:,} {kept}, "
                     f"{totals['on_disk']:,} already archived, {totals['MB']:,.0f} MB {verb}"
                     + ("" if args.list_only else f" ({totals['new']:,} files)")
                 )
@@ -1160,6 +1173,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     whi.add_argument("--tolerance", default="5min", help="max distance from a grid time")
     whi.add_argument("--offset", default="0min", help="grid offset from the hour")
+    whi.add_argument(
+        "--min-sun-elevation",
+        type=float,
+        default=-6.0,
+        help="keep images taken with the sun at or above this elevation in degrees "
+        "(default -6, the end of civil twilight)",
+    )
+    whi.add_argument(
+        "--all-hours", action="store_true", help="keep night images too (no sun filter)"
+    )
     whi.add_argument("--limit", type=int, help="at most N new images per camera")
     whi.add_argument("--list-only", action="store_true", help="list and count; download nothing")
     whi.add_argument(

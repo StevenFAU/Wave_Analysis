@@ -122,7 +122,13 @@ independently, and the hosts exchange files through the offsite remote
   `data/raw/` a symlink; the sync follows symlinks in both directions
   (`--copy-links`). If the drive is not mounted the sync fails, so the
   dashboard's offsite status goes stale instead of the collection being
-  skipped silently.
+  skipped silently. On the desktop, `webcoos`, `webcoos_timex` and
+  `webcoos_brt` have been links to a second drive since 2026-10-12
+  (`/mnt/wavedata/wave_analysis/`, a 1 TB SSD on a USB adapter, mounted from
+  `/etc/fstab` with `nofail`). Unplugging it stops the hourly WebCOOS
+  collector, the historical download and the sync until it is mounted again.
+  Ledgers record files under a linked collection as `data/raw/...`, like all
+  others.
 
 On the second host, after `uv sync` and the R2 setup below:
 

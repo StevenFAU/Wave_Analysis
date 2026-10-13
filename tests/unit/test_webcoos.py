@@ -17,6 +17,8 @@ from wave_analysis.sources.webcoos import (
     API_BASE,
     HISTORICAL_SAMPLE_LIMIT,
     ONPREM_BASE,
+    ONPREM_GROUPS,
+    ONPREM_POSITIONS,
     HistoricalAccessError,
     OnPremArchive,
     TokenError,
@@ -25,12 +27,14 @@ from wave_analysis.sources.webcoos import (
     camera_table,
     check_age,
     element_table,
+    in_daylight,
     ledger_path,
     load_token,
     local_path,
     month_index_path,
     onprem_stills,
     parse_listing,
+    read_month_index,
     select_between,
     select_on_grid,
     still_time,
@@ -509,7 +513,7 @@ def test_historical_command(tmp_path: Path, monkeypatch, capsys):
 
     monkeypatch.setattr(downloader_module, "Downloader", fake_downloader)
     argv = ["webcoos", "historical", "cocoabeach", "--start", "2023-01-01", "--end", "2023-03-01"]
-    argv += ["--out", str(tmp_path)]
+    argv += ["--out", str(tmp_path), "--all-hours"]
     assert cli.main(argv) == 3 and not requests  # no approval, no request
 
     # One still was already fetched from S3 by the hourly collector.
@@ -539,6 +543,53 @@ def test_historical_command(tmp_path: Path, monkeypatch, capsys):
     assert cli.main([*argv, "--historical-approved"]) == 0
     assert [str(r.url) for r in requests] == [COCOA, f"{COCOA}2023/"]
     assert len(list(read_manifest(ledger))) == 3
+
+
+def test_in_daylight_keeps_twilight_and_drops_night():
+    assert set(ONPREM_POSITIONS) == set(ONPREM_GROUPS)
+    # Cocoa Beach, 31 January 2023: sunset is near 22:59 UTC and civil
+    # twilight ends near 23:25 UTC.
+    times = ["2023-01-31T15:00:00Z", "2023-01-31T23:10:00Z", "2023-01-31T23:29:50Z"]
+    stills = pd.DataFrame({"time_utc": pd.to_datetime(times, utc=True)}, index=[7, 8, 9])
+    lit = in_daylight(stills, "cocoabeach")
+    assert list(lit) == [True, True, False] and list(lit.index) == [7, 8, 9]
+    assert list(in_daylight(stills, "cocoabeach", min_sun_elevation=0.0)) == [True, False, False]
+    assert in_daylight(stills.iloc[:0], "cocoabeach").empty
+    with pytest.raises(ValueError):
+        in_daylight(stills, "unknown_cam")
+
+
+def test_historical_keeps_only_lit_images_unless_all_hours(tmp_path: Path, monkeypatch, capsys):
+    import wave_analysis.cli as cli
+    import wave_analysis.ingest.downloader as downloader_module
+
+    requests: list[httpx.Request] = []
+    transport = httpx.MockTransport(tree_handler(requests))
+    real = downloader_module.Downloader
+    monkeypatch.setattr(
+        downloader_module,
+        "Downloader",
+        lambda **kw: real(
+            **{**kw, "min_gap_s": 0, "max_bytes_per_s": None, "transport": transport}
+        ),
+    )
+    argv = ["webcoos", "historical", "cocoabeach", "--start", "2023-01-01", "--end", "2023-03-01"]
+    argv += ["--out", str(tmp_path), "--historical-approved"]
+    # The archive holds one image at 10:00 local time and four after dusk.
+    assert cli.main(argv) == 0
+    out = capsys.readouterr().out
+    assert "2023-01: 3 images, 1 with the sun above -6 deg, 1 on the 30min grid" in out
+    assert "2023-02: 2 images, 0 with the sun above -6 deg, 0 on the 30min grid" in out
+    files = sorted(p.name for p in (tmp_path / "cocoabeach").rglob("*.jpg"))
+    assert files == ["cocoabeach-2023-01-30-150010Z.jpg"]
+    # The saved listing still names the night images, so they can be fetched
+    # later without listing the month again.
+    index = month_index_path(tmp_path, "cocoabeach", pd.Period("2023-01", "M"))
+    assert len(read_month_index(index)) == 3
+    requests.clear()
+    assert cli.main([*argv, "--all-hours"]) == 0
+    assert len(list((tmp_path / "cocoabeach").rglob("*.jpg"))) == 4
+    assert not any("/2023/01/" in str(r.url) and str(r.url).endswith("/") for r in requests)
 
 
 TIMEX = f"{ONPREM_BASE}/timex/uncw/cocoabeach/"
@@ -595,7 +646,8 @@ def test_historical_timex_every_image(tmp_path: Path, monkeypatch, capsys):
         "timex.cocoabeach-2024-03-05-151009Z.jpg",
         "timex.cocoabeach-2024-03-05-152009Z.jpg",
     ]
-    assert "3 images, 3 kept (all), 0 already archived" in capsys.readouterr().out
+    shown = capsys.readouterr().out
+    assert "3 images, 3 with the sun above -6 deg, 3 kept (all), 0 already archived" in shown
     assert cli.main([*argv, "--product", "nope", "--out", str(out), "--historical-approved"]) == 2
 
 
@@ -615,6 +667,7 @@ def test_historical_stops_when_the_drive_is_nearly_full(tmp_path: Path, monkeypa
     )
     monkeypatch.setattr(shutil, "disk_usage", lambda p: DiskUsage(100e9, 70e9, 30e9))
     argv = ["webcoos", "historical", "cocoabeach", "--out", str(tmp_path), "--historical-approved"]
+    argv += ["--all-hours"]
     assert cli.main(argv) == 4  # 30 GB free, default floor 50 GB
     assert "30 GB free" in capsys.readouterr().out
     assert not list(tmp_path.rglob("*.jpg"))

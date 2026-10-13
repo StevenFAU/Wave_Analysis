@@ -50,8 +50,11 @@ The hourly collector runs `webcoos download @yin2025 @near_buoy --lookback 3D`;
 the last 85 days of the new cameras were backfilled once, inside the 90-day
 guideline. CDIP 200's
 historic record ends on 2026-07-20 and it had no realtime file on 2026-09-26,
-so recent Oak Island images have no nearby buoy until it is back. Stills exist
-in daylight only (about 300–700 a day per camera).
+so recent Oak Island images have no nearby buoy until it is back. In 2026
+stills exist in daylight only (about 300–700 a day per camera): none of those
+collected from July to October 2026 was taken with the sun more than 2.7°
+below the horizon. Earlier years can hold night images
+([what we collect](#what-we-collect-and-why)).
 
 ## Access
 
@@ -165,9 +168,10 @@ Other products under `/archive/<product>/<group>/<camera>/`, one day at
 | `mp4` | video clips, mostly 10 min | 102 files, 5.2 GB (51 MB) | not checked |
 | `15-second-timex` | — | none that day | not checked |
 
-`annotation/` and `jsonl/` were not examined. The cameras record from about
-sunrise to sunset (stills 07:09–19:09 EDT, video from 06:48, on 2026-09-21);
-there are no night images to collect.
+`annotation/` and `jsonl/` were not examined. On that day the camera recorded
+from about sunrise to sunset (stills 07:09–19:09 EDT, video from 06:48). That
+is not so in every year: in January 2022 the same camera has stills around the
+clock ([what we collect](#what-we-collect-and-why)).
 
 **What `timex` and `brt` are** (worked out from the archive, 2026-10-09; the
 files carry no metadata):
@@ -198,7 +202,7 @@ small sample at full cadence to test whether more images per record help:
 
 | Part | Command (`--product`, `--every`) | Size |
 |---|---|---|
-| Stills every 30 min, all years, 8 cameras | `stills`, `30min` | ~150 GB, ~290,000 files |
+| Stills every 30 min in daylight, all years, 8 cameras | `stills`, `30min` | ~150 GB, ~290,000 files |
 | `timex` and `brt` every 30 min, 2024 on | `timex` / `brt`, `30min` | ~150–200 GB, ~215,000 files |
 | Test sample: every `timex`/`brt` for one month, 8 cameras; every still for one month at `currituck_hampton_inn` and `jennette_south` | `--every all --start … --end …` | ~25 GB, ~40,000 files |
 
@@ -225,6 +229,18 @@ About 325–375 GB and ten days at WebCOOS's pace (the `timex` files of March
   several images per record helps. If it does, a rerun with `--every 10min`
   (or `all`) fetches only the images not yet held, since the 30-minute grid
   times are part of the denser grid. The archive stays at WebCOOS.
+- **Night images are left at WebCOOS.** Some cameras recorded around the
+  clock in earlier years. In January 2022 `currituck_hampton_inn` has 23,333
+  stills on 21 days, and 54 % of them were taken with the sun more than 6°
+  below the horizon. Those average half the size of the others (0.35 MB
+  against 0.70 MB); the one examined is a dark, monochrome frame with faint
+  surf lines. The estimates above assumed daylight, so `historical` keeps
+  only images taken with the sun at or above −6°, the end of civil twilight
+  (`--min-sun-elevation`; `--all-hours` keeps everything). The first run
+  (2026-10-13 UTC) fetched 426 night stills of that month before this was
+  seen. They are kept as a sample for testing whether night frames carry any
+  signal. The saved month listings name every image, so the rest can be
+  fetched later without listing again.
 
 Not collected: every still (2.5–4 TB, months at this pace, mostly
 near-duplicates), every `timex`/`brt` (another ~300 GB of the same labels,
@@ -246,8 +262,11 @@ journalctl --user -u wave-analysis-webcoos-historical -f    # one line per camer
 A transient unit stops at a reboot (and at logout without lingering); rerun
 the same command to resume.
 
-`historical` does not mirror whole days. It lists each day directory, keeps one
-image per 30 minutes as `download` does (`--every`, `--tolerance`, `--offset`;
+`historical` does not mirror whole days. It lists each day directory, drops
+images taken with the sun more than 6° below the horizon at the camera
+(`--min-sun-elevation`, from the positions the WebCOOS API gives; for `timex`
+and `brt` the time is the start of their clip), keeps one of the others per
+30 minutes as `download` does (`--every`, `--tolerance`, `--offset`;
 grid times are split by month, each getting one image; `--every all` keeps
 every image), skips images already archived (same name and size, e.g. fetched
 from S3 by the hourly collector), and fetches the rest. Stills go to
@@ -280,7 +299,8 @@ from S3 by the hourly collector), and fetches the rest. Stills go to
 camera at 0.26–0.90 MB each (mean by camera). The eight cameras have about 33
 camera-years of stills (about 22 of `timex`/`brt`). At about 1.4 s a file
 (1 s wait plus transfer, measured 2026-10-09) the plan above takes about ten
-days, plus about nine hours of listings. A first test (2022-01-10 to
+days, plus about nine hours of listings. The transfer started on 2026-10-13
+at 01:15 UTC on the desktop; its first 787 files took 1.53 s each. A first test (2022-01-10 to
 2022-01-12, `currituck_hampton_inn`) listed 364 stills, kept 12 on the grid
 and fetched 3 as expected.
 

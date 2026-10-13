@@ -8,6 +8,11 @@ separately (`docs/REPRODUCIBILITY.md`).
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
 ### Fixed
+- Ledgers recorded an absolute path on the collector host for files under a
+  collection that is a symlink to another drive (`portable_path` followed the
+  link out of the repository). The path is now tried as written first, so
+  such files are recorded as `data/raw/...` like all others (found before the
+  WebCOOS folders were linked to a second drive, 2026-10-12).
 - Landscape review cited `Quach2020`; the bibliography key is `Quach2021`
   (found by the new catalog consistency test).
 - NDBC wave processing is cited as TD 03-01 (Earle 2003). The previously cited
@@ -16,6 +21,18 @@ separately (`docs/REPRODUCIBILITY.md`).
 - The FAU Harbor Branch entry in `camera_sites.yaml` described its coordinate
   as the Fort Pierce Inlet shoreline; it is the approximate campus position on
   the lagoon.
+
+### Added (2026-10-12)
+- `webcoos historical` keeps only images taken with the sun at or above −6°
+  at the camera (`--min-sun-elevation`; `--all-hours` keeps night images too).
+  Some cameras recorded around the clock in earlier years (54 % of
+  `currituck_hampton_inn`'s January 2022 stills are night frames), which the
+  size estimate given to WebCOOS did not allow for. Camera positions are the
+  WebCOOS API's (`ONPREM_POSITIONS`); the saved month listings still name
+  every image.
+- The WebCOOS historical download started on 2026-10-13 at 01:15 UTC on the
+  desktop, onto a second drive behind symlinks
+  (`docs/operations/data_collection.md`).
 
 ### Added (2026-10-09)
 - `wave-analysis webcoos historical`: past years of WebCOOS stills from the

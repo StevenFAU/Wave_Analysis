@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Download the WebCOOS history agreed with WebCOOS (docs/datasets/webcoos.md):
 # stills every 30 min for all years, then timex and brt every 30 min (2024 on),
-# one product after another over a single connection. Resumable: rerun to
-# continue. Extra arguments are passed to every run (e.g. --list-only).
+# one product after another over a single connection. Night images are left
+# out (the command's default). Resumable: rerun to continue. Extra arguments
+# are passed to every run (e.g. --list-only).
 # WEBCOOS_PRODUCTS limits the products (default "stills timex brt").
 #
 #   systemd-run --user --collect --unit wave-analysis-webcoos-historical \
