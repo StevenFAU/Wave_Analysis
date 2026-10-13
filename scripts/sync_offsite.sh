@@ -16,6 +16,12 @@
 # never "sync"). On success the time is written to data/raw/.offsite_last_sync,
 # which the dashboard reports.
 #
+# A collector appends to its ledger while it runs, and rclone rejects a file
+# that changes during its upload. A long download (the WebCOOS history adds a
+# row every two seconds for days) would fail every exchange that way. So the
+# ledgers are uploaded from a copy made just before, which holds what was
+# written up to that moment; the next exchange uploads the rest.
+#
 # A collection may live on another drive behind a symlink (e.g. data/raw/
 # webcoos_timex -> /mnt/Warehouse/...): --copy-links follows it in both
 # directions. If that drive is not mounted, the exchange fails instead of
@@ -35,7 +41,8 @@ COMMON=(--transfers 8 --checkers 16 --fast-list --copy-links --stats-one-line --
 # which rclone applies in order after the skip rules (--include would come first).
 RAW=(--immutable --size-only --exclude "**/_manifests/**" --exclude ".*.lock"
     --exclude ".partial-*" --exclude "*.partial" --exclude "/.offsite_last_sync")
-LEDGERS=(--update --filter "+ **/_manifests/**" --filter "- **")
+ONLY_LEDGERS=(--filter "+ **/_manifests/**" --filter "- **")
+LEDGERS=(--update "${ONLY_LEDGERS[@]}")
 SKIP=()
 read -ra SKIP_DIRS <<< "${WAVE_ANALYSIS_SYNC_PULL_SKIP:-}"
 for d in "${SKIP_DIRS[@]}"; do
@@ -44,7 +51,13 @@ for d in "${SKIP_DIRS[@]}"; do
 done
 
 rclone copy "$SRC" "$DEST" "${RAW[@]}" "${COMMON[@]}"
-rclone copy "$SRC" "$DEST" "${LEDGERS[@]}" "${COMMON[@]}"
+SNAPSHOT="$(mktemp -d)"
+trap 'rm -rf "$SNAPSHOT"' EXIT
+rclone lsf -R --files-only --copy-links "${ONLY_LEDGERS[@]}" "$SRC" | while IFS= read -r f; do
+    mkdir -p "$SNAPSHOT/$(dirname "$f")"
+    cp -pL "$SRC/$f" "$SNAPSHOT/$f"
+done
+rclone copy "$SNAPSHOT" "$DEST" "${LEDGERS[@]}" "${COMMON[@]}"
 # Nothing to pull before the first push (only possible in a dry run).
 if rclone lsf --max-depth 1 "$DEST" >/dev/null 2>&1; then
     rclone copy "$DEST" "$SRC" "${SKIP[@]}" "${RAW[@]}" "${COMMON[@]}"

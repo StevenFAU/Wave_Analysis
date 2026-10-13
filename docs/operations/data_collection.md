@@ -146,8 +146,11 @@ Three tiers, following the 3-2-1 rule (three copies, two media, one offsite):
    `scripts/sync_offsite.sh`. Raw files are pushed and pulled with
    `rclone copy --immutable`, so existing objects are never overwritten on
    either side and deletions are never propagated. The growing ledgers are
-   copied with `--update`. The same remote is how collector hosts share
-   images ([a second collector host](#a-second-collector-host)).
+   copied with `--update`, from a copy made just before the upload: rclone
+   rejects a file that changes in transit, and a collector may be writing
+   its ledger at that moment (the WebCOOS historical download does for
+   days). The same remote is how collector hosts share images
+   ([a second collector host](#a-second-collector-host)).
 3. **Citable releases:** frozen snapshots on Zenodo with DOIs (for example,
    quarterly), packed as monthly tar shards because a record allows at most
    100 files and 50 GB. NOAA imagery is a U.S. Government work, so
@@ -210,6 +213,7 @@ in this repository.
 | 2026-10-01 13:13 to 23:38 | No collector run for about 10 h (host down again) | Recovered by the 23:38 backfill (615 images). Seven-day coverage as of 23:49: 12,874 archived, 83 never published, and 164 gaps, all at 2026-10-01 21:00 and 22:00 UTC (78 stations each). The next two runs (2026-10-02 00:42 and 01:41) filled them: at 01:45 the 3-day window had no unexplained gap. Separately, station 46061's camera stopped publishing on 2026-09-29 |
 | 2026-10-04 20:43 to 2026-10-08 00:32 | No collector run for about 76 h (host powered off). The first two recovery runs (00:32 and 01:10) were cut short by a reboot and a shutdown; a run from 03:43 to 04:32 and the new second host (02:10 to 03:50) finished the backfill | **638 camera-hours lost for good:** every station from 2026-10-04 20:00 to 2026-10-05 02:00 (7 h × 78 stations, older than the 70 h window when collection resumed), plus 51 stations at 03:00 and 41 at 04:00. Those 92 were inside the window, but the interrupted runs walked each station newest-first and never reached them; the backfill now fetches the oldest hours first. Dashboard seven-day coverage as of 2026-10-08 12:42: 12,166 archived, 147 never published, 637 gaps |
 | Until 2026-10-08 | No offsite copy (`offsite.last_sync` null) | Resolved: the first upload to R2 (11.4 GiB, 58,975 files) finished 2026-10-08 06:12; daily since |
+| 2026-10-13 08:16 to 08:46 | The daily exchange uploaded the images, then failed at the ledgers: the WebCOOS historical download was adding a row to its ledger every two seconds, and rclone rejects a file that changes during its upload | That ledger had no offsite copy, the second host's files were not pulled and `offsite.last_sync` stayed at 2026-10-12 08:32. Fixed the same day: ledgers are uploaded from a copy made just before (the ledger reached R2 at 14:16) |
 
 The first two outages were recovered only because each lasted less than the
 70 h backfill window; the third was not. See P0 in the

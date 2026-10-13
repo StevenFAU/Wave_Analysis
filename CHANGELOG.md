@@ -8,6 +8,14 @@ separately (`docs/REPRODUCIBILITY.md`).
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
 ### Fixed
+- The offsite exchange failed whenever a collector was writing its ledger
+  during the upload: rclone rejects a file that changes in transit. The
+  WebCOOS historical download adds a row every two seconds, so the exchange of
+  2026-10-13 stopped after the images: the ledgers' step failed, other hosts'
+  files were not pulled and `.offsite_last_sync` was not written.
+  `scripts/sync_offsite.sh` now uploads the ledgers from a copy made just
+  before; the next exchange uploads the rows written since
+  (`tests/integration/test_sync_offsite.py`, which needs rclone).
 - Ledgers recorded an absolute path on the collector host for files under a
   collection that is a symlink to another drive (`portable_path` followed the
   link out of the repository). The path is now tried as written first, so
