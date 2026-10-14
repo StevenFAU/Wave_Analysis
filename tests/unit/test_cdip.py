@@ -37,17 +37,26 @@ DENSITY = np.array([1.0, 4.0, 2.0, 0.5])  # m0 = 7.5 * 0.05 = 0.375 -> Hm0 = 2.4
 FILL = -999.99
 
 
-def write_cdip_file(path: Path, *, source_index: tuple[int, ...] = (1, 1, 2, 2)) -> Path:
-    """A small file with CDIP's variable names, types, fill values and attributes."""
+def write_cdip_file(
+    path: Path, *, source_index: tuple[int, ...] = (1, 1, 2, 2), realtime: bool = False
+) -> Path:
+    """A small file with CDIP's variable names, types, fill values and attributes.
+
+    ``realtime`` writes the layout of a realtime file: one deployment position
+    without ``metaDeployCount``, and transmissions as source files.
+    """
     n = len(source_index)
     start = (T0.value // 10**9) + 1800 * np.arange(n)
     with nc4.Dataset(path, "w") as nc:
         nc.createDimension("waveTime", n)
         nc.createDimension("waveFrequency", len(FREQ))
         nc.createDimension("metaBoundsCount", 2)
-        nc.createDimension("metaDeployCount", 2)
+        if not realtime:
+            nc.createDimension("metaDeployCount", 2)
         nc.createDimension("sourceCount", 2)
-        nc.setncattr("id", "CDIP_106p1_test_historic")
+        nc.setncattr(
+            "id", "CDIP_106p1_20120105-20120106" if realtime else "CDIP_106p1_test_historic"
+        )
         nc.setncattr("license", "These data may be redistributed and used without restriction.")
 
         def var(name, dtype, dims, data, **attrs):
@@ -145,6 +154,13 @@ def write_cdip_file(path: Path, *, source_index: tuple[int, ...] = (1, 1, 2, 2))
             _FillValue=np.float32(FILL),
         )
         names = nc.createVariable("sourceFilename", str, ("sourceCount",))
+        if realtime:
+            names[0] = "im74082_201201051705"
+            names[1] = "im74082_201201051735"
+            var("metaDeployLatitude", "f4", (), 21.6705)
+            var("metaDeployLongitude", "f4", (), -158.1171)
+            var("metaWaterDepth", "f4", (), 200.0)
+            return path
         names[0] = "106p1_d01.nc"
         names[1] = "106p1_d02.nc"
         var("metaDeployLatitude", "f4", ("metaDeployCount",), [21.6727, 21.6705])
@@ -270,6 +286,28 @@ def test_normalize_bulk(cdip_file: Path):
     assert set(third["source_qc_flag"]) == {"3/6"}
     assert obs["observation_id"].is_unique
     assert obs["observation_id"].iloc[0].startswith("cdip:106:wave:")
+
+
+def test_normalize_realtime_file_names_its_one_deployment(tmp_path: Path):
+    # Transmissions, not deployments, are the source files: indices beyond the
+    # number of deployments are normal here.
+    path = write_cdip_file(tmp_path / "106p1_rt.nc", source_index=(1, 2, 2, 2), realtime=True)
+    src = CDIPSource()
+    obs = src.normalize(src.parse(path), station_id=106, source_file=path.name)
+    validate_observation_frame(obs)
+    assert len(obs) == 19
+    assert set(obs["deployment_id"]) == {"106p1_rt20120105"}
+    assert obs["latitude"].unique() == pytest.approx([21.6705], abs=1e-4)
+    assert obs["longitude"].unique() == pytest.approx([-158.1171], abs=1e-4)
+
+
+def test_realtime_file_without_a_dated_id_is_refused(tmp_path: Path):
+    path = write_cdip_file(tmp_path / "106p1_rt.nc", realtime=True)
+    with nc4.Dataset(path, "a") as nc:
+        nc.setncattr("id", "something else")
+    src = CDIPSource()
+    with pytest.raises(ValueError, match="cannot name the deployment"):
+        src.normalize(src.parse(path), station_id=106, source_file=path.name)
 
 
 @pytest.mark.parametrize("index", [(0, 1, 1, 2), (1, 1, 2, 3)])

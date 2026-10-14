@@ -127,6 +127,7 @@ DERIVED_MAP: dict[str, tuple[str, str]] = {
 
 _STATION = re.compile(r"^\d{3}$")
 _DEPLOYMENT_FILE = re.compile(r"^(?P<stn>\d{3})p1_d(?P<n>\d{2})\.nc$")
+_REALTIME_ID = re.compile(r"^CDIP_(?P<platform>\d{3}p\d)_(?P<start>\d{8})-\d{8}$")
 _SIZE_UNITS = {"bytes": 1.0, "Kbytes": 1e3, "Mbytes": 1e6, "Gbytes": 1e9, "Tbytes": 1e12}
 _THREDDS_NS = {"t": "http://www.unidata.ucar.edu/namespaces/thredds/InvCatalog/v1.0"}
 
@@ -252,6 +253,39 @@ def source_filenames(ds: Any) -> list[str]:
         v.decode() if isinstance(v, bytes) else str(v)
         for v in np.asarray(ds["sourceFilename"].values).ravel()
     ]
+
+
+def record_deployments(
+    ds: Any,
+) -> tuple[NDArray[np.float64], NDArray[np.float64], list[str]]:
+    """Latitude, longitude and deployment name of each wave record.
+
+    Historic and deployment files list their deployments along
+    ``metaDeployCount`` (:func:`deployment_index`), and a record's deployment
+    is named after its file, e.g. ``433p1_d13``.
+
+    A realtime file holds the current deployment only (verified on
+    433p1_rt.nc, 2026-10-13): one position, no ``metaDeployCount``, and
+    ``sourceFilename`` lists the buoy's transmissions, which
+    ``waveSourceIndex`` points to. CDIP numbers a deployment when it is
+    archived, so its records are named after the start date in the file's
+    ``id`` attribute: ``CDIP_433p1_20250725-20261013`` gives
+    ``433p1_rt20250725``, the same in every later snapshot.
+    """
+    n = int(ds.sizes["waveTime"])
+    lat = np.asarray(ds["metaDeployLatitude"].values, dtype=np.float64)
+    lon = np.asarray(ds["metaDeployLongitude"].values, dtype=np.float64)
+    if "metaDeployCount" in ds.sizes:
+        dep = deployment_index(ds) if n else np.zeros(0, dtype=np.intp)
+        names = np.asarray(source_filenames(ds), dtype=object)
+        return lat[dep], lon[dep], [Path(s).stem for s in names[dep]]
+    if lat.ndim or lon.ndim:
+        raise ValueError("a file without metaDeployCount must have one deployment position")
+    m = _REALTIME_ID.match(str(ds.attrs.get("id", "")))
+    if m is None:
+        raise ValueError(f"cannot name the deployment from the id attribute {ds.attrs.get('id')!r}")
+    name = f"{m['platform']}_rt{m['start']}"
+    return np.full(n, float(lat)), np.full(n, float(lon)), [name] * n
 
 
 class CDIPSource(DataSource):
@@ -383,14 +417,9 @@ class CDIPSource(DataSource):
         ds = parsed
         stn = station_code(station_id)
         times = pd.to_datetime(ds["waveTime"].values).tz_localize("UTC")
-        n = len(times)
         bounds = np.asarray(ds["waveTimeBounds"].values)
         averaging = (bounds[:, 1] - bounds[:, 0]) / np.timedelta64(1, "s")
-        dep = deployment_index(ds) if n else np.zeros(0, dtype=np.intp)
-        lat = np.asarray(ds["metaDeployLatitude"].values, dtype=np.float64)[dep]
-        lon = np.asarray(ds["metaDeployLongitude"].values, dtype=np.float64)[dep]
-        names = np.asarray(source_filenames(ds), dtype=object)
-        deployment = [Path(s).stem for s in names[dep]]
+        lat, lon, deployment = record_deployments(ds)
         primary = _flag_strings(ds["waveFlagPrimary"].values)
         secondary = _flag_strings(ds["waveFlagSecondary"].values)
         source_flag = [f"{p}/{s}" for p, s in zip(primary, secondary, strict=True)]

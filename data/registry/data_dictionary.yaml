@@ -699,6 +699,52 @@ tables:
       Leakage-audited day, week and year splits; baseline scores (climatology,
       corrected ERA5, image-statistics ridge) with bootstrap intervals, and
       the scores by light and wave height.
+  - id: currituck_pairing
+    name: Currituck pairing (samples)
+    roles: [derived]
+    shape: "40,313 rows × 39 columns"
+    path: data/processed/pairs/webcoos_currituck_hampton_inn_cdip433/samples.parquet
+    doc: docs/datasets/webcoos.md
+    holds: >-
+      One row per still of the WebCOOS camera `currituck_hampton_inn`, night
+      frames included: file, checksum, capture time (from the file name), sun
+      height and light category, whether the camera was in its night mode,
+      distance and time offset to the nearest CDIP 433 record, and the labels:
+      `Hs_label_m` (mean of the records within ±30 min) with its spread,
+      `Tp_label_s` and `Dp_label_deg` (nearest record), the alternatives, the
+      label with a travel-time lag applied, a `peak_records_disagree` flag,
+      and why a still has no label.
+    columns: [Hs_label_m, Tp_label_s, Dp_label_deg]
+  - id: currituck_candidates
+    name: Currituck pairing (candidates)
+    roles: [derived]
+    shape: "460,230 rows × 23 columns"
+    path: data/processed/pairs/webcoos_currituck_hampton_inn_cdip433/candidates.parquet
+    doc: docs/datasets/webcoos.md
+    holds: >-
+      Every good CDIP 433 record within ±3 h of every still, with offsets,
+      values, flags, deployment and two travel-time estimates, so another
+      labelling rule can be tried without pairing again.
+  - id: webcoos_audit
+    name: WebCOOS image audit
+    roles: [derived]
+    shape: 177 MB for one camera
+    path: data/interim/webcoos_audit/
+    doc: docs/datasets/webcoos.md
+    holds: >-
+      Per camera: the checksum of every still against its ledger, decode
+      checks, frame size, brightness and colour saturation (which shows the
+      night mode), block statistics and a small thumbnail.
+  - id: cdip_433_standardized
+    name: CDIP 433 standardized
+    roles: [derived]
+    shape: 2021-12 to the present
+    path: data/processed/cdip/433/
+    doc: docs/datasets/cdip.md
+    holds: >-
+      Bulk parameters and spectra of the Duck FRF 17 m buoy in the project's
+      long format, with CDIP's flags kept: the archived deployments from the
+      historic file and the current deployment from the realtime file.
   - id: cdip_standardized
     name: CDIP 106 standardized
     roles: [derived]

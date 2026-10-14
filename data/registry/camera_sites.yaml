@@ -149,9 +149,9 @@ sites:
     name: WebCOOS camera currituck_hampton_inn, Corolla (North Carolina)
     provider: WebCOOS
     dataset_id: webcoos
-    latitude: 36.3779
-    longitude: -75.8258
-    coordinate_source: "WebCOOS API asset location, 2026-09-26"
+    latitude: 36.2593
+    longitude: -75.7852
+    coordinate_source: "GPS position in the EXIF of the camera's stills, 80 m from the hotel in OpenStreetMap (2026-10-13); the WebCOOS API asset location (36.3779, -75.8258) is 13.7 km north of the hotel"
     period: "one-minute stills 2022-01 to present (API token required)"
     references:
       - {station_id: "44056", network: CDIP, cdip_id: "433", role: primary}

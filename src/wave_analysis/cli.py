@@ -349,15 +349,26 @@ def _cmd_cdip_standardize(args: argparse.Namespace) -> int:
     raw = data_dir("raw") / "cdip"
     out_root = data_dir("processed") / "cdip"
     tag = f"{args.start or 'start'}_{args.end or 'end'}".replace(":", "")
+    if args.product == "realtime":
+        tag = f"realtime_{tag}"
     for st in args.stations:
         stn = station_code(st)
-        path = raw / stn / file_path(stn, "historic").rsplit("/", 1)[-1]
+        name = file_path(stn, args.product).rsplit("/", 1)[-1]
+        if args.product == "realtime":
+            # Snapshots are stamped with their retrieval time; the newest holds the most.
+            snapshots = sorted((raw / stn).glob(f"{name.removesuffix('.nc')}.*.nc"))
+            path = snapshots[-1] if snapshots else raw / stn / name
+        else:
+            path = raw / stn / name
         if not path.exists():
-            print(f"{stn}: {path} not found; run 'wave-analysis cdip download {stn}'")
+            print(
+                f"{stn}: {path} not found; run 'wave-analysis cdip download {stn} "
+                f"--products {args.product}'"
+            )
             return 1
         checksum = sha256_file(path)
         ds = src.parse(path, start=args.start, end=args.end)
-        url = file_url(file_path(stn, "historic"))
+        url = file_url(file_path(stn, args.product))
         obs = src.normalize(
             ds, station_id=stn, source_file=path.name, source_url=url, source_checksum=checksum
         )
@@ -385,7 +396,10 @@ def _cmd_cdip_standardize(args: argparse.Namespace) -> int:
                 artifact_id=f"cdip_standardized_{stn}_{tag}",
                 inputs=[path],
                 outputs=written,
-                config={"start": args.start, "end": args.end},
+                # "product" is recorded only for realtime, so that the records of
+                # earlier historic runs keep their configuration checksum.
+                config={"start": args.start, "end": args.end}
+                | ({"product": args.product} if args.product != "historic" else {}),
             ),
             out / f"provenance_{tag}.yaml",
         )
@@ -1097,8 +1111,15 @@ def build_parser() -> argparse.ArgumentParser:
     cdl.add_argument("--min-interval", type=float, default=1.0)
     cdl.add_argument("--timeout", type=float, default=120.0, help="per-request timeout [s]")
     cdl.set_defaults(func=_cmd_cdip_download)
-    cstd = cdip.add_parser("standardize", help="write standardized tables from the historic file")
+    cstd = cdip.add_parser("standardize", help="write standardized tables from a station's file")
     cstd.add_argument("stations", nargs="+")
+    cstd.add_argument(
+        "--product",
+        default="historic",
+        choices=["historic", "realtime"],
+        help="historic: all released records; realtime: the newest snapshot of the current "
+        "deployment (it also holds records flagged bad)",
+    )
     cstd.add_argument("--start", help="first sample start (UTC), e.g. 2009-01-01")
     cstd.add_argument("--end", help="end of the range (UTC, exclusive), e.g. 2014-01-01")
     cstd.set_defaults(func=_cmd_cdip_standardize)

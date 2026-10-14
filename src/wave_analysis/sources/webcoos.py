@@ -171,9 +171,15 @@ ONPREM_GROUPS: dict[str, str] = {
 
 #: Position of each camera, (latitude, longitude) in degrees: the asset
 #: location given by the WebCOOS API (read 2026-10-12). Used for the sun's
-#: elevation at capture time.
+#: elevation at capture time and for the distance to a reference buoy.
+#: ``currituck_hampton_inn`` is the exception: the API gives 36.3779, -75.8258
+#: (a street in Corolla village), 13.7 km north of the hotel. Its position
+#: here is the GPS position in the EXIF of its 2026 stills (36.25926,
+#: -75.78518), which is 80 m from the hotel in OpenStreetMap (checked
+#: 2026-10-13). For the other seven cameras the EXIF and the API agree within
+#: 0.5 km.
 ONPREM_POSITIONS: dict[str, tuple[float, float]] = {
-    "currituck_hampton_inn": (36.3779, -75.8258),
+    "currituck_hampton_inn": (36.2593, -75.7852),
     "currituck_sailfish": (36.3388, -75.8139),
     "jennette_north": (35.9123, -75.5965),
     "jennette_south": (35.9063, -75.5942),

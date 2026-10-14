@@ -13,13 +13,18 @@ views used in the literature, which those papers lacked.
 
 | Camera | Place | Stills (inventory, 2026-09-26) | Nearest wave buoy |
 |---|---|---|---|
-| `currituck_hampton_inn` | Corolla, NC (36.3779, −75.8258) | 2022-01-04 → present; 1.11 M, 692 GB | CDIP 433 / 44056, 22.2 km |
+| `currituck_hampton_inn` | Corolla, NC (36.2593, −75.7852; see below) | 2022-01-04 → present; 1.11 M, 692 GB | CDIP 433 / 44056, 9.2 km |
 | `jennette_north` | Jennette's Pier, Nags Head, NC (35.9123, −75.5965) | inventory timed out (HTTP 504); none in the last day | CDIP 243 / 44086, 18.6 km |
 | `jennette_south` | Jennette's Pier, Nags Head, NC (35.9063, −75.5942) | 2022-10-03 → 2026-09-16; 1.01 M, 634 GB | CDIP 243 / 44086, 18.6 km |
 | `oakisland_east` | Oak Island, NC (33.9126, −78.2243) | 2022-01-01 → present; 977 k, 295 GB | CDIP 200 / 41108, 28.9 km |
 | `oakisland_west` | Oak Island, NC (33.9126, −78.2243) | 2021-12-03 → present; 921 k, 289 GB | CDIP 200 / 41108, 28.9 km |
 
-Positions are from the API; distances from the camera-site registry.
+Positions are from the API; distances from the camera-site registry. The
+exception is `currituck_hampton_inn`: the API gives 36.3779, −75.8258, a
+street in Corolla village 13.7 km north of the hotel, which would put the buoy
+22.2 km away. Its position here is the GPS position in the EXIF of its stills,
+80 m from the hotel in OpenStreetMap
+([the camera](#the-camera-and-its-position)).
 `jennette_north` has had no stills since 2026-09-16 and is listed as archived;
 `jennette_south` resumed by 2026-10-08.
 
@@ -310,6 +315,228 @@ file (the 1 s wait, about 0.4 s for the server to answer and about 0.4 s per
 MB), and 2 to 8 minutes to list a month's day folders (4 on average). The
 collector host adds under 2 s a month, so the pace is set by the agreed wait
 and by the server, and the plan takes about two weeks, not ten days.
+
+## Pairing with a buoy: `currituck_hampton_inn` and CDIP 433 (2026-10-13)
+
+The first WebCOOS camera paired with a wave buoy. The method is the one used
+for Waimea Bay ([pairing](pacioos_beachcam.md#pairing-with-cdip-106-2026-09-27),
+[label rule](pacioos_beachcam.md#label-rule-decided-2026-10-01-adr-0010), ADR
+0010); this section records what is specific to this camera and what was
+checked. The numbers are those of the audit of 2026-10-14 01:46 UTC, made when
+the historical download of this camera had finished (58 months, 2022-01 to
+2026-10), and of the pairing run on it. They are also in
+`data/manifests/processed/webcoos_currituck_hampton_inn_cdip433.summary.json`.
+
+```bash
+uv run wave-analysis cdip download 433 --products historic realtime
+uv run wave-analysis cdip standardize 433 --start 2021-12-01     # archived deployments
+uv run wave-analysis cdip standardize 433 --product realtime     # the current deployment
+uv run python scripts/webcoos_extract.py currituck_hampton_inn   # integrity, image features
+uv run python scripts/webcoos_pairs.py currituck_hampton_inn     # pairs and labels
+```
+
+| Step | Reads | Writes |
+|---|---|---|
+| `cdip download` | CDIP THREDDS | `data/raw/cdip/433/` (bytes as served), ledger `data/manifests/raw/cdip.csv` |
+| `cdip standardize` | the raw files | `data/processed/cdip/433/` (bulk values, spectra, provenance) |
+| `webcoos_extract.py` | the stills and their ledgers | `data/interim/webcoos_audit/currituck_hampton_inn/` |
+| `webcoos_pairs.py` | the two above | `data/processed/pairs/webcoos_currituck_hampton_inn_cdip433/`; summary and provenance also in `data/manifests/processed/` |
+
+### What is kept, so that the original data can be used again
+
+- **The archive is only read.** No still and no CDIP file is changed, moved or
+  re-encoded. A sample points to its still by `local_path` and `sha256`.
+- **No image is dropped.** `samples.parquet` has one row per still on disk or
+  in a ledger, night frames included. A row without a label says why in
+  `exclusion`; filters (light, flags, wave height) are left to the experiment
+  that uses the table.
+- **The label rule can be changed afterwards.** `candidates.parquet` keeps
+  every buoy record centred within ±3 h of every still, with offsets, values,
+  flags and deployment. Another window, rule or lag is a call to
+  `processing.synchronize.label_from_candidates`, without reading an image or
+  a buoy file again. `samples.parquet` already carries the nearest-record and
+  interpolated values and a lagged label beside the label.
+- **The stills are a subset that can be extended.** The month listings in
+  `data/raw/webcoos/_listings/onprem/` name every still WebCOOS holds (about
+  one a minute) with its size. A denser or shifted grid is a rerun of
+  `webcoos historical` with another `--every` or `--offset`, which fetches only
+  what is missing; rerunning the two scripts then adds the rows.
+- **Every output names its inputs.** `provenance.yaml` holds the checksum of
+  each input and output file, the configuration, the commit and the software
+  versions; the pairing script refuses to run if its reference buoy differs
+  from the camera-site registry.
+
+### The camera and its position
+
+- **Position.** WebCOOS's API gives the asset location 36.3779, −75.8258: a
+  residential street in Corolla village. The stills fetched from S3 since
+  July 2026 carry EXIF with a GPS position, 36.25926, −75.78518, and the
+  comment "NOAA Currituck County, Hampton Inn (South)". OpenStreetMap has the
+  Hampton Inn & Suites Outer Banks/Corolla at 36.2591, −75.7860, 80 m from the
+  EXIF position and 13.7 km from the API's. The EXIF position is used
+  (`ONPREM_POSITIONS`, `camera_sites.yaml`). For the other seven cameras of the
+  historical download the EXIF and the API agree within 0.5 km.
+- **Effect on the night filter.** The sun's elevation at the two positions
+  differs by at most 0.12°. Of the 1,118,919 stills listed for the camera in
+  its 57 complete months, 36 fall on the other side of −6°, so a rerun of the
+  download may fetch a few more frames at dawn or dusk.
+- **Frames.** 2688 × 1520 RGB, a fisheye view of the beach, the surf zone and
+  the sea to the horizon, with the hotel's beach stairs at the bottom right.
+  The only overlay is the fixed text "Hampton Inn" at the bottom left: no time
+  stamp, so nothing in the picture gives the date away. Stills from the
+  on-premise archive have no EXIF; those from S3 have the position and site
+  name above, and no time.
+- **Seen while checking, not yet handled:** people on the beach are visible in
+  summer frames (a point for any release of images), and in some periods part
+  of the lens is fouled or fogged.
+
+### The buoy
+
+CDIP 433 is the Datawell Waverider "Duck FRF 17 m" (NDBC 44056), operated by
+the USACE Field Research Facility: 36.1997 N, 75.7146 W in 18 m of water,
+**9.15 km from the camera** on a bearing of 316° from the buoy (the buoy lies
+south-east of the camera, further along the same coast). The files'
+acknowledgement reads "CDIP is primarily supported by the U.S. Army Corps of
+Engineers (USACE). Field operator: FRF/USACE".
+
+- **Two files.** `433p1_historic.nc` holds the archived deployments,
+  2013-05-09 to 2025-07-25 (1600-s samples every 30 min, 64 frequency bands).
+  The current deployment, from 2025-07-25 14:00, exists only in the realtime
+  file: a Datawell DWR-M4 with **1800-s samples** and 100 bands up to 1.0 Hz.
+  The pairing uses each record's own start and end, so the two sample lengths
+  need no special case.
+- **The realtime file has another layout** (one position, no deployment list,
+  transmissions as source files), which `CDIPSource.normalize` now reads. Its
+  records are named `433p1_rt20250725`, after the deployment's start date,
+  until CDIP archives the deployment under a number. A record present in both
+  files is taken from the historic file.
+- **Flags.** The realtime file also holds records flagged bad. Only records
+  with primary flag 1 are used: one record (flag 4, `incomplete_spectrum`) is
+  left out. Two good records carry secondary flag 17,
+  `max_energy_at_highest_freq`.
+- **Records since 2022-01-03:** 78,909, every 30 min. Gaps of more than three
+  days: 2022-01-17 to 02-11 (25 days), 2022-02-22 to 03-16 (22), 2022-04-29 to
+  05-04 (5), 2022-07-19 to 08-05 (17), 2023-12-17 to 2024-01-02 (16) and
+  2026-03-12 to 03-26 (14).
+- **Consistency.** CDIP's H_s matches the H_m0 recomputed from the spectrum
+  within 1.9 cm on every record (median 0.25 cm). Consecutive records differ
+  by a median 3.5 % of H_s (90 %: 9 %), which puts the sampling noise of one
+  record at σ ≤ 3.7 %, as at Waimea (4 %).
+
+### Capture time
+
+The capture time is the one in the file name, in UTC to the second (it equals
+the API's capture time for all 43,999 stills the hourly collector listed up to
+2026-10-09). The picture offers no second source, so the time is checked
+against the light:
+
+- **Night mode follows the sun.** In the dark the camera switches to a
+  monochrome mode (colour saturation exactly zero). Of the 418 monochrome
+  frames, all but one (below) were taken with the sun under the horizon: 391
+  at night, 21 in nautical twilight and 5 in civil twilight. Of the 39,894
+  colour frames, none was taken with the sun more than 8.7° below the horizon.
+  Read as US Eastern time instead of UTC, 10,958 colour frames would have the
+  sun more than 12° below the horizon and 139 monochrome frames would be in
+  daylight. The names are UTC.
+- **Dawn and dusk agree.** On the 25 days that have night-mode frames (21 of
+  them in January 2022, fetched before the night filter was added) the switch
+  happens with the sun between −5.8° and −8.7° at dawn
+  and between −5.9° and −8.1° at dusk. A clock that is off moves the two bands
+  apart by about 0.4° per minute, so an error of 10 min would separate them by
+  4°. They coincide within 1°: the file-name time is right to a few minutes.
+- **One frame contradicts its time:** `…-2022-02-11-130056Z.jpg` is a night
+  picture (stars, the stair lights on) stamped 13:00 UTC, with the sun 11.5°
+  up. It is marked `time_contradicts_light`. The rule (monochrome with the sun
+  above −3°, or colour with the sun below −12°) cannot catch a stale daylight
+  frame published at another daylight time.
+- **No repeated frames.** No two files have the same SHA-256, and consecutive
+  daytime stills always differ (mean absolute difference of the 96 × 54
+  thumbnails at least 1.0 grey levels), so the stream was never frozen across
+  two grid times.
+- **Dates.** The white-pixel index that confirmed the dates at Waimea does not
+  work for this view (Spearman −0.03 with H_s): glare, cloud reflections, haze
+  and a fouled lens whiten the sea as much as foam does. The dates rest on the
+  file names and on a look at the extremes: the highest label (4.68 m,
+  2025-10-28 16:59 UTC) is a storm with foam across the whole view and water at
+  the stairs; the lowest (0.22 m, 2026-08-12) is a flat summer sea.
+
+### Pairs and labels
+
+| Stills | Count |
+|---|---:|
+| On disk, each matching its ledger SHA-256 | 40,313 (2022-01-04 to 2026-10-13) |
+| Paired: two good records centred within 30 min (15 with one) | 38,361 on 1,609 days |
+| `no_buoy_within_30min` (the buoy gaps above) | 1,950 |
+| `image_unreadable` (`…-2025-09-22-172959Z.jpg` is empty at WebCOOS) | 1 |
+| `time_contradicts_light` | 1 |
+
+By year: 6,499 (2022), 8,485 (2023), 8,976 (2024), 8,355 (2025) and 6,046
+(2026, to 13 October). By light: 33,951 day, 3,204 low sun, 1,113 civil
+twilight and 93 darker (from the night frames of January 2022).
+
+**Timing.** The stills are the ones nearest each half hour (half of them
+within 16 s of it, all within 5 min) and CDIP's samples start on the half
+hour, so a still sits at the boundary between two records: the one that ended
+just before it and the one starting with it. The nearest record centre is a
+median 13.4 min away (99 %: 15.0; 26 min for one still beside a buoy gap), and
+64 % of stills fall inside that record's sample. The window mean of ADR 0010
+therefore averages the record before and the record after the still: 53 min
+of buoy data around it with 1600-s samples, 60 min with the 1800-s samples of
+the current deployment.
+
+**Travel time.** The buoy is not offshore of the camera but 9 km along the
+coast, so waves do not travel from one to the other; what matters is the part
+of that distance along the wave direction. Two estimates are stored per
+record, both at the peak period:
+
+- `propagation_lag_deep_s`: distance over the deep-water group velocity, the
+  Waimea estimate. Here it is an upper bound: median 23 min.
+- `propagation_lag_directional_s`: the distance projected on the direction the
+  peak waves travel in (D_p + 180°), over the group velocity in 18 m of water.
+  Positive when the waves pass the buoy first. Median +10 min; 10 % to 90 %:
+  −7 to +22 min; larger than the sample for 7 % of stills. Refraction turns
+  the waves towards the shore between the buoy and the beach, so this is an
+  order of magnitude, not a correction to the minute.
+
+**No lag is applied** (ADR 0010, point 3). Applying the directional lag moves
+the label by a median 0.00 m, 0.025 m at the 90th percentile (3 %) and 0.09 m
+at the 99th: less than the noise of one record. `Hs_label_lagged_m` keeps the
+lagged value for sensitivity tests.
+
+**Label noise.** The two records of a label differ by a median 3.6 % of H_s
+(90 %: 9 %). The window mean differs from the nearest record by a median
+1.5 cm (99 %: 11.5 cm), and the records within ±1 h spread by a median 0.07 m
+(8 %).
+
+**Label range.** H_s runs from 0.33 to 3.1 m (1st to 99th percentile), median
+0.81 m, maximum 4.68 m. T_p runs from 3.3 to 15.4 s, median 8.3 s; waves come
+mostly from the east (D_p 65° to 106° for the middle half).
+
+| H_s | < 0.5 m | 0.5–1 | 1–1.5 | 1.5–2 | 2–3 | 3–4 | ≥ 4 m |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Stills | 5,388 | 19,096 | 7,937 | 3,475 | 2,051 | 352 | 62 |
+
+2,465 stills are at 2 m or more, on 173 days, and 414 at 3 m or more, on 35
+days. As at Waimea, results at high sea states rest on few independent events,
+so splits and confidence intervals must be by day or event. T_p or D_p differ
+between the two records of the window by 3 s or 60° for 2,837 stills (7.4 %,
+`peak_records_disagree`; 5.7 % at Waimea): wind sea and swell often carry
+similar energy here.
+
+### What the label is, and what is still open
+
+- **The label is H_s at the buoy,** in 18 m of water 9 km down the coast, not
+  the wave height in the camera's surf zone. How well the two agree is not
+  measured yet. CDIP 430 (NDBC 44100, Duck FRF 26 m) lies 17.2 km due east of
+  the camera; pairing it as a second reference would measure the disagreement
+  between two buoys on either side of the view (gap G-10), and fill the gaps
+  of 433.
+- **Stale daylight frames** cannot be detected yet (see capture time).
+- **Lens fouling and people on the beach** are not flagged yet.
+- **The other cameras.** `scripts/webcoos_pairs.py` takes a camera listed in
+  its `PAIRINGS` table (site, CDIP station, depth at the buoy, time zone);
+  each camera needs its own look at the position, the frames and the buoy
+  files before it is added.
 
 ## Video archive (pilot, not yet collected)
 

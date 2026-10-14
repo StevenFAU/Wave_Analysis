@@ -87,7 +87,28 @@ uv run wave-analysis cdip discover 106                    # archive files and si
 uv run wave-analysis cdip download 106                    # historic file -> data/raw/cdip/106/
 uv run wave-analysis cdip download 106 --products deployment --deployments 9-13   # with displacement
 uv run wave-analysis cdip standardize 106 --start 2009-01-01 --end 2014-01-01
+uv run wave-analysis cdip download 433 --products historic realtime   # also the current deployment
+uv run wave-analysis cdip standardize 433 --product realtime          # newest realtime snapshot
 ```
+
+**Realtime files (verified on `433p1_rt.nc`, 2026-10-13).** The current
+deployment is not in the historic file until CDIP archives it: 433's historic
+file ends on 2025-07-25 and everything since is in the realtime file. That
+file differs from the historic one:
+
+- one deployment position (`metaDeployLatitude` is a single value) and no
+  `metaDeployCount`; `sourceFilename` lists the buoy's transmissions, and
+  `waveSourceIndex` points to them;
+- it holds records flagged bad (the historic file leaves them out), so filter
+  on `source_qc_flag`;
+- the sample length is the buoy's: 433's Datawell DWR-M4 reports 1800-s
+  samples in 100 bands up to 1.0 Hz, where the archived deployments have
+  1600-s samples in 64 bands. `waveTime` is the sample start in both.
+
+Realtime records are standardized under a deployment named after the start
+date in the file's `id` attribute (`433p1_rt20250725`), and the output files
+carry `realtime` in their names. Each download of a realtime file is a new
+snapshot, stamped with its retrieval time; `standardize` reads the newest.
 
 Downloads are recorded in `data/manifests/raw/cdip.csv` (committed). A
 re-download reports `unchanged` or `changed` against the previous checksum:

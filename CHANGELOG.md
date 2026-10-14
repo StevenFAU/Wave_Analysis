@@ -7,7 +7,27 @@ separately (`docs/REPRODUCIBILITY.md`).
 
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
+### Added (2026-10-13)
+- First WebCOOS camera paired with a wave buoy: `currituck_hampton_inn` with
+  CDIP 433 (Duck FRF 17 m, 9.15 km away). `scripts/webcoos_extract.py` checks
+  every still against its ledger and extracts brightness, colour saturation
+  and thumbnails; `scripts/webcoos_pairs.py` keeps every buoy record within
+  ±3 h of every still and adds the ADR 0010 labels: 38,361 of 40,313 stills
+  are labelled, on 1,609 days. No still is dropped and the archive is only
+  read. Method, checks and results: `docs/datasets/webcoos.md`.
+- `cdip standardize --product realtime` and support for the layout of CDIP's
+  realtime files (one deployment position, transmissions as source files),
+  which hold the current deployment until it is archived. Their records are
+  named after the deployment's start date, e.g. `433p1_rt20250725`.
+
 ### Fixed
+- The position of the camera `currituck_hampton_inn` was the WebCOOS API's
+  asset location (36.3779, −75.8258), which is 13.7 km north of the hotel. It
+  is now the GPS position in the EXIF of the camera's stills (36.2593,
+  −75.7852), 80 m from the hotel in OpenStreetMap. The reference buoy is
+  9.2 km away, not 22.2 km. For the night filter of the historical download
+  the sun's elevation changes by at most 0.12° (36 of 1,118,919 listed stills
+  change sides of −6°).
 - The offsite exchange failed whenever a collector was writing its ledger
   during the upload: rclone rejects a file that changes in transit. The
   WebCOOS historical download adds a row every two seconds, so the exchange of
