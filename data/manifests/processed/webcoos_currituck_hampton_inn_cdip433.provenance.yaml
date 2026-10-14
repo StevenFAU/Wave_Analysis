@@ -1,0 +1,63 @@
+artifact_id: webcoos_currituck_hampton_inn_cdip433
+created_at: '2026-10-14T11:27:02.777209Z'
+git:
+  commit: 8af414c54726e63ed6b7bdb35eddc1ba7e3dd9ad
+  branch: main
+  dirty: false
+pipeline:
+  command: python scripts/webcoos_pairs.py currituck_hampton_inn
+  config:
+    camera: currituck_hampton_inn
+    site_id: webcoos_currituck
+    cdip: '433'
+    reference_depth_m: 18.0
+    timezone: America/New_York
+    camera_latitude: 36.2593
+    camera_longitude: -75.7852
+    window: 3h
+    nearest_max: 30min
+    interp_max_gap: 40min
+    range_window: 1h
+    label_rule: window_mean
+    label_window: 30min
+    peak_label_rule: nearest
+    peak_disagree_tp_s: 3.0
+    peak_disagree_dp_deg: 60.0
+    good_primary_flag: '1'
+    monochrome_max_saturation: 0.01
+    monochrome_max_sun_deg: -3.0
+    colour_min_sun_deg: -12.0
+  config_sha256: 49d00b4389ad29a01b89537c434f81e4f0354b8b84aa8b322db5de79a238d1af
+software:
+  python: 3.12.13
+  platform: Linux-7.0.0-38-generic-x86_64-with-glibc2.43
+  wave_analysis: 0.1.0.dev0
+  packages:
+    numpy: 2.5.3
+    pandas: 3.0.6
+    scipy: 1.18.1
+    pyarrow: 25.0.1
+    pydantic: 2.13.5
+    httpx: 0.28.1
+    torch: 2.14.0+cpu
+    xarray: 2026.7.0
+input_files:
+- path: data/interim/webcoos_audit/currituck_hampton_inn/images.parquet
+  sha256: 357e683e1c4a78ffdcd0a96a1dc6ffe8ae98e0d4527479b60b9f322383ce90ba
+- path: data/processed/cdip/433/bulk_2021-12-01_end.parquet
+  sha256: bd12cfa1f8598a605a877807db400624b235ea409d4d151cf79d56bf631173cd
+- path: data/processed/cdip/433/bulk_realtime_start_end.parquet
+  sha256: 25269ba377b9307ae70632eb5375f4dd1c67949401eaad6da427510ba1630af8
+- path: data/processed/cdip/433/spectral_bulk_2021-12-01_end.parquet
+  sha256: b8d45c7c3b77cea0545f775062478bf137474046ee96207545e0644c3adb3d54
+- path: data/processed/cdip/433/spectral_bulk_realtime_start_end.parquet
+  sha256: 33c701798be35945bf9e6d303201df9e3617695a4df325fc877198df78549a5b
+upstream_manifests: []
+output_files:
+- path: data/processed/pairs/webcoos_currituck_hampton_inn_cdip433/samples.parquet
+  sha256: 2e15e9850983173f3b9b43b068427a3724d4d3ac33a2c4f8b5a987896f2a6c4b
+- path: data/processed/pairs/webcoos_currituck_hampton_inn_cdip433/candidates.parquet
+  sha256: a42bc38099dcb5e69db31107274446a0f6b80edd4e2fd077ef6d1d3ca4e86b15
+- path: data/processed/pairs/webcoos_currituck_hampton_inn_cdip433/summary.json
+  sha256: a8554da45b6b72a8495d161ef111341e2a10d158ade92151caaf1effccbc6829
+notes: Labels by ADR 0010 (Hs window mean; Tp, Dp nearest record); see docs/datasets/webcoos.md.

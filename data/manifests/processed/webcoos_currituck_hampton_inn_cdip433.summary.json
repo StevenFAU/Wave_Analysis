@@ -1,0 +1,361 @@
+{
+ "config": {
+  "camera": "currituck_hampton_inn",
+  "site_id": "webcoos_currituck",
+  "cdip": "433",
+  "reference_depth_m": 18.0,
+  "timezone": "America/New_York",
+  "camera_latitude": 36.2593,
+  "camera_longitude": -75.7852,
+  "window": "3h",
+  "nearest_max": "30min",
+  "interp_max_gap": "40min",
+  "range_window": "1h",
+  "label_rule": "window_mean",
+  "label_window": "30min",
+  "peak_label_rule": "nearest",
+  "peak_disagree_tp_s": 3.0,
+  "peak_disagree_dp_deg": 60.0,
+  "good_primary_flag": "1",
+  "monochrome_max_saturation": 0.01,
+  "monochrome_max_sun_deg": -3.0,
+  "colour_min_sun_deg": -12.0
+ },
+ "cdip": {
+  "station": "433",
+  "files": [
+   "bulk_2021-12-01_end.parquet",
+   "bulk_realtime_start_end.parquet",
+   "spectral_bulk_2021-12-01_end.parquet",
+   "spectral_bulk_realtime_start_end.parquet"
+  ],
+  "records_from": "2022-01-03 23:00:02+00:00",
+  "records": 78909,
+  "records_not_good_left_out": 1,
+  "source_qc_flag": {
+   "1/0": 78906,
+   "1/17": 2,
+   "4/13": 1
+  },
+  "sample_seconds": {
+   "1600": 58217,
+   "1800": 20691
+  },
+  "record_spacing_s_top": {
+   "1800": 78893,
+   "3600": 5,
+   "2205000": 1
+  },
+  "gaps_over_1h": 8,
+  "gaps_over_3d": [
+   {
+    "from": "2022-01-17 02:30:00+00:00",
+    "to": "2022-02-11 15:00:00+00:00",
+    "days": 25.5
+   },
+   {
+    "from": "2022-02-22 07:30:00+00:00",
+    "to": "2022-03-16 16:00:00+00:00",
+    "days": 22.4
+   },
+   {
+    "from": "2022-04-29 22:30:00+00:00",
+    "to": "2022-05-04 18:00:00+00:00",
+    "days": 4.8
+   },
+   {
+    "from": "2022-07-19 07:30:00+00:00",
+    "to": "2022-08-05 16:00:00+00:00",
+    "days": 17.4
+   },
+   {
+    "from": "2023-12-17 23:30:00+00:00",
+    "to": "2024-01-02 13:00:00+00:00",
+    "days": 15.6
+   },
+   {
+    "from": "2026-03-12 09:30:00+00:00",
+    "to": "2026-03-26 15:41:00+00:00",
+    "days": 14.3
+   }
+  ],
+  "abs_Hs_minus_Hm0_m_quantiles": {
+   "0.5": 0.0025,
+   "0.9": 0.0047,
+   "0.99": 0.0073,
+   "1": 0.0187
+  },
+  "consecutive_relative_dHs_quantiles": {
+   "0.5": 0.035,
+   "0.9": 0.09,
+   "0.99": 0.163
+  },
+  "record_noise_relative_sigma_at_most": 0.037,
+  "deployments": {
+   "433p1_d08": {
+    "first": "2022-01-03 23:30:00+00:00",
+    "last": "2022-01-17 02:30:00+00:00",
+    "records": 631,
+    "sample_s": 1600.0,
+    "latitude": 36.199699,
+    "longitude": -75.7146,
+    "distance_to_camera_m": 9166,
+    "bearing_to_camera_deg": 316.3
+   },
+   "433p1_d09": {
+    "first": "2022-02-11 15:00:00+00:00",
+    "last": "2022-02-22 07:30:00+00:00",
+    "records": 514,
+    "sample_s": 1600.0,
+    "latitude": 36.19965,
+    "longitude": -75.714981,
+    "distance_to_camera_m": 9147,
+    "bearing_to_camera_deg": 316.5
+   },
+   "433p1_d10": {
+    "first": "2022-03-16 16:00:00+00:00",
+    "last": "2022-04-29 22:30:00+00:00",
+    "records": 2126,
+    "sample_s": 1600.0,
+    "latitude": 36.19965,
+    "longitude": -75.714981,
+    "distance_to_camera_m": 9147,
+    "bearing_to_camera_deg": 316.5
+   },
+   "433p1_d11": {
+    "first": "2022-05-04 18:00:00+00:00",
+    "last": "2022-07-19 07:30:00+00:00",
+    "records": 3628,
+    "sample_s": 1600.0,
+    "latitude": 36.19965,
+    "longitude": -75.714981,
+    "distance_to_camera_m": 9147,
+    "bearing_to_camera_deg": 316.5
+   },
+   "433p1_d12": {
+    "first": "2022-08-05 16:00:00+00:00",
+    "last": "2023-10-11 13:30:00+00:00",
+    "records": 20732,
+    "sample_s": 1600.0,
+    "latitude": 36.19965,
+    "longitude": -75.714981,
+    "distance_to_camera_m": 9147,
+    "bearing_to_camera_deg": 316.5
+   },
+   "433p1_d13": {
+    "first": "2023-10-11 17:00:00+00:00",
+    "last": "2025-07-25 11:30:00+00:00",
+    "records": 30586,
+    "sample_s": 1600.0,
+    "latitude": 36.19965,
+    "longitude": -75.714981,
+    "distance_to_camera_m": 9147,
+    "bearing_to_camera_deg": 316.5
+   },
+   "433p1_rt20250725": {
+    "first": "2025-07-25 14:00:00+00:00",
+    "last": "2026-10-13 22:00:00+00:00",
+    "records": 20691,
+    "sample_s": 1800.0,
+    "latitude": 36.199684,
+    "longitude": -75.714302,
+    "distance_to_camera_m": 9186,
+    "bearing_to_camera_deg": 316.2
+   }
+  }
+ },
+ "images": {
+  "indexed": 40313,
+  "on_disk": 40313,
+  "first": "2022-01-04 02:00:02+00:00",
+  "last": "2026-10-13 22:29:42+00:00",
+  "decoded": 40312,
+  "sha256_matches_ledger": {
+   "yes": 40313
+  },
+  "by_ledger": {
+   "currituck_hampton_inn.otacon.csv": 38082,
+   "currituck_hampton_inn.csv": 2231
+  },
+  "frame_sizes": {
+   "2688x1520": 40312
+  },
+  "with_exif": 3274,
+  "exclusion": {
+   "paired": 38361,
+   "no_buoy_within_30min": 1950,
+   "time_contradicts_light": 1,
+   "image_unreadable": 1
+  },
+  "paired_by_year": {
+   "2022": 6499,
+   "2023": 8485,
+   "2024": 8976,
+   "2025": 8355,
+   "2026": 6046
+  },
+  "paired_days": 1609,
+  "paired_by_illumination": {
+   "day": 33951,
+   "low_sun": 3204,
+   "civil_twilight": 1113,
+   "night": 79,
+   "nautical_twilight": 14
+  }
+ },
+ "capture_time_check": {
+  "monochrome_frames": 418,
+  "monochrome_by_illumination": {
+   "night": 391,
+   "nautical_twilight": 21,
+   "civil_twilight": 5,
+   "day": 1
+  },
+  "monochrome_sun_elevation_deg_max": 11.5,
+  "colour_frames": 39894,
+  "colour_by_illumination": {
+   "day": 35344,
+   "low_sun": 3332,
+   "civil_twilight": 1199,
+   "nautical_twilight": 19
+  },
+  "colour_sun_elevation_deg_min": -8.7,
+  "colour_frames_with_sun_below_minus_6": 19,
+  "monochrome_frames_with_sun_above_0": 1,
+  "time_contradicts_light": [
+   "currituck_hampton_inn-2022-02-11-130056Z.jpg"
+  ],
+  "switch_band_sun_elevation_deg": {
+   "dawn": {
+    "frames": 47,
+    "highest_monochrome": -5.82,
+    "lowest_colour": -8.7
+   },
+   "dusk": {
+    "frames": 59,
+    "highest_monochrome": -5.89,
+    "lowest_colour": -8.12
+   }
+  }
+ },
+ "timing": {
+  "nearest_centre_offset_min_quantiles": {
+   "0.5": 13.4,
+   "0.9": 14.8,
+   "0.99": 15.0
+  },
+  "nearest_centre_offset_min_max": 26.4,
+  "image_inside_nearest_sample_fraction": 0.636,
+  "n_records_30min": {
+   "1": 15,
+   "2": 38346
+  },
+  "propagation_lag_deep_min_quantiles": {
+   "0.5": 23.4,
+   "0.9": 37.3,
+   "0.99": 59.8
+  },
+  "propagation_lag_directional_min_quantiles": {
+   "0.01": -32.9,
+   "0.1": -7.3,
+   "0.5": 10.4,
+   "0.9": 22.1,
+   "0.99": 43.5
+  },
+  "propagation_lag_directional_abs_min_quantiles": {
+   "0.5": 11.9,
+   "0.9": 24.1,
+   "0.99": 46.7
+  },
+  "directional_lag_over_sample_length_fraction": 0.071
+ },
+ "label_sensitivity": {
+  "Hs_range_1h_m_quantiles": {
+   "0.5": 0.07,
+   "0.9": 0.18,
+   "0.99": 0.4
+  },
+  "Hs_range_1h_relative_quantiles": {
+   "0.5": 0.082,
+   "0.9": 0.157,
+   "0.99": 0.313
+  },
+  "abs_nearest_minus_interp_m_quantiles": {
+   "0.5": 0.013,
+   "0.9": 0.044,
+   "0.99": 0.103
+  },
+  "interp_available_fraction": 1.0,
+  "abs_label_minus_lagged_label_m_quantiles": {
+   "0.5": 0.0,
+   "0.9": 0.025,
+   "0.99": 0.09
+  },
+  "abs_label_minus_lagged_label_relative_quantiles": {
+   "0.5": 0.0,
+   "0.9": 0.033,
+   "0.99": 0.094
+  },
+  "lagged_label_available_fraction": 0.998
+ },
+ "label": {
+  "rule": "window_mean",
+  "window": "30min",
+  "n_label_records": {
+   "1": 15,
+   "2": 38346
+  },
+  "abs_label_minus_nearest_m_quantiles": {
+   "0.5": 0.015,
+   "0.9": 0.05,
+   "0.99": 0.115
+  },
+  "label_spread_relative_quantiles": {
+   "0.5": 0.036,
+   "0.9": 0.091,
+   "0.99": 0.164
+  },
+  "peak_rule": "nearest",
+  "peak_disagree_by_Tp": 2769,
+  "peak_disagree_by_Dp": 561,
+  "peak_records_disagree": 2837
+ },
+ "labels": {
+  "Hs_m_quantiles": {
+   "0.01": 0.33,
+   "0.5": 0.81,
+   "0.99": 3.06
+  },
+  "Hs_m_max": 4.68,
+  "Hs_m_counts": {
+   "<0.5": 5388,
+   "0.5-1": 19096,
+   "1-1.5": 7937,
+   "1.5-2": 3475,
+   "2-3": 2051,
+   "3-4": 352,
+   ">=4": 62
+  },
+  "days_with_Hs_ge_2m": 173,
+  "days_with_Hs_ge_3m": 35,
+  "Tp_s_quantiles": {
+   "0.01": 3.3,
+   "0.5": 8.3,
+   "0.99": 15.4
+  },
+  "by_deployment": {
+   "433p1_d08": 158,
+   "433p1_d09": 57,
+   "433p1_d10": 1180,
+   "433p1_d11": 2025,
+   "433p1_d12": 10137,
+   "433p1_d13": 15280,
+   "433p1_rt20250725": 9524
+  },
+  "source_qc_flag": {
+   "1/0": 38360,
+   "1/17": 1
+  },
+  "monochrome": 91
+ }
+}
