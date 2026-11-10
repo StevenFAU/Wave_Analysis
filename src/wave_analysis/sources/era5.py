@@ -48,6 +48,7 @@ import pandas as pd
 
 from wave_analysis import __version__
 from wave_analysis.ingest.checksum import sha256_file
+from wave_analysis.ingest.durable import atomic_open, fsync_dir, fsync_file
 from wave_analysis.ingest.manifest import EntryStatus, ManifestEntry, utcnow
 from wave_analysis.processing.geospatial import haversine_m
 from wave_analysis.qc import qartod
@@ -507,11 +508,15 @@ class ERA5WaveSource(DataSource):
             )
         sha = sha256_file(tmp)
         size = tmp.stat().st_size
+        with tmp.open("rb+") as fh:  # the CDS client wrote it; make it durable before the rename
+            fsync_file(fh)
         os.replace(tmp, path)
-        path.with_suffix(".request.json").write_text(
-            json.dumps({"dataset": CDS_DATASET, "request": request, "sha256": digest}, indent=1)
-            + "\n"
-        )
+        fsync_dir(path.parent)
+        with atomic_open(path.with_suffix(".request.json"), "w") as fh:
+            fh.write(
+                json.dumps({"dataset": CDS_DATASET, "request": request, "sha256": digest}, indent=1)
+                + "\n"
+            )
         new_state = month_status(path, period)
         if previous is None:
             status = EntryStatus.VERIFIED

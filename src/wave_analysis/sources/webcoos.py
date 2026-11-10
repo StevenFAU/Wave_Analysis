@@ -74,6 +74,7 @@ import pandas as pd
 from wave_analysis.ingest import archive
 from wave_analysis.ingest.archive import ArchiveItem, ArchiveSummary, Sink
 from wave_analysis.ingest.downloader import USER_AGENT, Downloader
+from wave_analysis.ingest.durable import atomic_open
 from wave_analysis.processing.solar import solar_position
 
 DATASET_ID = "webcoos"
@@ -597,8 +598,8 @@ def write_listing(selected: pd.DataFrame, dest_root: Path, camera: str) -> Path:
     """Save the selected elements (the run's index) under ``_listings/``."""
     stamp = pd.Timestamp.now(tz="UTC").strftime("%Y%m%dT%H%M%SZ")
     path = dest_root / LISTINGS_DIR / f"{camera}_{stamp}.csv"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    selected.to_csv(path, index=False)
+    with atomic_open(path, "w", newline="") as fh:
+        selected.to_csv(fh, index=False)
     return path
 
 
@@ -606,7 +607,9 @@ def on_disk(selected: pd.DataFrame, dest_root: Path) -> pd.Series:
     """Whether each selected still is already archived: same file name and size.
 
     Stills fetched from S3 by the hourly collector, or by another host and
-    exchanged, are the same files as in the on-premise archive.
+    exchanged, are the same files as in the on-premise archive. Where the
+    listing gives no size, an empty file does not count (what a power cut can
+    leave of a still whose data never reached the disk).
     """
     have = []
     for cam, name, t, size in zip(
@@ -617,7 +620,12 @@ def on_disk(selected: pd.DataFrame, dest_root: Path) -> pd.Series:
         strict=True,
     ):
         p = local_path(dest_root, str(cam), str(name), t)
-        have.append(p.exists() and (pd.isna(size) or p.stat().st_size == int(size)))
+        try:
+            have_size = p.stat().st_size
+        except FileNotFoundError:
+            have.append(False)
+            continue
+        have.append(have_size > 0 if pd.isna(size) else have_size == int(size))
     return pd.Series(have, index=selected.index, dtype=bool)
 
 
@@ -802,10 +810,8 @@ def read_month_index(path: Path) -> pd.DataFrame:
 
 def write_month_index(stills: pd.DataFrame, path: Path, listed_at: pd.Timestamp) -> None:
     """Save a closed month's listing, written once (atomically) and never changed."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".partial-{path.name}")
-    stills.drop(columns="element_id").assign(listed_at=_iso(listed_at)).to_csv(tmp, index=False)
-    os.replace(tmp, path)
+    with atomic_open(path, "w", newline="") as fh:
+        stills.drop(columns="element_id").assign(listed_at=_iso(listed_at)).to_csv(fh, index=False)
 
 
 def in_daylight(

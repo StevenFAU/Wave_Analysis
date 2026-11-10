@@ -34,7 +34,7 @@ a configuration file.
 | Package | Responsibility | Key objects |
 |---|---|---|
 | `sources` | Provider adapters implementing the five-stage interface | `DataSource`, `NDBCSource`, `ndbc.run_inventory`, `ndbc.buoycam` |
-| `ingest` | Polite, atomic, checksummed downloads; CSV manifests | `Downloader`, `ManifestEntry` |
+| `ingest` | Polite, atomic, durable, checksummed downloads; CSV manifests; archive checks against the manifests and repair of the offsite copy | `Downloader`, `ManifestEntry`, `verify_archive`, `repair` |
 | `schemas` | Typed contracts (pydantic + frame validators) | `Observation`, `ImageRecord`, `MultimodalSample`, `VARIABLES` |
 | `physics` | Linear wave theory, zero-crossing analysis, parametric spectra, simulation | `wavenumber`, `zero_crossing_analysis`, `jonswap`, `simulate_surface_elevation` |
 | `processing` | Spectral analysis, synchronisation, geodesy, solar geometry | `FrequencySpectrum`, `bulk_parameters`, `directional_distribution`, `pair_nearest`, `pair_window`, `label_from_candidates` |
@@ -43,7 +43,7 @@ a configuration file.
 | `evaluation` | Regression, circular, ordinal classification, agreement, uncertainty, strata | `regression_report`, `circular_report`, `block_bootstrap_ci` |
 | `models` | Statistical baselines; optional torch reference architectures and physics losses | `ClimatologyBaseline`, `Choi2020Regressor`, `Yang2026Fusion`, `losses` |
 | `registry` | Schema + validation of `data/registry/datasets.yaml` | `DatasetEntry`, `validate_registry` |
-| `cli` | `wave-analysis` command | `ndbc inventory/download/standardize/cameras`, `registry validate` |
+| `cli` | `wave-analysis` command | `ndbc inventory/download/standardize/cameras`, `archive verify/compare-remote/repair`, `registry validate` |
 
 ## Design decisions
 

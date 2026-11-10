@@ -4,9 +4,12 @@ Guarantees
 ----------
 * **Bytes are stored exactly as served** (no decompression, no re-encoding).
   ``.txt.gz`` files stay gzipped; parsing happens in a later stage.
-* **Atomic writes** - data land in a temporary file and are renamed only after
-  the checksum is computed, so an interrupted run never leaves a truncated
-  file that looks valid.
+* **Atomic, durable writes** - data land in a temporary file, are synced to
+  disk, and are renamed only after the checksum is computed; the directory is
+  synced after the rename. An interrupted run never leaves a truncated file
+  that looks valid, and a power cut cannot leave a renamed file whose data
+  never reached the disk (an empty or NUL-filled file with a valid name, as
+  on 2026-11-03; see :mod:`wave_analysis.ingest.durable`).
 * **Every attempt is recorded** in the manifest, including HTTP 404s, so that
   *absence* of a product for a station/period is documented evidence rather
   than an unrecorded assumption.
@@ -29,6 +32,7 @@ from pathlib import Path
 import httpx
 
 from wave_analysis import __version__
+from wave_analysis.ingest.durable import fsync_dir, fsync_file
 from wave_analysis.ingest.manifest import EntryStatus, ManifestEntry, utcnow
 
 USER_AGENT = f"wave-analysis/{__version__} (research data pipeline; +https://github.com/StevenFAU/Wave_Analysis)"
@@ -159,6 +163,7 @@ class Downloader:
                                         time.sleep(ahead)
                             if gz is not None:
                                 gz.close()
+                            fsync_file(fh)
                         return resp, tmp, digest.hexdigest(), size
                     if resp.status_code not in _RETRY_STATUS:
                         return resp, None, None, 0
@@ -237,6 +242,7 @@ class Downloader:
         except BaseException:
             tmp.unlink(missing_ok=True)
             raise
+        fsync_dir(dest.parent)
         if previous_sha256 is None:
             status = EntryStatus.VERIFIED
         elif previous_sha256 == digest:

@@ -145,7 +145,13 @@ Three tiers, following the 3-2-1 rule (three copies, two media, one offsite):
 2. **Offsite copy:** S3-compatible object storage, updated daily by
    `scripts/sync_offsite.sh`. Raw files are pushed and pulled with
    `rclone copy --immutable`, so existing objects are never overwritten on
-   either side and deletions are never propagated. The growing ledgers are
+   either side and deletions are never propagated. Before pushing, every
+   file written since the last successful exchange is checked against its
+   ledger's SHA-256, and damaged files are held back
+   ([verifying integrity](#verifying-integrity)). A file that differs from
+   its offsite copy no longer stops the exchange: the others are still
+   copied, and the exchange fails at the end with the list and the command
+   that settles it. The growing ledgers are
    copied with `--update`, from a copy made just before the upload: rclone
    rejects a file that changes in transit, and a collector may be writing
    its ledger at that moment (the WebCOOS historical download does for
@@ -214,10 +220,16 @@ in this repository.
 | 2026-10-04 20:43 to 2026-10-08 00:32 | No collector run for about 76 h (host powered off). The first two recovery runs (00:32 and 01:10) were cut short by a reboot and a shutdown; a run from 03:43 to 04:32 and the new second host (02:10 to 03:50) finished the backfill | **638 camera-hours lost for good:** every station from 2026-10-04 20:00 to 2026-10-05 02:00 (7 h × 78 stations, older than the 70 h window when collection resumed), plus 51 stations at 03:00 and 41 at 04:00. Those 92 were inside the window, but the interrupted runs walked each station newest-first and never reached them; the backfill now fetches the oldest hours first. Dashboard seven-day coverage as of 2026-10-08 12:42: 12,166 archived, 147 never published, 637 gaps |
 | Until 2026-10-08 | No offsite copy (`offsite.last_sync` null) | Resolved: the first upload to R2 (11.4 GiB, 58,975 files) finished 2026-10-08 06:12; daily since |
 | 2026-10-13 08:16 to 08:46 | The daily exchange uploaded the images, then failed at the ledgers: the WebCOOS historical download was adding a row to its ledger every two seconds, and rclone rejects a file that changes during its upload | That ledger had no offsite copy, the second host's files were not pulled and `offsite.last_sync` stayed at 2026-10-12 08:32. Fixed the same day: ledgers are uploaded from a copy made just before (the ledger reached R2 at 14:16) |
+| 2026-10-18 about 14:08 | Unclean reset of the desktop (the journal stops without a shutdown) during the WebCOOS historical download | The last ~30 s of writes to the data drive were lost: the oakisland_west stills ledger ended in 1,882 NUL bytes and 27 stills were empty files. Repaired the same day: the ledger was cut at the first NUL, the stills were fetched again, and every ledger row written since 10-17 12:00 was checked against its file (notes in `/mnt/wavedata/wave_analysis/_crash_2026-10-18/`) |
+| 2026-11-02 about 22:13 | Unclean reset of the laptop | 28 buoy-camera images of 2026-10-31 05:00 to 06:10 left as empty files on the laptop; R2 holds good copies from the desktop. The laptop's exchange fails on them. **Open:** to be settled on the laptop with `wave-analysis archive repair` (see [after an unclean shutdown](#after-an-unclean-shutdown)) |
+| 2026-11-04 02:41 and 04:44 (11-03 21:41 and 23:44 EST) | Two unclean resets of the desktop, with nothing logged before either | The brt ledger of oakisland_west ended in 2,160 NUL bytes; 9 brt stills of 2025-03-25/26 were damaged (8 empty, 1 the right size but all NUL bytes); 20 buoy-camera images of 11-04 01:10 and a listing were empty. All were fetched again and checked on 11-04, but the exchange of 11-04 09:20 had already uploaded 29 damaged copies, and the exchange never overwrites a file: every exchange from 11-05 to 11-10 stopped on the 28 that differed in size, before the ledgers and the pull (`offsite.last_sync` stuck at 11-04 10:05; watchdog issue #15). The NUL-filled still had the right size, so no size comparison could see it. **2026-11-10:** the whole archive (629,917 files, 294 GB) checked against its ledgers: nothing damaged locally; R2 compared by MD5: exactly those 29 objects damaged, overwritten with the checked local copies. Cause: downloads and ledger rows were not synced to disk before counting as written. Fixed the same day: they are synced, empty files are fetched again, and the exchange checks new files against their ledgers and holds back damaged ones |
 
 The first two outages were recovered only because each lasted less than the
 70 h backfill window; the third was not. See P0 in the
-[collection plan](collection_plan.md).
+[collection plan](collection_plan.md). The resets of 2026-10-18 and 2026-11-03
+left no trace in the journal (no machine-check, thermal, disk or GPU message,
+no crash dump), which points to the power supply; see
+[after an unclean shutdown](#after-an-unclean-shutdown).
 
 ## Alerts
 
@@ -245,8 +257,108 @@ uv run python -m wave_analysis.dashboard.watchdog /tmp/status.json
 
 ## Verifying integrity
 
-Every ledger row carries the SHA-256 of the payload as served. Realtime
-snapshots stored with `--gzip` are hashed before compression, so verify them
-with `sha256_file(path, gunzip=True)`. For the offsite copy,
-`rclone check data/raw r2:wave-analysis-raw/raw --one-way` confirms that every
-local file exists remotely with the same hash.
+Every ledger row carries the SHA-256 and size of the payload as served. The
+whole archive is checked against them with:
+
+```bash
+.venv/bin/wave-analysis archive verify                        # every file (about 15 min for 270 GB)
+.venv/bin/wave-analysis archive verify --since last-exchange  # files written since the last exchange
+.venv/bin/wave-analysis archive verify --collections webcoos_brt
+```
+
+It follows the links to collections on other drives, reads every ledger
+(`_manifests/*.csv` and `data/manifests/raw/*.csv`) and writes a report to
+`data/interim/archive_verify/<UTC time>/`: `problems.csv` (every path that is
+not `ok`), `files.csv.gz` (every file with its SHA-256 and MD5), `ledgers.csv`
+and `summary.txt`. It exits with 1 if a file or a ledger is damaged. Statuses:
+
+| Status | Meaning | Action |
+|---|---|---|
+| `ok` | size and SHA-256 match a ledger row for this path | none |
+| `empty_upstream` | 0 bytes, and the ledger records that the source served 0 bytes | none: kept as evidence (some WebCOOS stills are empty on WebCOOS's side); not usable as an image |
+| `empty`, `size_mismatch`, `sha256_mismatch`, `unreadable` | the bytes are not the bytes that were downloaded | `archive repair` |
+| `suspect` | no ledger row, and the file is empty or ends in NUL bytes | fetch again or remove by hand |
+| `no_ledger` | no ledger row (the run lists under `_listings/` are records made here, by design) | none |
+| `missing` | a ledger row names the file, but it is not on disk | `archive repair` |
+| `partial` | a temporary file left by an interrupted download | delete it |
+
+Realtime snapshots stored with `--gzip` are compared after decompression, as
+their ledger rows describe the payload as served (`sha256_file(path,
+gunzip=True)` by hand). A file passes if it matches any row for its path: two
+hosts may each have fetched it, and a re-fetch adds a row.
+
+**The offsite copy.** The report's MD5s are the ETags that R2 reports for
+single-part uploads, so the offsite copy is compared without downloading it:
+
+```bash
+.venv/bin/wave-analysis archive compare-remote data/interim/archive_verify/<UTC time>/
+```
+
+It writes `remote_compare.csv` and `repair_candidates.txt` (paths whose
+offsite size or MD5 differs) next to the report. It replaces
+`rclone check data/raw r2:wave-analysis-raw/raw --one-way --copy-links`,
+which would read the 270 GB a second time. On the laptop, pass
+`--skip webcoos webcoos_timex webcoos_brt` for the collections it does not
+pull.
+
+**Settling a difference.** The ledgers decide which copy is right:
+
+```bash
+.venv/bin/wave-analysis archive repair --from <list> --dry-run   # see the decision for each path
+.venv/bin/wave-analysis archive repair --from <list>             # then do it
+.venv/bin/wave-analysis archive repair <path> --refetch          # neither copy is right: ask the source again
+```
+
+For each path it downloads the offsite object to a temporary folder, checks
+both copies against the ledger, and then uploads the local file over the
+offsite object (`push`), replaces the local file with the offsite one
+(`pull`), or, with `--refetch`, downloads the file again from its ledger URL
+and keeps it only if it matches the ledger. Buoy-camera images older than
+about 72 h cannot be fetched again; WebCOOS keeps its archive. When neither
+copy is right and the source no longer has the bytes, the file is reported as
+`lost` and left as it is (ADR 0001: annotate, don't delete). Every decision is
+appended to `data/interim/archive_repair/log.csv`. Uploads are read back and
+checked before they count as done.
+
+## After an unclean shutdown
+
+A power cut or hard reset (the journal of the previous boot stops without a
+shutdown: `journalctl --list-boots`, then `journalctl -b -1 -n 20`) can leave
+files that were written in the last seconds empty, or the right size and full
+of NUL bytes. Since 2026-11-10 downloads and ledger rows are synced to disk
+before they count as written, so this should no longer happen; the steps below
+check that it did not.
+
+1. **Mount the data drive** if it is not (`ls /mnt/wavedata/wave_analysis`;
+   if empty, run `sudo mount /mnt/wavedata` in a system terminal, outside the
+   Claude app).
+2. **Check the files written around the reset** (time in UTC, a little before
+   the reset):
+
+   ```bash
+   .venv/bin/wave-analysis archive verify --since 2026-11-04T02:00:00Z
+   ```
+
+   Look at `DAMAGED` lines and at `damaged ledger(s)` in the summary. Delete
+   `partial` files.
+3. **A ledger with NUL bytes:** copy it aside unchanged (keep it as found),
+   then cut it at the first NUL byte, e.g.
+   `python -c "import sys; p=sys.argv[1]; d=open(p,'rb').read(); open(p,'wb').write(d[:d.index(b'\0')])" <ledger>`.
+   Rows lost with the tail make their files `no_ledger`; the next run of that
+   collector fetches them again.
+4. **Damaged files:** `archive repair --from <list> --dry-run`, then without
+   `--dry-run` (add `--refetch` where neither copy is right). Buoy-camera
+   images can be fetched again for about 72 h after they were taken, so do
+   this first.
+5. **Run the exchange** (`systemctl --user start wave-analysis-offsite-sync`)
+   and check that `data/raw/.offsite_last_sync` is updated. The exchange
+   checks every file written since the last successful exchange anyway: a
+   damaged file is held back and named in its log, and a file that differs
+   from its offsite copy is listed in `data/interim/offsite/conflicts.txt`
+   with the `archive repair` command to run.
+6. Add a row to [Incidents](#incidents).
+
+Three resets in three weeks with nothing in the journal before them (no
+machine-check, thermal, disk or GPU message, and no crash dump) point to the
+power supply rather than to software. A UPS for the desktop would turn a power
+cut into a clean shutdown.

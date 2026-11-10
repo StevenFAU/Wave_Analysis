@@ -7,6 +7,43 @@ separately (`docs/REPRODUCIBILITY.md`).
 
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
+### Added (2026-11-10)
+- `wave-analysis archive verify`: checks every raw file (following the links
+  to other drives) against its ledger's SHA-256 and size, and reports files
+  that are empty, the wrong size, the right size with other bytes (a power cut
+  can leave a file full of NUL bytes), missing, without a ledger row, or left
+  half-written; ledgers containing NUL bytes are reported too. `--since
+  last-exchange` checks only what was written since the last offsite exchange.
+  It records each file's MD5, the ETag R2 reports, so
+  `wave-analysis archive compare-remote` compares the offsite copy without
+  downloading it. `wave-analysis archive repair` settles a file whose local and
+  offsite copies differ: whichever copy matches the ledger wins, and with
+  `--refetch` the source is asked again; every decision is logged.
+- Runbook "After an unclean shutdown" and the archive statuses in
+  `docs/operations/data_collection.md`.
+
+### Fixed (2026-11-10)
+- Downloads, ledger rows, run listings and ERA5 files are synced to disk
+  (fsync) before they count as written, and their folders after the rename.
+  Three resets of the desktop (2026-10-18, 2026-11-03 twice) had left renamed
+  files whose data never reached the disk: empty stills, one still the right
+  size but all NUL bytes, and ledgers ending in NUL bytes.
+- The buoy-camera archiver treats an empty image as missing and fetches it
+  again while NDBC keeps it; WebCOOS listings without a size no longer count
+  an empty still as archived.
+- The offsite exchange no longer uploads damaged files and no longer stops on
+  the first conflict. It first checks every file written since the last
+  successful exchange against its ledger and holds back damaged files and
+  ledgers. A file that differs from its offsite copy is listed in
+  `data/interim/offsite/conflicts.txt`; the other files are still pushed and
+  pulled, and the exchange fails at the end with the `archive repair` command
+  to run. Before this, 28 empty copies uploaded after the reset of 2026-11-03
+  stopped every exchange for six days (watchdog issue #15).
+- R2: 29 damaged objects (28 empty, 1 all NUL bytes, from that reset) were
+  overwritten with local copies checked against their ledgers. The whole local
+  archive (629,917 files, 294 GB) matches its ledgers; 38 WebCOOS stills are
+  empty at the source (HTTP 200 with 0 bytes) and stay as evidence.
+
 ### Added (2026-10-13)
 - First WebCOOS camera paired with a wave buoy: `currituck_hampton_inn` with
   CDIP 433 (Duck FRF 17 m, 9.15 km away). `scripts/webcoos_extract.py` checks

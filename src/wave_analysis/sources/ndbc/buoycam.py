@@ -132,6 +132,19 @@ def image_file_name(camera_code: str, time_utc: pd.Timestamp) -> str:
     return f"{camera_code}_{time_utc:%Y_%m_%d_%H%M}.jpg"
 
 
+def on_disk(path: Path) -> bool:
+    """Whether an image is archived: the file exists and is not empty.
+
+    An empty file is what a power cut can leave of an image whose data never
+    reached the disk (2026-11-03), so it is fetched again while NDBC still
+    keeps the image (~72 h).
+    """
+    try:
+        return path.stat().st_size > 0
+    except FileNotFoundError:
+        return False
+
+
 def manifest_path(
     dest_root: Path, when: pd.Timestamp | None = None, host: str | None = None
 ) -> Path:
@@ -182,8 +195,8 @@ def snapshot_cameras(
 ) -> tuple[list[ManifestEntry], pd.DataFrame]:
     """Download every *new* current buoy-camera image and the listing itself.
 
-    Images already on disk (same file name) are skipped without a request, so
-    repeated runs build a de-duplicated archive. The listing JSON is saved on
+    Images already on disk (same file name, not empty) are skipped without a
+    request, so repeated runs build a de-duplicated archive. The listing JSON is saved on
     every run, preserving the station-to-camera mapping over time.
 
     Returns
@@ -206,7 +219,7 @@ def snapshot_cameras(
         name = str(row.latest_image or "")
         if not _NAME.match(name):
             continue
-        if image_path(dest_root, str(row.station_id), name).exists():
+        if on_disk(image_path(dest_root, str(row.station_id), name)):
             continue
         entries.append(_fetch_image(downloader, dest_root, str(row.station_id), name))
     return entries, cams
@@ -227,7 +240,7 @@ def backfill_candidates(
     per camera (mostly :10, occasionally :00), so each hour gets one
     candidate name per minute in :data:`CANDIDATE_MINUTES`, with the latest
     image's minute first. An hour is skipped if any candidate is already on
-    disk; candidates already known to be missing are dropped. ``hours`` must
+    disk and not empty; candidates already known to be missing are dropped. ``hours`` must
     stay below :data:`RETENTION_HOURS`.
 
     Hours are returned **oldest first across all cameras**, so the images
@@ -252,7 +265,7 @@ def backfill_candidates(
         hour = latest.floor("h") - pd.Timedelta(hours=1)
         while hour + pd.Timedelta(minutes=max(minutes)) >= oldest:
             names = [image_file_name(cam, hour + pd.Timedelta(minutes=m)) for m in minutes]
-            if not any(image_path(dest_root, sid, n).exists() for n in names):
+            if not any(on_disk(image_path(dest_root, sid, n)) for n in names):
                 todo = tuple(n for n in names if f"{BUOYCAM_IMAGE_URL}/{n}" not in skip)
                 if todo:
                     out.append((hour, sid, todo))

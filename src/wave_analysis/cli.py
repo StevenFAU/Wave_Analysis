@@ -35,6 +35,11 @@ Commands
     grid point.
 ``registry validate``
     Validate ``data/registry/datasets.yaml`` against the registry schema.
+``archive verify | compare-remote | repair``
+    Check every raw file against its ledger's SHA-256 (finds files a power
+    cut left empty or full of NUL bytes); compare the offsite copy with a
+    verify report; settle a file whose local and offsite copies differ, using
+    the ledger to tell which one is right.
 ``dashboard catalog | live | build``
     Build the public dashboard: the catalog from repository files, the live
     status and sea-state data on the collector host, and the static site.
@@ -961,6 +966,187 @@ def _cmd_era5_standardize(args: argparse.Namespace) -> int:
     return 0
 
 
+def _since_arg(text: str | None, raw: Path) -> Any:
+    """``--since``: an ISO time, or ``last-exchange`` (the last successful exchange, less a day)."""
+    from datetime import UTC, datetime, timedelta
+
+    if not text:
+        return None
+    if text == "last-exchange":
+        stamp = raw / ".offsite_last_sync"
+        if not stamp.exists() or not stamp.read_text().strip():
+            return None
+        t = datetime.fromisoformat(stamp.read_text().strip().replace("Z", "+00:00"))
+        return t - timedelta(days=1)
+    t = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    return t if t.tzinfo else t.replace(tzinfo=UTC)
+
+
+def _rclone_pattern(rel: str) -> str:
+    """An rclone filter rule matching exactly one path relative to the root."""
+    escaped = "".join("\\" + c if c in "\\*?[]{}" else c for c in rel)
+    return "/" + escaped
+
+
+def _cmd_archive_verify(args: argparse.Namespace) -> int:
+    import time as _time
+
+    from wave_analysis.ingest.durable import atomic_open
+    from wave_analysis.ingest.verify import verify_archive, write_report
+
+    raw = Path(args.root) if args.root else data_dir("raw")
+    since = _since_arg(args.since, raw)
+    paths = None
+    if args.paths_from:
+        paths = Path(args.paths_from).read_text(encoding="utf-8").splitlines()
+    last = [0.0]
+
+    def progress(done: int, total: int, nbytes: int) -> None:
+        now = _time.monotonic()
+        if args.quiet or (now - last[0] < 60 and done < total):
+            return
+        last[0] = now
+        print(f"  {done:,}/{total:,} files, {nbytes / 1e9:,.1f} GB", file=sys.stderr, flush=True)
+
+    report = verify_archive(
+        raw,
+        manifests_dir=data_dir("manifests") / "raw",
+        repo_root=repo_root(),
+        since=since,
+        paths=paths,
+        collections=args.collections or None,
+        workers=args.workers,
+        progress=progress,
+    )
+    stamp = report.started.replace("-", "").replace(":", "")
+    out = Path(args.out) if args.out else data_dir("interim") / "archive_verify" / stamp
+    written = write_report(report, out, all_files=not args.problems_only)
+    damaged = report.damaged()
+    if args.exclude_list:
+        # Damaged ledgers are held back too: an exchange copies ledgers with
+        # --update, so a newer damaged ledger would replace a good offsite one.
+        held = [r.path for r in damaged] + [
+            str(lg["ledger"])
+            for lg in report.damaged_ledgers()
+            if (raw / str(lg["ledger"])).is_file()
+        ]
+        with atomic_open(Path(args.exclude_list), "w") as fh:
+            for rel in held:
+                fh.write(_rclone_pattern(rel) + "\n")
+    if since is not None:
+        print(f"files modified since {since.isoformat()}")
+    print(report.summary())
+    for r in damaged[: args.show]:
+        detail = f" ({r.note})" if r.note else ""
+        print(f"DAMAGED {r.status}: {r.path}{detail}")
+    if len(damaged) > args.show:
+        print(f"... and {len(damaged) - args.show} more")
+    for lg in report.damaged_ledgers():
+        print(
+            f"DAMAGED ledger {lg['ledger']}: {lg['nul_bytes']} NUL bytes, {lg['bad_rows']} bad rows"
+        )
+    print(f"report: {written['problems'].parent}")
+    return 1 if damaged or report.damaged_ledgers() else 0
+
+
+def _remote_arg(args: argparse.Namespace) -> str:
+    from wave_analysis.ingest.offsite import default_remote
+
+    remote = args.remote or default_remote()
+    if not remote:
+        raise SystemExit(
+            "no remote: pass --remote, or set WAVE_ANALYSIS_REMOTE (e.g. in "
+            "~/.config/wave-analysis/sync.env)"
+        )
+    return str(remote)
+
+
+def _cmd_archive_compare_remote(args: argparse.Namespace) -> int:
+    from wave_analysis.ingest.offsite import (
+        compare_remote,
+        list_remote,
+        read_files_report,
+        write_comparison,
+    )
+
+    report = Path(args.report)
+    files = report / "files.csv.gz" if report.is_dir() else report
+    remote = _remote_arg(args)
+    print(f"listing {remote} ...", file=sys.stderr, flush=True)
+    listing = list_remote(remote)
+    skip = [f"{d.strip('/')}/" for d in args.skip or []]
+    cmp = compare_remote(read_files_report(files), listing, skip_prefixes=skip)
+    out = Path(args.out) if args.out else files.parent
+    written = write_comparison(cmp, out)
+    counts = cmp.counts()
+    print(
+        f"{len(listing):,} objects offsite; "
+        + ", ".join(f"{k} {v:,}" for k, v in sorted(counts.items()))
+    )
+    differs = cmp.by("differs")
+    for r in differs[: args.show]:
+        print(
+            f"DIFFERS {r['path']}: here {r['size']} B ({r['local_status']}), "
+            f"offsite {r['remote_size']} B"
+        )
+    if len(differs) > args.show:
+        print(f"... and {len(differs) - args.show} more")
+    print(f"report: {written['compare']}; repair candidates: {written['candidates']}")
+    return 1 if differs else 0
+
+
+def _cmd_archive_repair(args: argparse.Namespace) -> int:
+    from wave_analysis.ingest.archive import collector_host
+    from wave_analysis.ingest.offsite import repair
+
+    paths = list(args.paths)
+    if args.from_file:
+        paths += Path(args.from_file).read_text(encoding="utf-8").splitlines()
+    if not paths:
+        print("nothing to repair: give paths (relative to data/raw) or --from FILE")
+        return 2
+    raw = Path(args.root) if args.root else data_dir("raw")
+    fetch = None
+    if args.refetch:
+        from wave_analysis.ingest.downloader import Downloader
+
+        dl = Downloader(min_interval_s=1.0)
+
+        def fetch(url: str, dest: Path) -> Path | None:
+            e = dl.fetch(url, dest, source_id="repair", product="refetch")
+            return dest if e.local_path else None
+
+    items = repair(
+        paths,
+        raw_root=raw,
+        remote=_remote_arg(args),
+        manifests_dir=data_dir("manifests") / "raw",
+        repo_root=repo_root(),
+        dry_run=args.dry_run,
+        refetch=args.refetch,
+        fetch=fetch,
+        log_path=data_dir("interim") / "archive_repair" / "log.csv",
+        host=collector_host(),
+        scratch=data_dir("interim"),
+    )
+    width = max((len(i.path) for i in items), default=0)
+    for i in items:
+        print(
+            f"{i.path:<{width}}  here={i.local_status:<15} offsite={i.remote_status:<15} "
+            f"{i.action:<8} {i.outcome}  {i.note}"
+        )
+    bad = [
+        i
+        for i in items
+        if i.action in ("choose", "unknown", "lost", "refetch")
+        or "fail" in i.outcome
+        or "not confirmed" in i.outcome
+    ]
+    if not args.dry_run:
+        print(f"log: {data_dir('interim') / 'archive_repair' / 'log.csv'}")
+    return 1 if bad else 0
+
+
 def _cmd_registry_validate(args: argparse.Namespace) -> int:
     from wave_analysis.registry import validate_registry
 
@@ -1275,6 +1461,58 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-docs", action="store_true", help="also require every linked docs page"
     )
     dcheck.set_defaults(func=_cmd_dashboard_check)
+
+    arc = sub.add_parser("archive", help="integrity of the raw archive").add_subparsers(
+        dest="cmd", required=True
+    )
+    aver = arc.add_parser("verify", help="check raw files against their ledgers' SHA-256 and size")
+    aver.add_argument("--root", help="raw directory (default: data/raw)")
+    aver.add_argument(
+        "--out", help="report directory (default: data/interim/archive_verify/<UTC time>)"
+    )
+    aver.add_argument(
+        "--since",
+        help="only files modified since this time (ISO), or 'last-exchange' "
+        "(the last successful offsite exchange, less a day)",
+    )
+    aver.add_argument("--paths-from", help="only the paths listed in this file (relative to root)")
+    aver.add_argument("--collections", nargs="*", help="only these top-level folders")
+    aver.add_argument("--workers", type=int, default=8, help="files hashed in parallel")
+    aver.add_argument(
+        "--problems-only", action="store_true", help="skip files.csv.gz (every file's hashes)"
+    )
+    aver.add_argument("--exclude-list", help="write the damaged paths here as rclone filter rules")
+    aver.add_argument("--show", type=int, default=50, help="damaged files to print")
+    aver.add_argument("--quiet", action="store_true", help="no progress lines")
+    aver.set_defaults(func=_cmd_archive_verify)
+    acmp = arc.add_parser(
+        "compare-remote", help="compare the offsite copy with a verify report (no download)"
+    )
+    acmp.add_argument("report", help="verify report directory (or its files.csv.gz)")
+    acmp.add_argument(
+        "--remote", help="rclone path of the raw copy (default: $WAVE_ANALYSIS_REMOTE/raw)"
+    )
+    acmp.add_argument("--skip", nargs="*", help="top-level folders this host does not pull")
+    acmp.add_argument("--out", help="output directory (default: the report's)")
+    acmp.add_argument("--show", type=int, default=50, help="differences to print")
+    acmp.set_defaults(func=_cmd_archive_compare_remote)
+    arep = arc.add_parser(
+        "repair",
+        help="settle files whose local and offsite copies differ, using the ledger",
+    )
+    arep.add_argument("paths", nargs="*", help="paths relative to data/raw")
+    arep.add_argument("--from", dest="from_file", help="file listing paths, one per line")
+    arep.add_argument("--root", help="raw directory (default: data/raw)")
+    arep.add_argument(
+        "--remote", help="rclone path of the raw copy (default: $WAVE_ANALYSIS_REMOTE/raw)"
+    )
+    arep.add_argument("--dry-run", action="store_true", help="decide and report; change nothing")
+    arep.add_argument(
+        "--refetch",
+        action="store_true",
+        help="when neither copy matches the ledger, download the file again from its source",
+    )
+    arep.set_defaults(func=_cmd_archive_repair)
 
     reg = sub.add_parser("registry", help="dataset registry").add_subparsers(
         dest="cmd", required=True

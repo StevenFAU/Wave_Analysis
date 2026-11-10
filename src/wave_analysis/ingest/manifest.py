@@ -21,6 +21,7 @@ from pathlib import Path
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from wave_analysis.config import portable_path
+from wave_analysis.ingest.durable import fsync_dir, fsync_file
 
 
 class EntryStatus(StrEnum):
@@ -61,7 +62,12 @@ FIELDS: tuple[str, ...] = tuple(ManifestEntry.model_fields)
 def write_manifest(
     entries: Iterable[ManifestEntry], path: str | Path, *, append: bool = True
 ) -> Path:
-    """Write entries to a CSV manifest, creating it (with header) if needed."""
+    """Write entries to a CSV manifest, creating it (with header) if needed.
+
+    The rows are synced to disk before returning. A ledger appended to without
+    a sync can end in NUL bytes after a power cut (2,160 of them in the brt
+    ledger of 2026-11-03), and losing a row loses the checksum of its file.
+    """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     exists = p.exists() and p.stat().st_size > 0
@@ -75,6 +81,9 @@ def write_manifest(
             if row.get("local_path"):
                 row["local_path"] = portable_path(row["local_path"])
             writer.writerow({k: ("" if v is None else v) for k, v in row.items()})
+        fsync_file(fh)
+    if mode == "w":
+        fsync_dir(p.parent)
     return p
 
 
