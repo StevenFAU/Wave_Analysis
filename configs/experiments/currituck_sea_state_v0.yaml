@@ -1,0 +1,95 @@
+# First vision deliverable: a four-class sea-state classifier from the WebCOOS
+# camera currituck_hampton_inn (Corolla, NC), judged by its confusion matrix on
+# held-out days and on a held-out year, against baselines that use no image
+# (ADR 0007). Decided with Steven on 2026-11-06.
+#
+#   scripts/sea_state_package.py configs/experiments/currituck_sea_state_v0.yaml   # desktop: package + baselines
+#   scripts/train_sea_state.py --config ... --package ... --split year           # GPU: train and evaluate
+#
+# Method, numbers and caveats: docs/experiments/currituck_sea_state.md.
+name: currituck_sea_state_v0
+description: >
+  WebCOOS currituck_hampton_inn stills (2022-01 to 2026-10, daylight and low
+  sun) labelled by CDIP 433 (Duck FRF 17 m, published by NDBC as 44056,
+  9.2 km away): window mean of the records centred within 30 min (ADR 0010),
+  binned into WMO sea-state classes.
+input:
+  samples: data/processed/pairs/webcoos_currituck_hampton_inn_cdip433/samples.parquet
+  timezone: America/New_York        # day groups and years are local calendar days
+task:
+  id_col: sample_id
+  label: Hs_label_m
+  filters:
+    # Paired, readable, checksum OK (the pairing's own exclusions), and light
+    # enough to see the sea. Civil twilight, nautical twilight and night are
+    # left out (about 1,300 labelled stills).
+    - {column: exclusion, op: isna}
+    - {column: illumination, op: in, value: [day, low_sun]}
+  classes:
+    # WMO-No. 306, code table 3700. Bands closed on the right: "the exact
+    # bounding height shall be assigned to the lower code figure".
+    names: [smooth, slight, moderate, rough_or_more]
+    bounds_m: [0.5, 1.25, 2.5]      # smooth <= 0.5 < slight <= 1.25 < moderate <= 2.5 < rough
+  near_boundary_rel_tol: 0.04       # about the sampling error of a 30-min buoy Hs
+split:
+  day:
+    protocol: iid_grouped
+    group_col: local_day
+    fractions: [0.7, 0.15, 0.15]
+    seed: 0
+  year:
+    protocol: year_holdout
+    train_years: [2022, 2023, 2024]
+    test_years: [2025]              # a full year, with the most rough stills
+    later_years: [2026]             # an extra, later test
+    val: {group_col: local_week, fraction: 0.15, seed: 0}   # weeks of the training years, for model selection
+    embargo: 72h                    # the first three days of 2025 are left out
+  audit:
+    group_cols: [local_day]
+    time_col: time_utc
+    min_gap: 6h
+baselines:
+  # Non-vision nowcasts, interpolated to each still's time and corrected with
+  # a line fitted on the training stills of each split (as in the Waimea
+  # benchmark). WIS ST44056 has no 2022 (its THREDDS catalog has no 2022
+  # folder; checked 2026-11-10) and ends 2025-12-31.
+  nowcasts:
+    wis:
+      path: wis/44056/bulk_2022-01-01_2026-01-01.parquet
+      variable: wave_significant_height
+    era5:
+      path: era5/webcoos_currituck/bulk_2022-01_2026-10.parquet
+      variable: wave_significant_height
+      optional: true                # used when standardized
+package:
+  out: data/processed/packages/currituck_sea_state_v0
+  long_side_px: 900                 # 2688 x 1520 -> 900 x 509
+  jpeg_quality: 90
+model:
+  backbone: convnext_tiny           # torchvision, ImageNet weights; resnet50 also supported
+  pretrained: true
+  # The sea and surf zone only: rows from 27 % to 60 % of the height. The
+  # horizon sits at about a third of the frame in every year 2022-2026, and
+  # the band leaves out the beach (people and umbrellas mark summer, which
+  # goes with calm seas) and the caption. full_frame is the ablation.
+  input: sea_crop
+  sea_crop: [0.27, 0.60]
+  augment:
+    horizontal_flip: false          # the camera is fixed; flipping changes the scene's geometry
+    scale: [0.85, 1.0]
+    rotate_deg: 2.0
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.1
+  class_weights: inverse_frequency  # of the training stills, mean 1
+  epochs: 15
+  batch_size: 64
+  lr: 3.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 1
+  select_on: f1_macro               # on val; the test partitions are scored once, with the chosen epoch
+  num_workers: 8
+  amp: bf16
+evaluation:
+  bootstrap: {group_col: local_day, n_boot: 1000, alpha: 0.05, seed: 0}
+seed: 0

@@ -55,7 +55,8 @@ STATE="$DATA/interim/offsite"
 : "${WAVE_ANALYSIS_REMOTE:?set WAVE_ANALYSIS_REMOTE, e.g. r2:wave-analysis-raw}"
 DEST="$WAVE_ANALYSIS_REMOTE/raw"
 PY="${WAVE_ANALYSIS_PYTHON:-$REPO/.venv/bin/python}"
-COMMON=(--transfers 8 --checkers 16 --fast-list --copy-links --stats-one-line --stats 5m "$@")
+COMMON=(--transfers 8 --checkers 16 --fast-list --copy-links --stats-one-line --stats 5m
+    --stats-log-level NOTICE "$@")
 # Patterns without a leading / match at any depth. Ledgers use --filter rules,
 # which rclone applies after every --exclude and --exclude-from rule.
 RAW=(--immutable --size-only --exclude "**/_manifests/**" --exclude ".*.lock"

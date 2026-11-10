@@ -66,20 +66,29 @@ def classification_report(
     class_names: Sequence[str] | None = None,
     ordinal: bool = True,
 ) -> dict[str, object]:
-    """Accuracy, balanced accuracy, macro/weighted P/R/F1, per-class table, and ordinal metrics."""
+    """Accuracy, balanced accuracy, macro/weighted P/R/F1, per-class table, and ordinal metrics.
+
+    Macro averages run over the classes present in ``y_true`` or ``y_pred``.
+    A class with stills that is never predicted has an undefined precision
+    and counts as 0 in the macro precision and F1 (scikit-learn's
+    ``zero_division=0``); skipping it instead would let a model that always
+    answers the majority class score that class's F1 as its macro-F1.
+    Balanced accuracy is the mean recall over the classes in ``y_true``.
+    """
     a = np.asarray(y_true, dtype=np.int64)
     b = np.asarray(y_pred, dtype=np.int64)
     cm = confusion_matrix(a, b, n_classes)
     pc = per_class_precision_recall_f1(cm)
     support = pc["support"]
     w = support / support.sum() if support.sum() else support
+    present = (cm.sum(axis=0) + cm.sum(axis=1)) > 0
     out: dict[str, object] = {
         "n": int(a.size),
         "accuracy": float(np.mean(a == b)),
         "balanced_accuracy": float(np.nanmean(pc["recall"])),
-        "precision_macro": float(np.nanmean(pc["precision"])),
-        "recall_macro": float(np.nanmean(pc["recall"])),
-        "f1_macro": float(np.nanmean(pc["f1"])),
+        "precision_macro": float(np.mean(np.nan_to_num(pc["precision"][present]))),
+        "recall_macro": float(np.mean(np.nan_to_num(pc["recall"][present]))),
+        "f1_macro": float(np.mean(np.nan_to_num(pc["f1"][present]))),
         "precision_weighted": float(np.nansum(pc["precision"] * w)),
         "recall_weighted": float(np.nansum(pc["recall"] * w)),
         "f1_weighted": float(np.nansum(pc["f1"] * w)),

@@ -35,7 +35,9 @@ _site/
 
 # --- Models / experiment outputs -------------------------------------------------
 runs/
+logs/
 checkpoints/
+.cache/torch/
 *.pt
 *.ckpt
 wandb/

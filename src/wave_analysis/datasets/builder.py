@@ -42,6 +42,7 @@ _OPS = {
     "not_in": lambda s, v: ~s.isin(v),
     "abs_le": lambda s, v: s.abs() <= v,
     "notna": lambda s, v: s.notna(),
+    "isna": lambda s, v: s.isna(),
     "between": lambda s, v: s.between(v[0], v[1]),
 }
 

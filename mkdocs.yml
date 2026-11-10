@@ -41,6 +41,8 @@ nav:
       - Dataset splitting: methodology/dataset_splitting.md
       - Evaluation: methodology/evaluation.md
       - Models: methodology/models.md
+  - Experiments:
+      - Sea state from the Currituck camera: experiments/currituck_sea_state.md
   - Datasets:
       - Overview & template: datasets/README.md
       - Data inventory: datasets/inventory.md
@@ -61,6 +63,7 @@ nav:
       - Continuous data collection: operations/data_collection.md
       - Collection plan: operations/collection_plan.md
       - Public dashboard: operations/dashboard.md
+      - Training on the GPU cluster: operations/cluster.md
   - Literature:
       - Landscape review: literature/landscape_review.md
       - Data source scan (2026-10): literature/data_source_scan_2026-10.md

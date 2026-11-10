@@ -104,6 +104,19 @@ def test_classification_report_ordinal():
     assert quadratic_weighted_kappa(np.eye(3, dtype=np.int64) * 5) == pytest.approx(1.0)
 
 
+def test_macro_f1_counts_a_class_never_predicted_as_zero():
+    # Always answering the majority class: F1 0.8 for it, 0 for the other three.
+    y = [1] * 6 + [0, 2, 2, 3]
+    rep = classification_report(y, [1] * 10, n_classes=4)
+    f1_majority = 2 * 0.6 * 1.0 / 1.6
+    assert rep["f1_macro"] == pytest.approx(f1_majority / 4)
+    assert rep["precision_macro"] == pytest.approx(0.6 / 4)
+    assert rep["balanced_accuracy"] == pytest.approx(0.25)
+    # a class absent from both truth and predictions does not count
+    rep5 = classification_report(y, [1] * 10, n_classes=5)
+    assert rep5["f1_macro"] == pytest.approx(rep["f1_macro"])
+
+
 def test_bin_values_excludes_out_of_range():
     # Choi et al. (2020) binary task: <1.52 m low, >3.05 m high, middle excluded.
     idx = bin_values([1.0, 2.0, 3.5, np.nan], [0, 1.52, 3.05, 99])
