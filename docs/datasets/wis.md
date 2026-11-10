@@ -121,6 +121,13 @@ use WIS's own bulk values.
 
 ### Quirks
 
+- **ST44056 has no 2022** (the Currituck and Duck site; checked 2026-11-10).
+  The bulk file jumps from 2022-01-01 00:00 to 2023-01-01 01:00 (8,761 hours),
+  and the THREDDS catalog of the station has no `2022` folder (HTTP 404),
+  while 2021 and 2023 have all twelve monthly files. So the WIS baseline of
+  the [Currituck sea-state experiment](../experiments/currituck_sea_state.md)
+  covers 2023–2025 only; ERA5 covers the rest.
+
 - **Longitude 360° off.** In some months the per-record `longitude` is stored
   360° too far west: −518.117 for −158.117 at 51201, in all of 1988–2017 and
   parts of 1980 and 1987. The scalar `lon` of the `.nc4` file is NaN. The

@@ -316,6 +316,36 @@ MB), and 2 to 8 minutes to list a month's day folders (4 on average). The
 collector host adds under 2 s a month, so the pace is set by the agreed wait
 and by the server, and the plan takes about two weeks, not ten days.
 
+### The full-cadence sample: September 2026 (started 2026-11-10)
+
+The history transfer finished on 2026-11-05: 241,229 stills (108 GB),
+108,516 `timex` (54 GB) and 109,053 `brt` (99 GB), with no file missing or
+failed, all checked against their ledgers on 2026-11-10
+(`wave-analysis archive verify`). The test sample then started:
+
+```bash
+.venv/bin/wave-analysis webcoos historical currituck_hampton_inn jennette_south \
+    --product stills --every all --start 2026-09-01 --end 2026-10-01 --historical-approved
+WEBCOOS_PRODUCTS="timex brt" scripts/webcoos_historical.sh --every all --start 2026-09-01 --end 2026-10-01
+```
+
+**Why September 2026.** The month must span calm and storm and have
+`timex`/`brt` at as many cameras as possible. `cocoabeach` has no `timex`
+after 2024-09, so seven cameras is the most any later month offers. Ranked by
+the days with a mean CDIP 433 label at or below 0.5 m and above 2.5 m
+(Currituck stills, local days), September 2026 has 3 calm and 4 rough days,
+daily means from 0.32 to 4.08 m, and `timex` at 7 cameras; the next best
+(November 2024: 4 calm, 1 rough; February 2026: 3 calm, 1 rough, and few
+Currituck `timex`) have one storm day each. September 2024, the only month
+with all eight cameras, has no calm and no rough day. The pace on 2026-11-10
+was 3.2 s a still (1 s wait included), so the sample takes two to three days.
+
+**Empty files at the source.** 38 files (28 stills, 7 `brt`, 3 `timex`) were
+served as HTTP 200 with 0 bytes and an ETag of `d41d8cd98f00b204e9800998ecf8427e`,
+the MD5 of nothing; their ledger rows record 0 bytes. They are kept as
+evidence (status `empty_upstream` in `archive verify`), and the pairing
+marks such stills `image_unreadable`.
+
 ## Pairing with a buoy: `currituck_hampton_inn` and CDIP 433 (2026-10-13)
 
 The first WebCOOS camera paired with a wave buoy. The method is the one used
