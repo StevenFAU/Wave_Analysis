@@ -145,7 +145,10 @@ jitter, ±2° rotation and mild colour changes.
 ## Status
 
 - [x] Package built and checked (`SHA256SUMS`), baselines scored (2026-11-10).
-- [x] CPU smoke test of the training script (see below).
+- [x] CPU smoke test of the training script (2026-11-10, commit `72fc917`, a
+      clean worktree): 100 stills per partition, one epoch, 70 s end to end;
+      every output file written, provenance `dirty: false`. Its numbers mean
+      nothing (100 training stills).
 - [ ] Runs on the H200: year split, day split, full-frame ablation
       ([cluster guide](../operations/cluster.md)).
 - [ ] ERA5 baseline (covers 2022 and 2026).
