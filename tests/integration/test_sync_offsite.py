@@ -160,3 +160,20 @@ def test_a_conflict_is_listed_with_the_command_that_settles_it(tmp_path: Path) -
     assert stale.read_bytes() == JPEG
     assert _exchange(tmp_path).returncode == 0
     assert (raw / ".offsite_last_sync").exists()
+
+
+def test_a_collection_whose_drive_is_not_mounted_stops_the_exchange(tmp_path: Path) -> None:
+    raw = tmp_path / "data" / "raw"
+    (raw / "cams").mkdir(parents=True)
+    (raw / "cams" / "x.jpg").write_bytes(JPEG)
+    (raw / "webcoos").symlink_to(tmp_path / "unmounted_drive" / "webcoos")
+    remote = tmp_path / "remote" / "raw" / "webcoos" / "a.jpg"
+    remote.parent.mkdir(parents=True)
+    remote.write_bytes(JPEG)
+
+    run = _exchange(tmp_path)
+
+    assert run.returncode == 2
+    assert "is its drive mounted" in run.stderr
+    assert not (tmp_path / "remote" / "raw" / "cams").exists()  # nothing copied
+    assert (raw / "webcoos").is_symlink() and not (tmp_path / "unmounted_drive").exists()

@@ -40,8 +40,8 @@
 #
 # A collection may live on another drive behind a symlink (e.g. data/raw/
 # webcoos_timex -> /mnt/wavedata/...): --copy-links follows it in both
-# directions. If that drive is not mounted, the exchange fails instead of
-# skipping the collection.
+# directions. If that drive is not mounted, the exchange stops before copying
+# anything instead of skipping the collection.
 #
 # A host without room for some collections can leave them out of the pull
 # (its own files in them are still pushed), e.g. in sync.env on a laptop:
@@ -68,6 +68,18 @@ read -ra SKIP_DIRS <<< "${WAVE_ANALYSIS_SYNC_PULL_SKIP:-}"
 for d in "${SKIP_DIRS[@]}"; do
     [[ "$d" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "bad WAVE_ANALYSIS_SYNC_PULL_SKIP entry: $d" >&2; exit 2; }
     SKIP+=(--filter "- /$d/**")
+done
+
+# A collection on another drive is a link. If that drive is not mounted, the
+# link dangles, every file behind it looks missing, and the pull tries to fetch
+# the whole collection back: on 2026-11-12 that was five hours of errors for
+# ~460,000 WebCOOS files. Stop at once instead.
+for link in "$SRC"/*; do
+    if [[ -L "$link" && ! -d "$link" ]]; then
+        echo "ERROR: $link points to $(readlink "$link"), which is not there:" \
+            "is its drive mounted? Nothing was copied." >&2
+        exit 2
+    fi
 done
 
 mkdir -p "$STATE"
