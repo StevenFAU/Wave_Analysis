@@ -249,8 +249,19 @@ def _status(rel: str, file: Path, index: LedgerIndex) -> tuple[str, str, str]:
     return status, content, digest.md5
 
 
-def decide(rel: str, local: tuple[str, str], remote: tuple[str, str]) -> tuple[str, str]:
-    """``(action, note)`` from the local and offsite ``(status, sha256)``."""
+def decide(
+    rel: str, local: tuple[str, str], remote: tuple[str, str], *, latest_sha256: str = ""
+) -> tuple[str, str]:
+    """``(action, note)`` from the local and offsite ``(status, sha256)``.
+
+    When both copies match a ledger row but differ, the file was retrieved
+    twice with different bytes: an upstream revision (an ERA5 month that was
+    preliminary and is now final, a CDIP file reprocessed) or two hosts that
+    fetched it at different times. The copy matching the newest retrieval
+    (``latest_sha256``, the latest ledger row for the path) wins, as it does
+    on the host that made it; the older version stays described by its ledger
+    row.
+    """
     lstat, lsha = local
     rstat, rsha = remote
     lgood, rgood = lstat in GOOD, rstat in GOOD
@@ -259,6 +270,10 @@ def decide(rel: str, local: tuple[str, str], remote: tuple[str, str]) -> tuple[s
     if lgood and rgood:
         if lsha == rsha:
             return "none", "both copies match the ledger"
+        if latest_sha256 and lsha == latest_sha256:
+            return "push", "both copies match a ledger row; the local one is the newest retrieval"
+        if latest_sha256 and rsha == latest_sha256:
+            return "pull", "both copies match a ledger row; the offsite one is the newest retrieval"
         return "choose", "both copies match a ledger row but differ (two retrievals)"
     if lgood:
         return "push", "the local copy matches the ledger"
@@ -333,11 +348,12 @@ def repair(
         for rel in rels:
             lstat, lsha, _ = _status(rel, raw_root / rel, index)
             rstat, rsha, _ = _status(rel, got / rel, index)
-            action, note = decide(rel, (lstat, lsha), (rstat, rsha))
+            rows = index.rows.get(rel, [])
+            latest = rows[-1].sha256 if rows else ""
+            action, note = decide(rel, (lstat, lsha), (rstat, rsha), latest_sha256=latest)
             item = RepairItem(rel, lstat, rstat, action, note=note)
             item.sha256 = lsha if action == "push" else (rsha if action == "pull" else "")
             if action == "refetch":
-                rows = index.rows.get(rel, [])
                 if not refetch or fetch is None or not rows:
                     item.outcome = "skipped" if rows else "lost"
                     if not rows:

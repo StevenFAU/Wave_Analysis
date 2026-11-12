@@ -313,7 +313,9 @@ For each path it downloads the offsite object to a temporary folder, checks
 both copies against the ledger, and then uploads the local file over the
 offsite object (`push`), replaces the local file with the offsite one
 (`pull`), or, with `--refetch`, downloads the file again from its ledger URL
-and keeps it only if it matches the ledger. Buoy-camera images older than
+and keeps it only if it matches the ledger. When both copies match a ledger
+row but differ (an upstream revision, e.g. an ERA5 month re-requested when it
+went from preliminary to final), the copy matching the newest row wins. Buoy-camera images older than
 about 72 h cannot be fetched again; WebCOOS keeps its archive. When neither
 copy is right and the source no longer has the bytes, the file is reported as
 `lost` and left as it is (ADR 0001: annotate, don't delete). Every decision is

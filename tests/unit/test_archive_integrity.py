@@ -329,6 +329,9 @@ def test_decide() -> None:
     assert decide("x", ("empty", ""), ("ok", a))[0] == "pull"
     assert decide("x", ("empty", ""), ("empty", ""))[0] == "refetch"
     assert decide("x", ("ok", a), ("ok", b))[0] == "choose"
+    # an upstream revision: the copy matching the newest ledger row wins
+    assert decide("x", ("ok", a), ("ok", b), latest_sha256=a)[0] == "push"
+    assert decide("x", ("ok", a), ("ok", b), latest_sha256=b)[0] == "pull"
     assert decide("x", ("no_ledger", ""), ("ok", a))[0] == "unknown"
 
 
