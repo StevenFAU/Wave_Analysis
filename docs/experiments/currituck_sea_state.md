@@ -90,8 +90,11 @@ intervals from a bootstrap over whole days:
 | year / 2025 | monthly climatology | 8,091 (100 %) | 0.25 | 0.18 | 0.00 | 0.58 |
 | year / 2025 | **WIS 44056, corrected** | 8,091 (100 %) | **0.77 [0.70, 0.82]** | **0.80 [0.74, 0.84]** | **0.82 [0.78, 0.85]** | 0.83 [0.81, 0.86] |
 | day / test | majority | 5,591 (100 %) | 0.25 | 0.19 [0.18, 0.20] | 0.00 | 0.61 [0.56, 0.66] |
+| year / 2025 | ERA5, corrected | 8,091 (100 %) | 0.73 [0.67, 0.78] | 0.76 [0.70, 0.80] | 0.78 [0.74, 0.82] | 0.80 [0.77, 0.83] |
 | day / test | WIS 44056, corrected | 4,138 (74 %) | 0.75 [0.55, 0.82] | 0.78 [0.56, 0.83] | 0.78 [0.71, 0.83] | 0.82 [0.78, 0.86] |
+| day / test | ERA5, corrected | 5,591 (100 %) | 0.69 [0.57, 0.78] | 0.73 [0.58, 0.79] | 0.74 [0.68, 0.78] | 0.79 [0.76, 0.83] |
 | year / 2026 | majority | 5,907 (100 %) | 0.25 | 0.20 [0.19, 0.21] | 0.00 | 0.66 [0.62, 0.71] |
+| year / 2026 | **ERA5, corrected** | 5,907 (100 %) | **0.75 [0.67, 0.80]** | **0.77 [0.70, 0.81]** | **0.76 [0.71, 0.81]** | 0.82 [0.79, 0.85] |
 
 - **The monthly climatology is the majority class**: "slight" is the most
   frequent class in every calendar month, so season alone gives nothing at
@@ -108,14 +111,29 @@ intervals from a bootstrap over whole days:
   2022 folder; 2021 and 2023 have all twelve months; checked 2026-11-10), and
   it ends 2025-12-31. So its correction in the year split is fitted on 2023–2024
   only, it covers 74 % of the day split's test stills, and none of 2026.
-  ERA5 at the camera (downloading since 2026-11-10) will cover 2022 and 2026;
-  the package is rebuilt with it when it is standardized.
+- **ERA5 covers every still and is weaker than WIS.** ERA5 at the nearest
+  grid point with sea data (36.5 N 76.0 W, 33 km from the camera), corrected
+  with Hs = −0.06 + 2.32 · Hs_ERA5 (fitted on the year split's training
+  stills). That point lies on the coast by Currituck Sound, and its values are
+  damped: over the 58 months its mean Hs is 41 % of the open-ocean point
+  east of it (36.5 N 75.5 W), hence the slope. But of the 30 sea points in the
+  downloaded box it tracks the buoy best: r = 0.94 on the training stills,
+  against 0.91–0.92 for the ocean points at 75.5 W. Tried on 2026-11-13, the
+  ocean point scored lower on every test (balanced accuracy 0.66 on 2025), so
+  the nearest-sea-point rule stays. On 2025 ERA5 is below WIS (0.73 against
+  0.77), and its weakest class is again "smooth" (52 % recall). It is the
+  **only physics baseline for 2026**. Confusion matrices (rows true, columns
+  predicted): 2025 `[694, 644, 0, 0] / [380, 4144, 207, 0] / [0, 316, 1443, 20] / [0, 0, 71, 172]`;
+  2026 `[600, 392, 0, 0] / [265, 3492, 147, 0] / [0, 220, 657, 15] / [0, 0, 29, 90]`.
+  ERA5's last two months (September and October 2026) are still the
+  preliminary ERA5T, which ECMWF finalizes about three months later.
 - The model is always compared with a baseline **on the same stills**
   (`metrics.json`: `model_same_stills`).
 
 **The bar for the camera:** on the held-out year, beat balanced accuracy 0.77
 and macro-F1 0.80 by more than the intervals, and above all improve on the
-smooth and rough rows.
+smooth and rough rows. On 2026, where WIS has no data, the bar is ERA5:
+balanced accuracy 0.75, macro-F1 0.77.
 
 ## Model
 
@@ -151,4 +169,6 @@ jitter, ±2° rotation and mild colour changes.
       nothing (100 training stills).
 - [ ] Runs on the H200: year split, day split, full-frame ablation
       ([cluster guide](../operations/cluster.md)).
-- [ ] ERA5 baseline (covers 2022 and 2026).
+- [x] ERA5 baseline (2026-11-13): standardized for 2022-01 to 2026-10, package
+      rebuilt from a clean tree (commit `fdff589`, `dirty: false`, `SHA256SUMS`
+      checked).

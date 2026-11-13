@@ -111,7 +111,21 @@ output these catch a broken request or file rather than bad values.
 | Site | Nearest sea point | Distance |
 |---|---|---|
 | `pacioos_waimea` | 22.0 N, 158.0 W | 40.2 km (21.5 N 158.0 W, 17.3 km, is land) |
-| `webcoos_oak_island` | 34.0 N, 78.0 W | 22.9 km |
+| `webcoos_oak_island` | 34.0 N, 78.0 W | 22.9 km (by the Cape Fear River mouth; mean Hs 0.75 m against 0.94 m at 33.5 N, checked on Aug–Oct 2026) |
+| `webcoos_currituck` | 36.5 N, 76.0 W | 33.0 km (coastal, by Currituck Sound; see below) |
+| `webcoos_jennettes_pier` | 36.0 N, 75.5 W | 13.1 km |
+
+**The nearest sea point can be a damped coastal point, and still the best
+one.** At Currituck the nearest sea point's mean Hs over 2022-01 to 2026-10
+is 41 % of the open-ocean point east of it (0.46 m against 1.13 m at
+36.5 N 75.5 W), so a correction to the buoy needs a slope of 2.3. Yet of the 30
+sea points in the box it correlates best with CDIP 433 at the camera's still
+times (r = 0.94; the ocean points at 75.5 W 0.91–0.92), and the ocean point
+made a weaker baseline (checked 2026-11-13,
+[sea-state experiment](../experiments/currituck_sea_state.md)). A likely
+reason, not verified: the 0.5 deg value there is interpolated from wave-model
+points near the coast. Judge a grid point by its correlation with the buoy
+after a linear correction, not by its mean.
 
 ## Licence and citation
 

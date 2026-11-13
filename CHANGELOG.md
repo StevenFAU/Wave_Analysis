@@ -7,6 +7,13 @@ separately (`docs/REPRODUCIBILITY.md`).
 
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
+### Added (2026-11-13)
+- ERA5 baseline in the `currituck_sea_state_v0` package (2022-01 to 2026-10,
+  every still): balanced accuracy 0.73 on 2025 (WIS 0.77) and 0.75 on 2026,
+  where it is the only physics baseline. The nearest sea grid point is a damped
+  coastal point by Currituck Sound but tracks the buoy best of the 30 in the
+  box (r = 0.94); an open-ocean point scored lower.
+
 ### Added (2026-11-10)
 - `wave-analysis archive verify`: checks every raw file (following the links
   to other drives) against its ledger's SHA-256 and size, and reports files
