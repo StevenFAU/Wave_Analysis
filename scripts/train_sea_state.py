@@ -72,6 +72,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--batch-size", type=int)
     ap.add_argument("--lr", type=float)
     ap.add_argument("--num-workers", type=int)
+    ap.add_argument(
+        "--micro-batch",
+        type=int,
+        help="images per forward/backward pass; gradients are summed to the full batch "
+        "(for a GPU with less memory; the update is unchanged)",
+    )
+    ap.add_argument("--amp", choices=("bf16", "fp16", "none"), help="override model.amp")
     ap.add_argument("--no-pretrained", action="store_true", help="random weights (offline tests)")
     ap.add_argument("--limit", type=int, help="stills per partition (smoke test)")
     ap.add_argument("--device", default="auto", help="auto, cuda, cuda:1 or cpu")
@@ -87,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
         batch_size=args.batch_size,
         lr=args.lr,
         num_workers=args.num_workers,
+        micro_batch=args.micro_batch,
+        amp=args.amp,
         pretrained=False if args.no_pretrained else None,
     )
     seed = int(args.seed if args.seed is not None else cfg.get("seed", 0))

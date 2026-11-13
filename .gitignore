@@ -16,6 +16,7 @@ __pycache__/
 build/
 dist/
 .venv/
+.venv-rocm/
 .python-version
 
 # --- Tooling -------------------------------------------------------------------

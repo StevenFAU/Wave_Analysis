@@ -56,6 +56,10 @@ class TrainSettings:
     select_on: str = "f1_macro"
     num_workers: int = 8
     amp: str = "bf16"
+    #: Images per forward/backward pass when a whole batch does not fit in GPU
+    #: memory; the gradients of a batch's pieces are summed before the optimizer
+    #: step, so the update is the batch's (``None``: the whole batch at once).
+    micro_batch: int | None = None
 
     @classmethod
     def from_config(cls, model: dict[str, Any], **overrides: Any) -> TrainSettings:
@@ -240,7 +244,11 @@ def fit(
     steps = settings.epochs * max(1, len(train_loader))
     warm = settings.warmup_epochs * max(1, len(train_loader))
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: lr_lambda(s, warmup=warm, total=steps))
-    loss_fn = nn.CrossEntropyLoss(weight=weights.to(device))
+    w = weights.to(device)
+    # Summed per piece and divided by the whole batch's weight, the loss equals
+    # CrossEntropyLoss(weight=w)'s weighted mean over the batch however it is split.
+    loss_fn = nn.CrossEntropyLoss(weight=w, reduction="sum")
+    piece = settings.micro_batch or settings.batch_size
     best = (-math.inf, -1)
     best_state: dict[str, torch.Tensor] = {}
     history: list[dict[str, float]] = []
@@ -250,13 +258,17 @@ def fit(
         for x, y in train_loader:
             x = x.to(device, non_blocking=True).to(memory_format=torch.channels_last)
             y = y.to(device, non_blocking=True)
-            with _autocast(device, settings.amp):
-                loss = loss_fn(model(x), y)
+            denom = w[y].sum()
             opt.zero_grad(set_to_none=True)
-            loss.backward()
+            batch_loss = torch.zeros((), device=device)
+            for xs, ys in zip(x.split(piece), y.split(piece), strict=True):
+                with _autocast(device, settings.amp):
+                    loss = loss_fn(model(xs), ys) / denom
+                loss.backward()
+                batch_loss += loss.detach()
             opt.step()
             sched.step()
-            total += float(loss.detach()) * len(y)
+            total += float(batch_loss) * len(y)
             n += len(y)
         pred, _ = predict(model, val_loader, device, amp=settings.amp)
         metrics = score(val_true, pred)

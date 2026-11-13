@@ -166,3 +166,42 @@ def test_training_pieces() -> None:
     net = build_model("resnet18", 4, pretrained=False).eval()
     with torch.no_grad():
         assert tuple(net(x[None]).shape) == (1, 4)
+
+
+def test_micro_batches_give_the_same_update() -> None:
+    """Splitting a batch into pieces sums to the same gradient as the whole batch."""
+    torch = pytest.importorskip("torch")
+    import numpy as np
+    from torch import nn
+    from torch.utils.data import DataLoader, TensorDataset
+
+    from wave_analysis.models.sea_state import TrainSettings, fit
+
+    g = torch.Generator().manual_seed(0)
+    x = torch.randn(24, 3, 4, 6, generator=g)
+    y = torch.tensor([0, 1, 1, 1, 2, 1, 3, 1] * 3)
+    weights = torch.tensor([2.0, 0.5, 1.0, 3.0])
+
+    def run(micro: int | None) -> dict[str, torch.Tensor]:
+        torch.manual_seed(1)
+        net = nn.Sequential(nn.Conv2d(3, 5, 3), nn.Flatten(), nn.Linear(5 * 2 * 4, 4))
+        loader = DataLoader(TensorDataset(x, y), batch_size=8, shuffle=False)
+        s = TrainSettings(
+            epochs=2, batch_size=8, lr=1e-2, warmup_epochs=0, micro_batch=micro, amp="none"
+        )
+        out = fit(
+            net,
+            loader,
+            loader,
+            y.numpy(),
+            settings=s,
+            weights=weights,
+            device=torch.device("cpu"),
+            score=lambda t, p: {"f1_macro": float(np.mean(t == p))},
+            log=lambda _: None,
+        )
+        return dict(net.state_dict()) | {"_best": torch.tensor(out.best_epoch)}
+
+    whole, pieces = run(None), run(3)
+    for k in whole:
+        torch.testing.assert_close(pieces[k], whole[k], rtol=1e-5, atol=1e-6)
