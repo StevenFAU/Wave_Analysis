@@ -11,8 +11,8 @@ taken.
 Config: `configs/experiments/ndbc_buoycam_sea_state_v0.yaml`. Pairing:
 `scripts/buoycam_pairs.py`. Package and baselines:
 `scripts/buoycam_package.py`. Building blocks:
-`wave_analysis.datasets.buoycam`. Built on 2026-11-14 from commit `7b8a93c`
-(`dirty: false`); package `data/processed/packages/ndbc_buoycam_sea_state_v0`
+`wave_analysis.datasets.buoycam`. Built on 2026-11-14 from commit `7b8a93c`, rebuilt with the ERA5 baseline
+from `5198fab` (images unchanged; `dirty: false`); package `data/processed/packages/ndbc_buoycam_sea_state_v0`
 (2.9 GB, `SHA256SUMS` checked).
 
 ## Ground truth
@@ -139,12 +139,22 @@ those days. 7.7 % of the strips lie within 4 % of a class boundary.
 | station / test | majority ("moderate") | 0.25 | 0.17 [0.14, 0.25] |
 | time / test | majority | 0.25 | 0.11 [0.10, 0.12] |
 | time / test | each buoy's own majority class in its training weeks | 0.39 [0.36, 0.42] | 0.35 [0.31, 0.39] |
+| station / val | **ERA5 at the buoy, corrected** (92 % of strips) | 0.79 [0.73, 0.87] | 0.81 [0.73, 0.88] |
+| **station / test** | **ERA5 at the buoy, corrected** (91 %) | **0.74 [0.67, 0.90]** | **0.77 [0.67, 0.91]** |
+| time / test | ERA5 at the buoy, corrected (41 %: to 11-09) | 0.78 [0.73, 0.83] | 0.80 [0.74, 0.84] |
 
-**ERA5 at each buoy is being added**, the physics baseline (as at
-Currituck): one global wave-height request per month serves all 79 buoys
-(`scripts/buoycam_era5.py`), and the package takes the grid point with sea
-data nearest each buoy. Until it is in, there is no bar beyond the trivial
-ones above.
+**ERA5 at each buoy** (added 2026-11-14, package rebuilt from commit
+`5198fab`): one global wave-height request per month serves all buoys
+(`scripts/buoycam_era5.py`); each buoy takes the grid point with sea data
+nearest it (median 19 km away, at most 44 km: 44065 off New York). Its series
+is interpolated to the strip's time and corrected with a line fitted on the
+training strips: Hs = −0.05 + 1.09 · Hs_ERA5, nearly the identity, so offshore
+ERA5 is close to the buoys before any correction. ERA5 ends 2026-11-09 16:00
+(about 5 days behind real time; all of it still the preliminary ERA5T), so it
+covers 92 % of the strips and only 41 % of the time split's test weeks;
+re-running the download after 2026-11-20 completes them. **On the test buoys
+ERA5 scores 0.74 / 0.77: that is the bar.** Its interval is wide because 12
+buoys are few.
 
 ## Model
 
@@ -189,9 +199,8 @@ weighting does. Then the time split.
 - [x] Pairing and package (2026-11-14, `7b8a93c`): 41,091 strips at 79
       buoys, leakage audits pass, `SHA256SUMS` checked, captions cut.
 - [x] Majority baselines scored.
-- [ ] ERA5 baseline at each buoy: global wave-height files downloading
-      (2026-09 done, 2026-10 and 11 under way); one request per month for
-      all buoys (`scripts/buoycam_era5.py`).
+- [x] ERA5 baseline at each buoy (2026-11-14): 0.74 / 0.77 on the test
+      buoys. To complete the last test days: download again after 2026-11-20.
 - [x] Training code for six-view strips, a CPU test of the whole path
       (2026-11-14).
 - [ ] Training: approved by Steven 2026-11-14, **on hold**: the desktop GPU
