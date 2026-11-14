@@ -140,17 +140,63 @@ those days. 7.7 % of the strips lie within 4 % of a class boundary.
 | time / test | majority | 0.25 | 0.11 [0.10, 0.12] |
 | time / test | each buoy's own majority class in its training weeks | 0.39 [0.36, 0.42] | 0.35 [0.31, 0.39] |
 
-**Still to add: ERA5 at each buoy**, the physics baseline (as at Currituck).
-It needs the 79 buoys as sites and about 240 monthly requests to the
-Copernicus data store. Without it there is no bar a camera must beat beyond
-these trivial ones.
+**ERA5 at each buoy is being added**, the physics baseline (as at
+Currituck): one global wave-height request per month serves all 79 buoys
+(`scripts/buoycam_era5.py`), and the package takes the grid point with sea
+data nearest each buoy. Until it is in, there is no bar beyond the trivial
+ones above.
+
+## Model
+
+`scripts/train_sea_state.py --split station` (or `time`) with the config's
+`model` section, added on 2026-11-14 after the package was built (the data
+sections are unchanged). `MultiViewNet`
+(`wave_analysis.models.sea_state`): one `convnext_tiny` (ImageNet weights)
+reads each of the six views at 270 × 480 px (44008's 216 × 384 views scaled
+up); the mean feature of the **usable** views (the package's rule: mean grey
+≥ 20, deviation ≥ 4) goes to a four-class head, so a dark or blank view
+cannot change the answer (test `test_strip_views_and_masked_mean`). The views
+share the weights, so their order (compass heading) means nothing to the
+model. Training as at Currituck: class-weighted cross-entropy (inverse
+frequency over the training strips, mean 1), AdamW with a one-epoch warm-up
+and cosine decay, 10 epochs, batches of 32 strips (192 views), fp32; each
+view gets its own random crop (scale 0.85–1), tilt (±5°: the horizon tilts
+with the buoy) and colour change; no mirroring. The epoch is chosen by
+macro-F1 on val; the test buoys are predicted once.
+
+Two runs on the station split: the config as written, and the same with
+`--class-weights none` (every strip counts the same), to show what the
+weighting does. Then the time split.
+
+## The bar (fixed 2026-11-14, before any training)
+
+1. **Station split, test buoys:** the camera must beat **ERA5 at each buoy**
+   on the same strips, in balanced accuracy *and* macro-F1, with the 95 %
+   interval of the gain above zero (paired bootstrap over whole test buoys,
+   `paired_block_bootstrap_ci`). ERA5 here: the nearest grid point with sea
+   data, interpolated to the strip's time, corrected with a line fitted on
+   the training strips (`scripts/buoycam_era5.py`, then the package).
+2. **Time split, test weeks:** the same against ERA5, and against each buoy's
+   own majority class.
+3. The unweighted run is reported beside the weighted one; it is not a
+   second chance at the bar: the config's run (weighted) is the one judged.
+4. ERA5 lags real time by about 5 days, so the last test days are covered
+   only once the data store has them; the comparison uses the strips ERA5
+   covers, and its coverage is reported.
 
 ## Status
 
 - [x] Pairing and package (2026-11-14, `7b8a93c`): 41,091 strips at 79
       buoys, leakage audits pass, `SHA256SUMS` checked, captions cut.
 - [x] Majority baselines scored.
-- [ ] ERA5 baseline at each buoy.
-- [ ] Training (the Currituck script needs a reader for six-view strips;
-      not started, needs Steven's go).
+- [ ] ERA5 baseline at each buoy: global wave-height files downloading
+      (2026-09 done, 2026-10 and 11 under way); one request per month for
+      all buoys (`scripts/buoycam_era5.py`).
+- [x] Training code for six-view strips, a CPU test of the whole path
+      (2026-11-14).
+- [ ] Training: approved by Steven 2026-11-14, **on hold**: the desktop GPU
+      overheated and shut the machine down at the first timing test
+      ([desktop GPU](../operations/cluster.md#training-on-the-desktop-gpu-rocm)).
+      Needs a GPU with working cooling (this one checked, or the FAU
+      cluster).
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.

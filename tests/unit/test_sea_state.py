@@ -205,3 +205,53 @@ def test_micro_batches_give_the_same_update() -> None:
     whole, pieces = run(None), run(3)
     for k in whole:
         torch.testing.assert_close(pieces[k], whole[k], rtol=1e-5, atol=1e-6)
+
+
+def test_strip_views_and_masked_mean(tmp_path) -> None:
+    """Six views from one strip; a view outside the mask cannot change the logits."""
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    from PIL import Image
+
+    from wave_analysis.models.sea_state import (
+        MultiViewNet,
+        StripDataset,
+        TrainSettings,
+        _pieces,
+        build_transforms,
+    )
+
+    a = np.zeros((40, 6 * 48, 3), dtype=np.uint8)
+    for k in range(6):
+        a[:, k * 48 : (k + 1) * 48] = 30 * k
+    Image.fromarray(a).save(tmp_path / "s.png")
+    table = pd.DataFrame({"image": ["s.png"], "class": [2]})
+    st = TrainSettings(input="views", view_size=(32, 48), backbone="resnet18", pretrained=False)
+    mask = np.array([[True, True, False, True, True, True]])
+    ds = StripDataset(tmp_path, table, st, build_transforms(st, (32, 48), train=False), mask)
+    (views, m), y = ds[0]
+    assert views.shape == (6, 3, 32, 48) and y == 2 and m.tolist() == mask[0].tolist()
+    # view k keeps its own pixels (grey 30*k), in order
+    grey = views.mean(dim=(1, 2, 3))
+    assert bool((grey[1:] > grey[:-1]).all())
+    with pytest.raises(ValueError):
+        StripDataset(
+            tmp_path, table, st, build_transforms(st, (32, 48), train=False), ~mask[:, :6] & False
+        )
+
+    torch.manual_seed(0)
+    net = MultiViewNet("resnet18", 4, pretrained=False).eval()
+    batch = (views[None], m[None])
+    with torch.no_grad():
+        before = net(batch)
+        changed = views.clone()
+        changed[2] = torch.randn_like(changed[2]) * 5  # the masked view
+        after = net((changed[None], m[None]))
+        changed[0] = torch.randn_like(changed[0]) * 5  # a used view
+        moved = net((changed[None], m[None]))
+    assert before.shape == (1, 4)
+    torch.testing.assert_close(before, after)
+    assert not torch.allclose(before, moved)
+    # micro-batch pieces of a (views, mask) batch keep the pairs together
+    pieces = _pieces((torch.zeros(5, 6, 3, 2, 2), torch.ones(5, 6, dtype=torch.bool)), 2)
+    assert [p[0].shape[0] for p in pieces] == [2, 2, 1] and all(len(p) == 2 for p in pieces)

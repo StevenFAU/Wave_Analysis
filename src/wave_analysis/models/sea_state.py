@@ -6,6 +6,10 @@ predictions. This module holds the pieces the training script puts together:
 
 * :class:`StillDataset` reads stills and crops them to the configured input
   (the sea and surf band, or the full frame).
+* :class:`StripDataset` reads an NDBC buoy-camera strip as its six views
+  (``input: views``) with a mask of the usable ones, and
+  :class:`MultiViewNet` runs one backbone on every view and averages the
+  features of the usable views before the class head.
 * :func:`build_transforms` - mild scale, rotation and colour changes for
   training; **no horizontal flip**: the camera is fixed, and a mirrored scene
   (shoreline, light direction, the beach on the other side) is not a scene it
@@ -60,6 +64,9 @@ class TrainSettings:
     #: memory; the gradients of a batch's pieces are summed before the optimizer
     #: step, so the update is the batch's (``None``: the whole batch at once).
     micro_batch: int | None = None
+    #: ``input: views`` (buoy-camera strips): network input size of each view, and views per strip.
+    view_size: tuple[int, int] | None = None
+    n_views: int = 6
 
     @classmethod
     def from_config(cls, model: dict[str, Any], **overrides: Any) -> TrainSettings:
@@ -68,18 +75,24 @@ class TrainSettings:
         known.update({k: v for k, v in overrides.items() if v is not None})
         if "sea_crop" in known:
             known["sea_crop"] = tuple(float(x) for x in known["sea_crop"])
+        if known.get("view_size") is not None:
+            known["view_size"] = tuple(int(x) for x in known["view_size"])
         return cls(**known)
 
 
 def input_size(settings: TrainSettings, frame_hw: tuple[int, int]) -> tuple[int, int]:
     """``(height, width)`` of the network input for stills of ``frame_hw`` pixels."""
     h, w = frame_hw
+    if settings.input == "views":
+        if settings.view_size is None:
+            raise ValueError("input 'views' needs model.view_size")
+        return settings.view_size[0], settings.view_size[1]
     if settings.input == "full_frame":
         return h, w
     if settings.input == "sea_crop":
         top, bottom = settings.sea_crop
         return round(h * bottom) - round(h * top), w
-    raise ValueError(f"unknown input {settings.input!r}: sea_crop or full_frame")
+    raise ValueError(f"unknown input {settings.input!r}: sea_crop, full_frame or views")
 
 
 def crop(img: Image.Image, settings: TrainSettings) -> Image.Image:
@@ -151,6 +164,103 @@ class StillDataset(Dataset[tuple[torch.Tensor, int]]):
         return self.transform(img), self.labels[i]
 
 
+class StripDataset(Dataset[tuple[tuple[torch.Tensor, torch.Tensor], int]]):
+    """Buoy-camera strips as ``((views, mask), class)``: ``views`` is ``(n_views, 3, H, W)``.
+
+    The strip (caption already cut by the package) is split into
+    ``settings.n_views`` equal views side by side; each is transformed on its
+    own (its own random crop, tilt and colour change in training). ``masks``
+    (one row per strip) marks the usable views; :class:`MultiViewNet` ignores
+    the others.
+    """
+
+    def __init__(
+        self,
+        root: Path,
+        table: pd.DataFrame,
+        settings: TrainSettings,
+        transform: Callable[[Image.Image], torch.Tensor],
+        masks: np.ndarray,
+    ) -> None:
+        if masks.shape != (len(table), settings.n_views):
+            raise ValueError(f"masks must be ({len(table)}, {settings.n_views}), got {masks.shape}")
+        if not masks.any(axis=1).all():
+            raise ValueError("every strip needs at least one usable view")
+        self.root = Path(root)
+        self.paths = table["image"].tolist()
+        self.labels = table["class"].astype(int).tolist()
+        self.masks = torch.as_tensor(masks, dtype=torch.bool)
+        self.n_views = settings.n_views
+        self.transform = transform
+
+    def __len__(self) -> int:
+        return len(self.paths)
+
+    def __getitem__(self, i: int) -> tuple[tuple[torch.Tensor, torch.Tensor], int]:
+        with Image.open(self.root / self.paths[i]) as im:
+            strip = im.convert("RGB")
+        w, h = strip.size
+        step = w // self.n_views
+        views = [
+            self.transform(strip.crop((k * step, 0, (k + 1) * step, h)))
+            for k in range(self.n_views)
+        ]
+        return (torch.stack(views), self.masks[i]), self.labels[i]
+
+
+class MultiViewNet(nn.Module):
+    """One backbone on every view; the mean feature of the usable views goes to the class head.
+
+    Input ``(views, mask)``: ``views`` ``(B, V, 3, H, W)``, ``mask`` ``(B, V)``
+    bool. The views share the backbone's weights, so the order of the views
+    (their compass headings) carries no meaning to the model.
+    """
+
+    def __init__(self, backbone: str, n_classes: int, *, pretrained: bool = True) -> None:
+        super().__init__()
+        net = build_model(backbone, n_classes, pretrained=pretrained)
+        if backbone == "convnext_tiny":
+            seq = getattr(net, "classifier")  # noqa: B009 - LayerNorm2d, Flatten, Linear
+            assert isinstance(seq, nn.Sequential)
+            head = seq[2]
+            seq[2] = nn.Identity()
+        else:
+            head = getattr(net, "fc")  # noqa: B009
+            setattr(net, "fc", nn.Identity())  # noqa: B010
+        assert isinstance(head, nn.Linear)
+        self.encoder = net
+        self.head = head
+
+    def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        """Class logits ``(B, n_classes)`` of a batch ``(views, mask)``."""
+        views, mask = x
+        b, v = views.shape[:2]
+        flat = views.flatten(0, 1).contiguous(memory_format=torch.channels_last)
+        f = self.encoder(flat).reshape(b, v, -1)
+        m = mask.to(f.dtype).unsqueeze(-1)
+        pooled = (f * m).sum(dim=1) / m.sum(dim=1).clamp_min(1.0)
+        out: torch.Tensor = self.head(pooled)
+        return out
+
+
+Batch = torch.Tensor | tuple[torch.Tensor, ...]
+
+
+def _to_device(x: Batch, device: torch.device) -> Batch:
+    """A batch (a tensor, or a tuple such as ``(views, mask)``) on ``device``; 4-D images channels-last."""
+    if isinstance(x, (tuple, list)):
+        return tuple(_to_device(t, device) for t in x)  # type: ignore[misc]
+    x = x.to(device, non_blocking=True)
+    return x.to(memory_format=torch.channels_last) if x.dim() == 4 else x
+
+
+def _pieces(x: Batch, size: int) -> list[Batch]:
+    """A batch cut into pieces of ``size`` samples along the first dimension."""
+    if isinstance(x, (tuple, list)):
+        return list(zip(*(t.split(size) for t in x), strict=True))
+    return list(x.split(size))
+
+
 def build_model(name: str, n_classes: int, *, pretrained: bool = True) -> nn.Module:
     """A torchvision classifier with a new ``n_classes`` head (ImageNet weights if ``pretrained``)."""
     import torchvision.models as tvm
@@ -196,7 +306,7 @@ def predict(
     model.eval()
     probs = []
     for x, _ in loader:
-        x = x.to(device, non_blocking=True).to(memory_format=torch.channels_last)
+        x = _to_device(x, device)
         with _autocast(device, amp):
             logits = model(x)
         probs.append(torch.softmax(logits.float(), dim=1).cpu().numpy())
@@ -256,12 +366,12 @@ def fit(
         model.train()
         t0, total, n = time.monotonic(), 0.0, 0
         for x, y in train_loader:
-            x = x.to(device, non_blocking=True).to(memory_format=torch.channels_last)
+            x = _to_device(x, device)
             y = y.to(device, non_blocking=True)
             denom = w[y].sum()
             opt.zero_grad(set_to_none=True)
             batch_loss = torch.zeros((), device=device)
-            for xs, ys in zip(x.split(piece), y.split(piece), strict=True):
+            for xs, ys in zip(_pieces(x, piece), y.split(piece), strict=True):
                 with _autocast(device, settings.amp):
                     loss = loss_fn(model(xs), ys) / denom
                 loss.backward()
@@ -293,7 +403,9 @@ __all__ = [
     "IMAGENET_MEAN",
     "IMAGENET_STD",
     "FitResult",
+    "MultiViewNet",
     "StillDataset",
+    "StripDataset",
     "TrainSettings",
     "build_model",
     "build_transforms",

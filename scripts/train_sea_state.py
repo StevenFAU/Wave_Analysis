@@ -4,10 +4,22 @@
     python scripts/train_sea_state.py --config configs/experiments/currituck_sea_state_v0.yaml \\
         --package /path/to/currituck_sea_state_v0 --split year --out runs/year_convnext
 
-The package comes from ``scripts/sea_state_package.py``. ``--split`` picks the
-partition column (``day``: whole local days; ``year``: train 2022-2024, test
-2025, later test 2026). The model is trained on ``train``, the epoch is chosen
-on ``val``, and every test partition is predicted once with that epoch.
+The package comes from ``scripts/sea_state_package.py`` (Currituck) or
+``scripts/buoycam_package.py`` (NDBC buoy cameras). ``--split`` picks the
+partition column: ``day`` (whole local days) or ``year`` (train 2022-2024,
+test 2025, later test 2026) at Currituck; ``station`` (unseen buoys) or
+``time`` (later weeks) for the buoys. The model is trained on ``train``, the
+epoch is chosen on ``val``, and every test partition is predicted once with
+that epoch. Intervals come from a bootstrap over the config's
+``evaluation.bootstrap.group_col`` (per split if it is a mapping).
+
+With ``model.input: views`` (buoy-camera strips) each strip is read as its
+six views, one backbone runs on every view, and the mean feature of the
+usable views (the config's ``images`` rule) goes to the class head
+(``wave_analysis.models.sea_state.MultiViewNet``).
+
+    python scripts/train_sea_state.py --config configs/experiments/ndbc_buoycam_sea_state_v0.yaml \\
+        --package data/processed/packages/ndbc_buoycam_sea_state_v0 --split station --out runs/buoy_station
 
 Outputs in ``--out``:
 
@@ -39,17 +51,26 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from wave_analysis.config import load_yaml, repo_root
 from wave_analysis.datasets import build_provenance, write_provenance
+from wave_analysis.datasets.buoycam import usable_view_mask
 from wave_analysis.datasets.provenance import git_state
 from wave_analysis.datasets.sea_state import TEST_LATER
 from wave_analysis.datasets.splits import TEST, TRAIN, VAL
 from wave_analysis.evaluation.classification import classification_report
-from wave_analysis.evaluation.sea_state import HEADLINE, confusion_svg, format_line, report
+from wave_analysis.evaluation.sea_state import (
+    GROUP_UNITS,
+    HEADLINE,
+    confusion_svg,
+    format_line,
+    report,
+)
 from wave_analysis.models.sea_state import (
+    MultiViewNet,
     StillDataset,
+    StripDataset,
     TrainSettings,
     build_model,
     build_transforms,
@@ -66,10 +87,21 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--config", required=True)
     ap.add_argument("--package", required=True, help="package directory")
-    ap.add_argument("--split", choices=("day", "year"), required=True)
+    ap.add_argument(
+        "--split",
+        required=True,
+        help="a split of the package: day, year (Currituck), station, time",
+    )
     ap.add_argument("--out", required=True, help="run directory (created)")
     ap.add_argument("--backbone", help="override model.backbone")
-    ap.add_argument("--input", choices=("sea_crop", "full_frame"), help="override model.input")
+    ap.add_argument(
+        "--input", choices=("sea_crop", "full_frame", "views"), help="override model.input"
+    )
+    ap.add_argument(
+        "--class-weights",
+        choices=("inverse_frequency", "none"),
+        help="override model.class_weights (none: every still counts the same)",
+    )
     ap.add_argument("--epochs", type=int)
     ap.add_argument("--batch-size", type=int)
     ap.add_argument("--lr", type=float)
@@ -99,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         num_workers=args.num_workers,
         micro_batch=args.micro_batch,
         amp=args.amp,
+        class_weights=args.class_weights,
         pretrained=False if args.no_pretrained else None,
     )
     seed = int(args.seed if args.seed is not None else cfg.get("seed", 0))
@@ -128,6 +161,13 @@ def main(argv: list[str] | None = None) -> int:
     labels = pd.read_csv(pkg / "labels.csv")
     base = pd.read_csv(pkg / "baselines.csv")
     col = f"split_{args.split}"
+    if col not in labels.columns:
+        splits = sorted(c.removeprefix("split_") for c in labels.columns if c.startswith("split_"))
+        raise SystemExit(f"the package has no split {args.split!r}; it has {splits}")
+    boot = cfg["evaluation"]["bootstrap"]
+    gcol = boot["group_col"]
+    gcol = str(gcol[args.split] if isinstance(gcol, dict) else gcol)  # local_day, station_id, ...
+    unit = GROUP_UNITS.get(gcol, "groups")
     table = labels[labels[col].isin([TRAIN, *PARTITIONS])].reset_index(drop=True)
     if args.limit:
         rng = np.random.default_rng(seed)
@@ -137,7 +177,8 @@ def main(argv: list[str] | None = None) -> int:
             keep[rng.choice(idx, min(args.limit, idx.size), replace=False)] = True
         table = table.loc[keep].reset_index(drop=True)
     parts = {p: table[table[col] == p].reset_index(drop=True) for p in (TRAIN, *PARTITIONS)}
-    frame = (int(table["height_px"].iloc[0]), int(table["width_px"].iloc[0]))
+    hcol, wcol = ("height_px", "width_px") if "height_px" in table else ("height", "width")
+    frame = (int(table[hcol].iloc[0]), int(table[wcol].iloc[0]))
     size = input_size(settings, frame)
     log(
         f"{cfg['name']} split={args.split} device={device} backbone={settings.backbone} "
@@ -145,8 +186,20 @@ def main(argv: list[str] | None = None) -> int:
         + ", ".join(f"{p} {len(t):,}" for p, t in parts.items())
     )
 
+    views = settings.input == "views"
+
     def loader(t: pd.DataFrame, train: bool) -> DataLoader[Any]:
-        ds = StillDataset(pkg, t, settings, build_transforms(settings, size, train=train))
+        tf = build_transforms(settings, size, train=train)
+        ds: Dataset[Any]
+        if views:
+            ims = cfg["images"]  # the package's own rule for a usable view
+            mask = usable_view_mask(
+                t, min_mean=float(ims["min_view_mean"]), min_std=float(ims["min_view_std"]),
+                n_views=settings.n_views,
+            )  # fmt: skip
+            ds = StripDataset(pkg, t, settings, tf, mask)
+        else:
+            ds = StillDataset(pkg, t, settings, tf)
         return DataLoader(
             ds,
             batch_size=settings.batch_size,
@@ -172,7 +225,11 @@ def main(argv: list[str] | None = None) -> int:
         rep = classification_report(y_true, y_pred, n_classes=k)
         return {m: float(rep[m]) for m in HEADLINE[:4]}  # type: ignore[arg-type]
 
-    model = build_model(settings.backbone, k, pretrained=settings.pretrained)
+    model = (
+        MultiViewNet(settings.backbone, k, pretrained=settings.pretrained)
+        if views
+        else build_model(settings.backbone, k, pretrained=settings.pretrained)
+    )
     result = fit(
         model,
         loader(parts[TRAIN], True),
@@ -198,7 +255,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     pd.DataFrame(result.history).to_csv(out / "history.csv", index=False)
 
-    boot = cfg["evaluation"]["bootstrap"]
     rows, metrics, lines = [], {}, []
     for p in PARTITIONS:
         t = parts[p]
@@ -209,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "sample_id": t["sample_id"],
                 "partition": p,
-                "local_day": t["local_day"],
+                gcol: t[gcol],
                 "Hs_label_m": t["Hs_label_m"],
                 "near_boundary": t["near_boundary"],
                 "true": t["class"],
@@ -226,9 +282,9 @@ def main(argv: list[str] | None = None) -> int:
             "alpha": float(boot["alpha"]),
             "seed": int(boot["seed"]),
         }
-        y, g, nb = t["class"].to_numpy(), t["local_day"].to_numpy(), t["near_boundary"].to_numpy()
+        y, g, nb = t["class"].to_numpy(), t[gcol].to_numpy(), t["near_boundary"].to_numpy()
         entry: dict[str, Any] = {"model": report(y, pred, groups=g, near_boundary=nb, **kw)}
-        lines.append(format_line(f"{p:<10} model", entry["model"]))
+        lines.append(format_line(f"{p:<10} model", entry["model"], groups=unit))
         for bname in sorted(
             c.rsplit("_", 1)[0] for c in base.columns if c.endswith(f"_{args.split}")
         ):
@@ -245,11 +301,15 @@ def main(argv: list[str] | None = None) -> int:
             }
             lines.append(
                 format_line(
-                    f"{p:<10} {bname} ({ok.mean():.0%} of stills)", entry[bname]["baseline"]
+                    f"{p:<10} {bname} ({ok.mean():.0%} of stills)",
+                    entry[bname]["baseline"],
+                    groups=unit,
                 )
             )
             lines.append(
-                format_line(f"{p:<10} model, same stills", entry[bname]["model_same_stills"])
+                format_line(
+                    f"{p:<10} model, same stills", entry[bname]["model_same_stills"], groups=unit
+                )
             )
             if bname == "wis":
                 (out / f"confusion_{p}_wis.svg").write_text(

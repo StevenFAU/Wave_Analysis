@@ -179,9 +179,23 @@ prediction, and `provenance.yaml` the commit, inputs and GPU.
 
 ## Training on the desktop GPU (ROCm)
 
+> **Do not train on the desktop GPU until its cooling has been checked
+> (2026-11-14).** At 16:12:14 UTC, three minutes into a timing test, the
+> driver logged `GPU over temperature range(SW CTF) detected` and powered the
+> desktop off (an orderly shutdown). After the restart, a load test that
+> stopped itself at 90 °C saw the card go from 58 to 80 °C at the edge sensor
+> and from 69 to 98 °C at the hottest point within half a second of full load
+> (262 W), with the fan turning (1,000-1,400 rpm). That speed points to poor
+> contact between the chip and its heatsink (a cooler shifted, for example in
+> the move of 2026-11-13, or dried thermal paste), not to the fan curve. The
+> Currituck runs of 2026-11-13/14 (9 h) had finished without a trip. Idle
+> limits read by the driver: edge 100 °C, junction 110 °C (critical).
+> Check temperatures without root:
+> `cat /sys/class/drm/card*/device/hwmon/hwmon*/temp{1,2}_input` (milli-°C).
+
 The same three runs fit on the desktop's AMD card (Radeon RX 6800 XT class,
 gfx1030, 17.2 GB), without waiting for a cluster account. Set up and timed on
-2026-11-13; no run started yet.
+2026-11-13; the three Currituck runs ran on it on 2026-11-13/14.
 
 **Environment (once, no sudo):** `bash deploy/local/setup_rocm_env.sh` builds
 `.venv-rocm` with uv.lock's versions and PyTorch 2.14.0 for ROCm 7.2 (a 6.2 GB

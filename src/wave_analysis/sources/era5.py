@@ -459,17 +459,45 @@ class ERA5WaveSource(DataSource):
         (``.request.json``). Every attempt is returned and, if given, passed to
         ``sink`` as it completes.
         """
-        area = area_around(latitude, longitude, box_deg)
+        return self.fetch_area(
+            site_id,
+            area_around(latitude, longitude, box_deg),
+            periods,
+            dest_root=dest_root,
+            refresh=refresh,
+            now=now,
+            sink=sink,
+        )
+
+    def fetch_area(
+        self,
+        name: str,
+        area: Sequence[float],
+        periods: Iterable[pd.Period],
+        *,
+        dest_root: Path,
+        parameters: Sequence[WaveParameter] = PARAMETERS,
+        refresh: bool = False,
+        now: pd.Timestamp | None = None,
+        sink: Callable[[list[ManifestEntry]], object] | None = None,
+    ) -> list[ManifestEntry]:
+        """As :meth:`fetch`, for any ``area`` (``[north, west, south, east]``) and parameters.
+
+        ``name`` takes the place of the site in the file layout
+        (``<root>/<name>/era5_waves_<name>_<YYYY-MM>.nc``). Used for requests
+        that serve many sites at once, such as one parameter over the globe
+        (the CDS size limit counts fields, not area).
+        """
         entries: list[ManifestEntry] = []
         for period in periods:
-            path = raw_path(dest_root, site_id, period)
+            path = raw_path(dest_root, name, period)
             state = month_status(path, period)
             if not needs_request(path, state, now=now, refresh=refresh):
                 continue
-            request = build_request(period, area)
+            request = build_request(period, area, parameters)
             if request_fields(request) > MAX_FIELDS:
                 raise ValueError(f"request for {period} exceeds {MAX_FIELDS} fields")
-            entry = self._retrieve(site_id, period, request, path, state)
+            entry = self._retrieve(name, period, request, path, state)
             entries.append(entry)
             if sink is not None:
                 sink([entry])

@@ -94,14 +94,22 @@ def report(
     return out
 
 
-def format_line(name: str, rep: dict[str, Any]) -> str:
-    """One text line: the headline metrics with their intervals."""
+#: What the bootstrap groups are called in text, by grouping column.
+GROUP_UNITS = {"local_day": "days", "station_id": "buoys", "station_day": "buoy-days"}
+
+
+def format_line(name: str, rep: dict[str, Any], *, groups: str = "days") -> str:
+    """One text line: the headline metrics with their intervals.
+
+    ``groups`` names the bootstrap's groups (``rep["n_days"]`` counts them):
+    days at Currituck, buoys or buoy-days for the buoy cameras (:data:`GROUP_UNITS`).
+    """
     if not rep.get("n"):
         return f"{name}: no stills"
     parts = [
         f"{m} {rep[m]['value']:.3f} [{rep[m]['lo']:.3f}, {rep[m]['hi']:.3f}]" for m in HEADLINE[:4]
     ]
-    return f"{name}: n={rep['n']:,} ({rep['n_days']} days); " + "; ".join(parts)
+    return f"{name}: n={rep['n']:,} ({rep['n_days']} {groups}); " + "; ".join(parts)
 
 
 def confusion_svg(cm: Sequence[Sequence[int]], names: Sequence[str], *, title: str = "") -> str:

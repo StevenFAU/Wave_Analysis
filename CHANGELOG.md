@@ -27,6 +27,13 @@ separately (`docs/REPRODUCIBILITY.md`).
   2026 stills below the blurriest third of 2022-2024); haze of that size lowers the
   model's calm calls only from 0.73 to 0.67-0.70, against 0.49 seen in 2025.
 
+- Six-view training for the buoy cameras: `model.input: views` reads each strip's
+  six views with one backbone and averages the features of the usable ones
+  (`MultiViewNet`, `StripDataset`); `train_sea_state.py` takes any split of a
+  package, bootstraps over the config's group column and has `--class-weights none`.
+- `scripts/buoycam_era5.py`: ERA5 wave height at every camera buoy from one global
+  request per month (`ERA5WaveSource.fetch_area`), and the package's ERA5 baseline.
+
 ### Fixed (2026-11-14)
 - `sources.ndbc.buoycam.caption_band_rows`: the caption is a fixed 30-row band in
   both strip formats (measured); it was scaled to 25 rows for 2304 × 246 strips.

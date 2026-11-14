@@ -206,15 +206,23 @@ def view_columns(prefix: str, n_views: int = N_VIEWS) -> list[str]:
     return [f"{prefix}_{i}" for i in range(n_views)]
 
 
-def usable_views(
+def usable_view_mask(
     stats: pd.DataFrame, *, min_mean: float, min_std: float, n_views: int = N_VIEWS
-) -> NDArray[np.int64]:
-    """Number of views per strip with mean grey >= ``min_mean`` and std >= ``min_std``."""
+) -> NDArray[np.bool_]:
+    """``(strips, n_views)``: which views have mean grey >= ``min_mean`` and std >= ``min_std``."""
     m = stats[view_columns("view_mean", n_views)].to_numpy(dtype=np.float64)
     s = stats[view_columns("view_std", n_views)].to_numpy(dtype=np.float64)
     ok = np.nan_to_num(m, nan=-1) >= min_mean
     ok &= np.nan_to_num(s, nan=-1) >= min_std
-    return np.asarray(ok.sum(axis=1), dtype=np.int64)
+    return np.asarray(ok, dtype=np.bool_)
+
+
+def usable_views(
+    stats: pd.DataFrame, *, min_mean: float, min_std: float, n_views: int = N_VIEWS
+) -> NDArray[np.int64]:
+    """Number of usable views per strip (:func:`usable_view_mask`)."""
+    mask = usable_view_mask(stats, min_mean=min_mean, min_std=min_std, n_views=n_views)
+    return np.asarray(mask.sum(axis=1), dtype=np.int64)
 
 
 def check_filters(spec: Mapping[str, Any]) -> None:
@@ -234,6 +242,7 @@ __all__ = [
     "spec_records",
     "station_positions",
     "strip_stats",
+    "usable_view_mask",
     "usable_views",
     "view_columns",
 ]

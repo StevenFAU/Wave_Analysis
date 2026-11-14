@@ -66,12 +66,44 @@ split:
     min_gap: 72h
 baselines:
   # No image: the training strips' majority class, and for the time split
-  # each buoy's own majority class in its training weeks. ERA5 at each buoy is
-  # the physics baseline still to add (docs/experiments/ndbc_buoycam_sea_state.md).
+  # each buoy's own majority class in its training weeks.
   station_majority: [time]
+  # The physics baseline (added 2026-11-14): ERA5 significant wave height at
+  # the grid point with sea data nearest each buoy (scripts/buoycam_era5.py),
+  # interpolated to the strip's time (no value across a gap over 3 h) and
+  # corrected with a line fitted on each split's training strips.
+  era5:
+    path: era5/buoycam/era5_at_buoys.parquet
+    max_gap: 3h
+    optional: true                  # absent until downloaded and extracted
 package:
   out: data/processed/packages/ndbc_buoycam_sea_state_v0
   jpeg_quality: 95                  # strips keep their size; only the caption is cut
+model:
+  # Added 2026-11-14 after the package was built (the sections above are
+  # unchanged). One backbone reads each of the six views; the mean feature of
+  # the usable views (the images rule above) goes to the class head
+  # (wave_analysis.models.sea_state.MultiViewNet).
+  backbone: convnext_tiny           # torchvision, ImageNet weights
+  pretrained: true
+  input: views
+  view_size: [270, 480]             # the 2880 x 300 format's views as they are; 44008's 216 x 384 are scaled up
+  augment:
+    horizontal_flip: false          # as at Currituck: a mirrored view moves the sun and its glint
+    scale: [0.85, 1.0]
+    rotate_deg: 5.0                 # the horizon tilts with the buoy's roll and pitch
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.1
+  class_weights: inverse_frequency  # of the training strips, mean 1; the comparison run uses --class-weights none
+  epochs: 10                        # Currituck overfit by epoch 15 (training loss 0.04)
+  batch_size: 32                    # strips, so 192 views
+  lr: 3.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 1
+  select_on: f1_macro               # on val; the test partitions are scored once, with the chosen epoch
+  num_workers: 8
+  amp: none                         # fp32: bf16 is slow on the desktop's GPU and fp16 needs loss scaling
 evaluation:
   # Intervals from a bootstrap over whole buoys (station split: the unit that
   # generalizes) or whole buoy-days (time split).

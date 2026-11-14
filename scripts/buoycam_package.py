@@ -7,7 +7,9 @@ Reads the pairing table (``scripts/buoycam_pairs.py``), keeps the strips the
 config's filters allow, gives each a WMO sea-state class, makes the two splits
 (unseen buoys, grouped by distance; later weeks of the same buoys) and audits
 them for leakage. It scores the baselines (majority class; for the time split
-also each buoy's own majority class) and writes the package:
+also each buoy's own majority class; ERA5 at each buoy, corrected with a line
+fitted on the training strips, once ``scripts/buoycam_era5.py extract`` has
+run) and writes the package:
 
     <package.out>/
       images/<station>/YYYY/MM/<strip>.jpg   strips without their caption band
@@ -37,7 +39,7 @@ import numpy as np
 import pandas as pd
 import PIL
 
-from wave_analysis.config import load_yaml, repo_root
+from wave_analysis.config import data_dir, load_yaml, repo_root
 from wave_analysis.datasets import build_manifest, build_provenance, check_leakage, write_provenance
 from wave_analysis.datasets.buoycam import (
     check_filters,
@@ -48,13 +50,15 @@ from wave_analysis.datasets.buoycam import (
 )
 from wave_analysis.datasets.sea_state import (
     default_workers,
+    linear_correction,
     majority_baseline,
     near_boundary,
+    nowcast_at,
     sea_state_class,
     write_checksums,
 )
 from wave_analysis.datasets.splits import TEST, TRAIN, VAL, grouped_split, time_block_split
-from wave_analysis.evaluation.sea_state import format_line, report
+from wave_analysis.evaluation.sea_state import GROUP_UNITS, format_line, report
 from wave_analysis.ingest.checksum import sha256_file
 from wave_analysis.ingest.durable import atomic_open
 
@@ -169,6 +173,31 @@ def main(argv: list[str] | None = None) -> int:
             base[f"station_majority_{k}"] = station_majority(
                 y, st, train, fallback=base[f"majority_{k}"].to_numpy()
             )
+    # ERA5 at each buoy (scripts/buoycam_era5.py): interpolated to the strip's
+    # time, corrected with a line fitted on each split's training strips.
+    era_spec = cfg["baselines"].get("era5")
+    era_path = data_dir("processed") / era_spec["path"] if era_spec else None
+    corrections: dict[str, Any] = {}
+    if era_path is not None and era_path.exists():
+        era = pd.read_parquet(era_path)
+        x = np.full(len(m), np.nan)
+        for sid, g in era.groupby("station_id"):
+            rows = (m["station_id"] == sid).to_numpy()
+            if rows.any():
+                x[rows] = nowcast_at(
+                    m.loc[rows, "time_utc"],
+                    g.set_index("time_utc")["era5_hs_m"],
+                    max_gap=str(era_spec.get("max_gap", "3h")),
+                )
+        base["era5_hs_m"] = x
+        for k in SPLITS:
+            train = m[f"split_{k}"].to_numpy() == TRAIN
+            a, b = linear_correction(x, hs, train)
+            base[f"era5_{k}"] = sea_state_class(a + b * x, bounds)
+            ok = train & np.isfinite(x)
+            corrections[f"era5_{k}"] = {"a": a, "b": b, "n_train": int(ok.sum())}
+    elif era_spec and not era_spec.get("optional"):
+        raise SystemExit(f"{era_path} is missing (run scripts/buoycam_era5.py extract)")
     boot = cfg["evaluation"]["bootstrap"]
     scores: dict[str, Any] = {}
     for k in SPLITS:
@@ -187,7 +216,8 @@ def main(argv: list[str] | None = None) -> int:
                 )  # fmt: skip
                 bname = col.removesuffix(f"_{k}")
                 scores[f"{k}/{p}/{bname}"] = rep
-                print(format_line(f"{k:>7} {p:<4} {bname:<16}", rep))
+                unit = GROUP_UNITS.get(boot["group_col"][k], "groups")
+                print(format_line(f"{k:>7} {p:<4} {bname:<16}", rep, groups=unit))
 
     # ------------------------------------------------------------------ package
     out.mkdir(parents=True, exist_ok=True)
@@ -282,6 +312,8 @@ def main(argv: list[str] | None = None) -> int:
             stations.loc[stations["split_station"] == VAL, "station_id"]
         ),
         "leakage_audit": audits,
+        "era5_corrections": corrections,
+        "era5_coverage": float(np.isfinite(base["era5_hs_m"]).mean()) if corrections else 0.0,
         "baselines": scores,
     }
     with atomic_open(out / "summary.json", "w") as fh:
@@ -302,7 +334,11 @@ def main(argv: list[str] | None = None) -> int:
     write_provenance(
         build_provenance(
             artifact_id=cfg["name"],
-            inputs=[samples_path, Path(args.config)],
+            inputs=[
+                samples_path,
+                Path(args.config),
+                *([era_path] if era_path is not None and era_path.exists() else []),
+            ],
             outputs=[out / f for f in (*written, "SHA256SUMS")],
             config=cfg,
             notes=(
