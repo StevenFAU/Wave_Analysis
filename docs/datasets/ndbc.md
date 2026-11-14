@@ -239,6 +239,12 @@ images), 78 strips were 2880 × 300 px (6 × 480 px views) and one (44008) was
 horizon tilt (buoy roll and pitch), sun glint, distant land, hull structure at
 the edges, and occasional lens spots. `sources.ndbc.buoycam.split_views` crops
 the caption and returns the six views, so QC and models can work per view.
+The caption is a fixed band of the bottom **30 rows in both formats**
+(measured on 2026-11-14 on daylight strips of 44008, 2304 × 246, and of five
+2880 × 300 stations). In twilight the cameras raise their exposure and the
+strips stay in colour; at night the views are black. The sea-state dataset
+built from the archive is described in
+[ndbc_buoycam_sea_state](../experiments/ndbc_buoycam_sea_state.md).
 
 A new image is posted every hour, day and night, about 20 minutes after its
 time stamp. **Superseded images remain downloadable for about 72 hours** and

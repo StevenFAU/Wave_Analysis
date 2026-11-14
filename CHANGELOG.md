@@ -8,6 +8,12 @@ separately (`docs/REPRODUCIBILITY.md`).
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
 ### Added (2026-11-14)
+- NDBC buoy-camera sea-state dataset (`ndbc_buoycam_sea_state_v0`): every archived
+  strip paired with its own buoy's wave height (`scripts/buoycam_pairs.py`), and a
+  package of 41,091 twilight and daylight strips at 79 buoys with the caption cut,
+  a split by unseen buoys at least 300 km apart and a split by later weeks
+  (`scripts/buoycam_package.py`, `configs/experiments/ndbc_buoycam_sea_state_v0.yaml`).
+  Method in `docs/experiments/ndbc_buoycam_sea_state.md`.
 - First results of `currituck_sea_state_v0` (desktop GPU): on the held-out year
   2025 the camera alone scores balanced accuracy 0.73, below WIS (0.77) and level
   with ERA5; `scripts/sea_state_fusion.py` shows it adds macro-F1 +0.04 to +0.06
@@ -22,6 +28,8 @@ separately (`docs/REPRODUCIBILITY.md`).
   model's calm calls only from 0.73 to 0.67-0.70, against 0.49 seen in 2025.
 
 ### Fixed (2026-11-14)
+- `sources.ndbc.buoycam.caption_band_rows`: the caption is a fixed 30-row band in
+  both strip formats (measured); it was scaled to 25 rows for 2304 × 246 strips.
 - `scripts/train_sea_state.py` records the git commit at the start of a run, not
   at the end (`build_provenance(git=...)`): the full-frame run's provenance named a
   commit made while it ran.

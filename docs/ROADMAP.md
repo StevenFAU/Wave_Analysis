@@ -63,7 +63,10 @@ Priorities from the [landscape review](literature/landscape_review.md) §7:
 - CoastCam (Madeira Beach) adapter, orthorectification from IO/EO.
 - `ndbc_buoycam_hs_v0.1.0` dataset from the archiver: caption masking,
   image-quality annotation, pairing with same-station spectra, cross-station
-  benchmark with baselines. Zenodo DOI and datasheet.
+  benchmark with baselines. Zenodo DOI and datasheet. **Started 2026-11-14**
+  as `ndbc_buoycam_sea_state_v0` (caption cut, per-view brightness and
+  contrast, same-buoy labels, a split by unseen buoys; ERA5 baseline and
+  training to come): [experiment](experiments/ndbc_buoycam_sea_state.md).
 - First scientific question: *How accurately can H_s be inferred from public
   imagery when entire stations are held out?*
 
