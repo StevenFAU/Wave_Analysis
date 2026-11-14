@@ -22,10 +22,12 @@ Image format (observed on 79 images, 2026-09-26 00:10 UTC)
   Images are stamped at minute 10 of the hour (occasionally minute 0).
 * **A caption is burned into the bottom of every image** (station ID, UTC
   time, heading label). Models can read it, which leaks station identity and
-  invalidates cross-station evaluation. On all 47 daylight 2880 x 300 images
-  it occupies exactly the bottom **30 rows** (:data:`CAPTION_BAND_PX`). For
-  other heights :func:`caption_band_rows` scales proportionally; that fallback
-  is *unverified* until a daylight image of that format is measured.
+  invalidates cross-station evaluation. It is a fixed band of exactly the
+  bottom **30 rows** (:data:`CAPTION_BAND_PX`) in both formats: measured on
+  all 47 daylight 2880 x 300 images of 2026-09-26, and on 2026-11-14 on
+  daylight strips of 44008 (2304 x 246; rows 216-245 black, text in the
+  bottom 18) and of five 2880 x 300 stations. The band does not scale with
+  the image height (:func:`caption_band_rows`).
 * Visible per view: independent horizon tilt (buoy roll/pitch), sun glint,
   distant land, hull/tower structure at the edges, lens spots. Quality
   annotation should therefore run **per view** (:func:`split_views`).
@@ -75,10 +77,9 @@ from wave_analysis.ingest.manifest import EntryStatus, ManifestEntry, utcnow
 from wave_analysis.sources.ndbc.inventory import parse_buoycams
 from wave_analysis.sources.ndbc.products import BUOYCAM_IMAGE_URL, BUOYCAM_URL
 
-#: Bottom rows of a 300-px-high strip containing the burned-in caption
-#: (measured: exactly 30 rows on 47/47 daylight images, 2026-09-26).
+#: Bottom rows holding the burned-in caption, in both formats (2880 x 300 and
+#: 2304 x 246; measured 2026-09-26 and 2026-11-14, see the module notes).
 CAPTION_BAND_PX = 30
-_REFERENCE_HEIGHT_PX = 300
 
 #: Number of camera views per strip.
 N_VIEWS = 6
@@ -370,10 +371,14 @@ def summarize(entries: list[ManifestEntry]) -> dict[str, int]:
 
 
 def caption_band_rows(image_height: int) -> int:
-    """Rows to mask at the bottom of a strip of the given height (see module notes)."""
-    if image_height == _REFERENCE_HEIGHT_PX:
-        return CAPTION_BAND_PX
-    return round(CAPTION_BAND_PX * image_height / _REFERENCE_HEIGHT_PX)
+    """Rows to mask at the bottom of a strip: the caption is a fixed 30-row band.
+
+    Until 2026-11-14 this scaled the band with the height (25 rows for the
+    246-px format); measured, it is 30 rows there too.
+    """
+    if image_height <= CAPTION_BAND_PX:
+        raise ValueError(f"a {image_height}-px strip has no room for its 30-row caption")
+    return CAPTION_BAND_PX
 
 
 def split_views(image: NDArray[np.generic], n_views: int = N_VIEWS) -> list[NDArray[np.generic]]:

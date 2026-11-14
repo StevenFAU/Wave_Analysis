@@ -1,0 +1,83 @@
+# Sea state from NDBC buoy cameras: the camera and the wave sensor are on the
+# same buoy, so the label is measured where the image is taken. Can a network
+# tell the sea state from one hourly six-view strip, on buoys it has never
+# seen? Decided with Steven on 2026-11-14.
+#
+#   scripts/buoycam_pairs.py                                                       # pair every archived strip
+#   scripts/buoycam_package.py configs/experiments/ndbc_buoycam_sea_state_v0.yaml  # package + baselines
+#
+# Method, numbers and caveats: docs/experiments/ndbc_buoycam_sea_state.md.
+name: ndbc_buoycam_sea_state_v0
+description: >
+  Hourly six-view strips of the NDBC buoy cameras (archived from 2026-09-23),
+  twilight and daylight, labelled by the same buoy's significant wave height
+  (realtime .spec WVHT, computed on board from the hull-motion record): mean
+  of the records centred within 30 min (ADR 0010), binned into WMO sea-state
+  classes. The burned-in caption (station ID, time) is cut from every image.
+input:
+  samples: data/processed/pairs/ndbc_buoycam/samples.parquet
+  # The archive grows every hour; v0 ends with the wave records of the
+  # realtime snapshot of 2026-11-14 15:33 UTC.
+  start_utc: "2026-09-23T00:00:00Z"
+  end_utc: "2026-11-14T15:00:00Z"
+task:
+  id_col: sample_id
+  label: Hs_label_m
+  filters:
+    # Paired, readable and labelled (the pairing's own exclusions); six views
+    # of a known format; light enough to see the sea (below).
+    - {column: exclusion, op: isna}
+    - {column: width, op: in, value: [2880, 2304]}   # 3360 and 3840 px strips hold 7 or 8 views (11 strips)
+    - {column: sun_elevation_deg, op: ge, value: -6.0}
+    - {column: usable_views, op: ge, value: 3}
+  classes:
+    # WMO-No. 306, code table 3700, bands closed on the right (as Currituck).
+    names: [smooth, slight, moderate, rough_or_more]
+    bounds_m: [0.5, 1.25, 2.5]
+  near_boundary_rel_tol: 0.04
+images:
+  # Twilight strips are in colour and show the sea (the cameras raise their
+  # exposure); at night the views are black (median grey 2). Low sun leaves
+  # some views dark or glared, so the rule is per view: a view is usable when
+  # its mean grey is at least 20 and its standard deviation at least 4 (on
+  # 0-255; night views: mean 2, sd 0.1). A strip is kept with 3 usable views.
+  min_sun_elevation_deg: -6.0
+  min_view_mean: 20.0
+  min_view_std: 4.0
+  min_usable_views: 3
+split:
+  station:
+    # Unseen buoys. Buoys within 300 km of each other (chained) form one group
+    # and go to the same partition, so every test buoy is at least 300 km from
+    # every training buoy (44 groups; the largest: US West Coast 21 buoys,
+    # US East Coast 13, Gulf of Alaska 9).
+    protocol: cross_station
+    group_km: 300
+    fractions: [0.7, 0.15, 0.15]
+    seed: 0
+  time:
+    # The same buoys, later weeks: train before val_start, val, then test,
+    # with 72 h left out after each boundary so that one swell cannot link them.
+    protocol: cross_time
+    val_start: "2026-10-24"
+    test_start: "2026-11-03"
+    embargo: 72h
+  audit:
+    min_gap: 72h
+baselines:
+  # No image: the training strips' majority class, and for the time split
+  # each buoy's own majority class in its training weeks. ERA5 at each buoy is
+  # the physics baseline still to add (docs/experiments/ndbc_buoycam_sea_state.md).
+  station_majority: [time]
+package:
+  out: data/processed/packages/ndbc_buoycam_sea_state_v0
+  jpeg_quality: 95                  # strips keep their size; only the caption is cut
+evaluation:
+  # Intervals from a bootstrap over whole buoys (station split: the unit that
+  # generalizes) or whole buoy-days (time split).
+  bootstrap:
+    group_col: {station: station_id, time: station_day}
+    n_boot: 1000
+    alpha: 0.05
+    seed: 0
+seed: 0

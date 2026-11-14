@@ -365,7 +365,7 @@ def test_split_views_removes_caption():
     assert len(views) == 6
     assert all(v.shape == (270, 480, 3) for v in views)
     assert all(v.max() == 0 for v in views)
-    assert caption_band_rows(246) == 25
+    assert caption_band_rows(246) == 30  # a fixed band (measured on 44008, 2026-11-14)
     assert [v.shape[1] for v in split_views(np.zeros((246, 2304)))] == [384] * 6
     with pytest.raises(ValueError):
         split_views(np.zeros((300, 1000)))
