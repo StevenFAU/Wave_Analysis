@@ -75,6 +75,38 @@ def block_bootstrap_ci(
     return point, float(lo), float(hi)
 
 
+def paired_block_bootstrap_ci(
+    y_true: ArrayLike,
+    pred_a: ArrayLike,
+    pred_b: ArrayLike,
+    metric: Metric,
+    *,
+    groups: ArrayLike,
+    n_boot: int = 2000,
+    alpha: float = 0.05,
+    seed: int = 0,
+) -> tuple[float, float, float]:
+    """``metric(a) - metric(b)`` on the same samples, with a percentile CI from one group resampling.
+
+    Both predictions are scored on the same resampled groups in each draw, so
+    the interval is that of the difference, not of two separate estimates.
+    """
+    a = np.asarray(y_true, dtype=np.float64)
+    pa = np.asarray(pred_a, dtype=np.float64)
+    pb = np.asarray(pred_b, dtype=np.float64)
+    point = float(metric(a, pa) - metric(a, pb))
+    g = np.asarray(groups)
+    uniq, inv = np.unique(g, return_inverse=True)
+    members = [np.flatnonzero(inv == k) for k in range(uniq.size)]
+    rng = np.random.default_rng(seed)
+    reps = np.empty(n_boot)
+    for i in range(n_boot):
+        idx = np.concatenate([members[k] for k in rng.integers(0, uniq.size, uniq.size)])
+        reps[i] = metric(a[idx], pa[idx]) - metric(a[idx], pb[idx])
+    lo, hi = np.nanpercentile(reps, [100 * alpha / 2, 100 * (1 - alpha / 2)])
+    return point, float(lo), float(hi)
+
+
 def interval_coverage(y_true: ArrayLike, lower: ArrayLike, upper: ArrayLike) -> float:
     """Prediction-interval coverage probability (PICP)."""
     y = np.asarray(y_true, dtype=np.float64)
