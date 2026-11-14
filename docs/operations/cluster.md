@@ -190,6 +190,15 @@ prediction, and `provenance.yaml` the commit, inputs and GPU.
 > the move of 2026-11-13, or dried thermal paste), not to the fan curve. The
 > Currituck runs of 2026-11-13/14 (9 h) had finished without a trip. Idle
 > limits read by the driver: edge 100 °C, junction 110 °C (critical).
+> **After cleaning (2026-11-14 16:40 UTC) the card is unchanged:** the same
+> load took the hottest point from 53 to 105 °C and the edge from 46 to 85 °C
+> in about one second (229-262 W), and when the power dipped to 162 W it fell
+> 20 °C as fast. A chip that heats and cools in fractions of a second is
+> barely in contact with its heatsink: the cooler needs to come off and be
+> refitted with new paste (and pads), or the card repaired (Sapphire,
+> subsystem `1da2:439e`). The test script, which stops itself at set limits:
+> `.venv-rocm/bin/python .claude/bench/gpu_heat.py 180 100 85` (seconds,
+> junction °C, edge °C; local, not in the repository).
 > Check temperatures without root:
 > `cat /sys/class/drm/card*/device/hwmon/hwmon*/temp{1,2}_input` (milli-°C).
 
