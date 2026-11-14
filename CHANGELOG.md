@@ -34,6 +34,11 @@ separately (`docs/REPRODUCIBILITY.md`).
 - `scripts/buoycam_era5.py`: ERA5 wave height at every camera buoy from one global
   request per month (`ERA5WaveSource.fetch_area`), and the package's ERA5 baseline.
 
+- `deploy/k8s/`: training on a Kubernetes cluster with NVIDIA GPUs (FAU's H200
+  machine through Rancher), driven from the desktop by `run.sh` (storage volume,
+  helper pod, upload with checksums, environment from uv.lock, one-GPU job).
+  `git_state` reads the commit of a `git archive` tree from its `GIT_COMMIT` file.
+
 ### Fixed (2026-11-14)
 - `sources.ndbc.buoycam.caption_band_rows`: the caption is a fixed 30-row band in
   both strip formats (measured); it was scaled to 25 rows for 2304 × 246 strips.

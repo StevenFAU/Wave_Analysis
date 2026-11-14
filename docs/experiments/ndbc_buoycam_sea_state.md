@@ -207,5 +207,8 @@ weighting does. Then the time split.
       overheated and shut the machine down at the first timing test
       ([desktop GPU](../operations/cluster.md#training-on-the-desktop-gpu-rocm)).
       Needs a GPU with working cooling (this one checked, or the FAU
-      cluster).
+      cluster). The FAU route is ready: `deploy/k8s/run.sh` runs the job on
+      one H200 through Kubernetes ([cluster guide](../operations/cluster.md#kubernetes-faus-dgx-cluster-through-rancher)),
+      waiting for the administrators to clear the GPU machine's full disk
+      and give a namespace.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.

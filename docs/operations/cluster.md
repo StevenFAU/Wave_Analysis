@@ -177,6 +177,54 @@ prediction, and `provenance.yaml` the commit, inputs and GPU.
 | `EPOCHS`, `LIMIT` | config, all stills | smoke tests |
 | `STAGE` | `1` | copy the package to the node's local disk (`$TMPDIR`) before training |
 
+## Kubernetes (FAU's DGX cluster, through Rancher)
+
+FAU offers its H200 machine as a Kubernetes cluster, managed in Rancher, rather
+than through Slurm: a run is a Kubernetes *job* that asks for one GPU, and
+everything is driven from the desktop with `deploy/k8s/run.sh` (prepared and
+checked on 2026-11-14; not run yet).
+
+**Once, on the desktop:** the university VPN up; `kubectl` in `~/.local/bin`;
+the cluster's kubeconfig, downloaded in Rancher (cluster page, "Download
+KubeConfig" in the top bar), saved as `~/.kube/fau-dgx.yaml` with mode 600. It
+holds a token that lasts 30 days. A namespace to work in, from the cluster's
+administrators.
+
+```bash
+export KUBECONFIG=~/.kube/fau-dgx.yaml NS=<your namespace>
+deploy/k8s/run.sh check     # who you are, what you may create, the GPU machines and their taints
+deploy/k8s/run.sh up        # a 30 GB volume (nfs-csi) and a small helper pod
+deploy/k8s/run.sh push      # the code of this commit, the package (one 3 GB tar, SHA-256 checked), ImageNet weights, uv
+deploy/k8s/run.sh setup     # the Python environment of uv.lock on the volume (needs internet from the pod; once per lock)
+deploy/k8s/run.sh train station --limit 64 --epochs 1   # smoke test
+deploy/k8s/run.sh train station                         # the run
+deploy/k8s/run.sh train station --class-weights none    # the unweighted comparison
+deploy/k8s/run.sh logs <run>; deploy/k8s/run.sh fetch <run>   # follow, then copy runs/<run> back
+```
+
+How it is put together:
+
+- **Image:** the plain `python:3.12.16-slim-trixie`. The environment is built
+  from `uv.lock` (`uv sync --frozen --extra ml --no-install-project`) into
+  `/data/envs/<hash of uv.lock>`: PyTorch 2.14.0 with its own CUDA 13.0
+  libraries, which the H200 machine's NVIDIA driver (580) supports. The code
+  comes from `/data/repo/<commit>` (a `git archive` with a `GIT_COMMIT` file;
+  `git_state` reads it, so each run records its commit, `dirty: false`) on
+  `PYTHONPATH`.
+- **Data:** the job unpacks the package's tar into memory (`/scratch`, 8 GiB)
+  and checks `SHA256SUMS` before training: small files on network storage are
+  slow, and the node's own disk is not needed.
+- **Job:** one H200 (`nvidia.com/gpu: 1`, node selector `NVIDIA-H200`), 24 CPU
+  cores and 96 GiB of memory, bf16, 22 loading workers, 32 GiB `/dev/shm`; no
+  retry; a 12 h limit; results in `/data/runs/<run>`.
+- **Checked:** the three manifests pass a server-side dry run on the cluster
+  (nothing created); a training run from a `git archive` of the commit records
+  that commit; the package tar unpacks and passes `sha256sum -c`.
+- **Open (2026-11-14):** the GPU machine has carried a `disk-pressure` taint
+  since 2026-10-28, so no GPU job is scheduled until the cluster's
+  administrators clear it; and a namespace of our own. Whether pods can reach
+  PyPI is found out by `setup` (otherwise: a wheelhouse uploaded with `push`).
+
 ## Training on the desktop GPU (ROCm)
 
 > **Do not train on the desktop GPU until its cooling has been checked
