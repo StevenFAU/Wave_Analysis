@@ -1,0 +1,24 @@
+# A small long-running pod with the storage mounted (deploy/k8s/run.sh up):
+# uploads go through it, it builds the Python environment, and results are
+# fetched from it. No GPU. It deletes itself after a day (`run.sh up` again
+# makes a new one; the storage stays).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: wave-analysis-helper
+  labels: {app: wave-analysis, role: helper}
+spec:
+  restartPolicy: Never
+  activeDeadlineSeconds: 86400
+  containers:
+    - name: helper
+      image: python:3.12.16-slim-trixie   # the same image as the training job
+      command: ["sleep", "infinity"]
+      resources:
+        requests: {cpu: "2", memory: 8Gi}
+        limits: {memory: 8Gi}
+      volumeMounts:
+        - {name: data, mountPath: /data}
+  volumes:
+    - name: data
+      persistentVolumeClaim: {claimName: wave-analysis}

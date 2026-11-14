@@ -29,6 +29,9 @@ from wave_analysis.config import portable_path
 from wave_analysis.ingest.checksum import sha256_file
 from wave_analysis.ingest.manifest import utcnow
 
+#: File naming the commit of a source tree made with ``git archive`` (no ``.git``).
+ARCHIVE_STAMP = "GIT_COMMIT"
+
 _TRACKED_PACKAGES = ("numpy", "pandas", "scipy", "pyarrow", "pydantic", "httpx", "torch", "xarray")
 
 
@@ -36,7 +39,9 @@ def git_state(repo: Path | None = None) -> dict[str, Any]:
     """Current commit, branch and dirty flag (``None`` values outside a Git checkout).
 
     ``dirty`` means a tracked file differs from the commit; untracked files
-    (local tool settings, fresh outputs) do not count.
+    (local tool settings, fresh outputs) do not count. A tree without ``.git``
+    that holds a :data:`ARCHIVE_STAMP` file (a ``git archive`` copied to a
+    cluster) reports the commit written there.
     """
 
     def run(*args: str) -> str | None:
@@ -49,6 +54,11 @@ def git_state(repo: Path | None = None) -> dict[str, Any]:
         return out.stdout.strip()
 
     commit = run("rev-parse", "HEAD")
+    if commit is None and repo is not None and (Path(repo) / ARCHIVE_STAMP).is_file():
+        # A `git archive` of one commit (as copied to a cluster), with the commit
+        # written beside it: exactly that commit's tracked files, so not dirty.
+        stamp = (Path(repo) / ARCHIVE_STAMP).read_text(encoding="utf-8").split()
+        return {"commit": stamp[0] if stamp else None, "branch": None, "dirty": False}
     status = run("status", "--porcelain", "--untracked-files=no")
     return {
         "commit": commit,

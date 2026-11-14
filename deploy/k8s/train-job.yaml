@@ -1,0 +1,49 @@
+# One training run on one H200 (deploy/k8s/run.sh train <split> [args]).
+# run.sh fills in the __NAMES__; do not apply this file by hand.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wave-__RUN__
+  labels: {app: wave-analysis, run: "__RUN__"}
+spec:
+  backoffLimit: 0                    # a failed run is looked at, not retried
+  activeDeadlineSeconds: 43200       # 12 h at most
+  ttlSecondsAfterFinished: 604800    # the job record goes after 7 days; results stay on the volume
+  template:
+    metadata:
+      labels: {app: wave-analysis, run: "__RUN__"}
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        nvidia.com/gpu.product: NVIDIA-H200
+      containers:
+        - name: train
+          image: python:3.12.16-slim-trixie   # the environment's Python; PyTorch's wheels bring CUDA 13.0
+          command: ["bash", "/data/repo/__COMMIT__/deploy/k8s/train_in_pod.sh"]
+          env:
+            - {name: RUN, value: "__RUN__"}
+            - {name: SPLIT, value: "__SPLIT__"}
+            - {name: COMMIT, value: "__COMMIT__"}
+            - {name: ENV_DIR, value: "__ENV_DIR__"}
+            - {name: PKG, value: "__PKG__"}
+            - {name: CONFIG, value: "__CONFIG__"}
+            - {name: EXTRA_ARGS, value: "__EXTRA__"}
+            - {name: NUM_WORKERS, value: "22"}
+            - {name: TORCH_HOME, value: /data/cache/torch}
+            - {name: PYTHONUNBUFFERED, value: "1"}
+          resources:
+            # Memory includes the package unpacked in memory (/scratch) and the
+            # shared memory of the data-loading workers (/dev/shm).
+            requests: {cpu: "24", memory: 96Gi, nvidia.com/gpu: 1}
+            limits: {memory: 96Gi, nvidia.com/gpu: 1}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: scratch, mountPath: /scratch}
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: wave-analysis}
+        - name: scratch                # the package, unpacked in memory: no node disk needed
+          emptyDir: {medium: Memory, sizeLimit: 8Gi}
+        - name: shm
+          emptyDir: {medium: Memory, sizeLimit: 32Gi}

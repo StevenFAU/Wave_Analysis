@@ -1,0 +1,20 @@
+# Storage for the Kubernetes runs (deploy/k8s/run.sh up): one volume on the
+# cluster's network file storage, shared by the helper pod and the training jobs.
+#
+#   /data/repo/<commit>/   the code, a `git archive` of one commit (+ GIT_COMMIT)
+#   /data/envs/<lock>/     the Python environment of one uv.lock (about 6 GB)
+#   /data/packages/        training packages, one tar each (about 3 GB)
+#   /data/cache/torch/     the ImageNet weights (no internet needed for them)
+#   /data/runs/<run>/      results, fetched back with `run.sh fetch <run>`
+#   /data/bin/uv           the uv binary, copied from the desktop
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wave-analysis
+  labels: {app: wave-analysis}
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: nfs-csi        # the cluster's default class (kubectl get storageclass)
+  resources:
+    requests:
+      storage: 30Gi

@@ -407,3 +407,10 @@ def test_git_state_ignores_untracked_files(tmp_path):
     (tmp_path / "tracked.txt").write_text("a")
     git("add", "tracked.txt")
     assert git_state(tmp_path)["dirty"] is True
+
+
+def test_git_state_of_an_archived_tree(tmp_path):
+    from wave_analysis.datasets.provenance import ARCHIVE_STAMP
+
+    (tmp_path / ARCHIVE_STAMP).write_text("abc123\n")
+    assert git_state(tmp_path) == {"commit": "abc123", "branch": None, "dirty": False}
