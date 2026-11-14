@@ -13,6 +13,14 @@ separately (`docs/REPRODUCIBILITY.md`).
   with ERA5; `scripts/sea_state_fusion.py` shows it adds macro-F1 +0.04 to +0.06
   to either hindcast (intervals above zero), without clearing WIS on both
   metrics. Details in `docs/experiments/currituck_sea_state.md`.
+- Full-frame ablation: alone, below the sea band on 2025 (balanced accuracy
+  −0.07 [−0.10, −0.04]) and level on 2026; with a hindcast, level or slightly
+  better (macro-F1 +0.02, not planned beforehand).
+
+### Fixed (2026-11-14)
+- `scripts/train_sea_state.py` records the git commit at the start of a run, not
+  at the end (`build_provenance(git=...)`): the full-frame run's provenance named a
+  commit made while it ran.
 
 ### Added (2026-11-13)
 - Training on the desktop's AMD GPU: `deploy/local/setup_rocm_env.sh` (PyTorch for

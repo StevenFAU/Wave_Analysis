@@ -19,7 +19,8 @@ Outputs in ``--out``:
 * ``confusion_<partition>.svg`` / ``.csv`` - for the model and the WIS baseline.
 * ``report.md`` - the tables above as text; ``history.csv`` - one row per epoch.
 * ``best.pt`` - the chosen weights with the settings and class names.
-* ``provenance.yaml`` - git commit, inputs (labels, baselines, the package's
+* ``provenance.yaml`` - git commit (read at the start: a run takes hours and
+  the checkout may move on), inputs (labels, baselines, the package's
   SHA256SUMS), software and the GPU.
 
 Smoke test on a CPU: ``--limit 64 --epochs 1 --num-workers 2``.
@@ -42,6 +43,7 @@ from torch.utils.data import DataLoader
 
 from wave_analysis.config import load_yaml, repo_root
 from wave_analysis.datasets import build_provenance, write_provenance
+from wave_analysis.datasets.provenance import git_state
 from wave_analysis.datasets.sea_state import TEST_LATER
 from wave_analysis.datasets.splits import TEST, TRAIN, VAL
 from wave_analysis.evaluation.classification import classification_report
@@ -84,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--device", default="auto", help="auto, cuda, cuda:1 or cpu")
     ap.add_argument("--seed", type=int)
     args = ap.parse_args(argv)
+    git_at_start = git_state(repo_root())
 
     cfg = load_yaml(args.config)
     settings = TrainSettings.from_config(
@@ -299,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
             outputs=outputs,
             config=cfg,
             notes=f"torch {torch.__version__}; {run_info['gpu'] or platform.processor() or 'cpu'}",
-            repo=repo_root(),
+            git=git_at_start,
         ),
         out / "provenance.yaml",
     )

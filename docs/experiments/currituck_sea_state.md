@@ -228,6 +228,57 @@ camera adds. Gains with 95 % intervals from a paired bootstrap over days.
   there than on new data, and the combiner may trust it a little too much (this
   works against the combination on the test years).
 
+### The full frame (ablation)
+
+The same training on the whole frame (509 × 900 px, pieces of 8), to show
+how much the beach adds (see [Model](#model)). Run
+`runs/desktop_year_full_frame_20261114T0150Z/`, epoch 10 chosen (val macro-F1
+0.732), about 20 min an epoch. Its `provenance.yaml` names commit `c0e7cad`:
+the script read the commit at the end of the run, after the fusion code had
+been committed. The run used `f8967e0`'s code (the commits in between add the
+fusion code and docs; the training path is unchanged, and Python had imported
+it at the start). The script now reads the commit when a run starts.
+
+Differences full frame − sea band on the same stills, paired bootstrap over days:
+
+| Test | Full frame: bal. acc. / macro-F1 | Full − sea band, bal. acc. | Full − sea band, macro-F1 |
+|---|---|---|---|
+| val (2022–2024 weeks) | 0.76 / 0.73 | +0.016 [−0.056, +0.054] | −0.002 [−0.043, +0.029] |
+| 2025 | 0.67 [0.62, 0.71] / 0.70 [0.66, 0.74] | **−0.068 [−0.100, −0.040]** | −0.029 [−0.060, +0.004] |
+| 2026 | 0.70 [0.62, 0.74] / 0.71 [0.64, 0.74] | −0.015 [−0.047, +0.022] | +0.000 [−0.031, +0.036] |
+
+- **The beach does not help the camera alone.** On val and 2026 the two inputs
+  are level; on 2025 the full frame is worse. Recall on 2025 (smooth, slight,
+  moderate, rough): full frame 0.36, 0.92, 0.76, 0.63, sea band 0.49, 0.88,
+  0.84, 0.73. The full frame calls "slight" more often. The model that can see
+  the beach, people and umbrellas included, finds calm seas *less* often in
+  the next year. So the sea band stays the input.
+- **With a hindcast, the full frame does as well or a little better.** The
+  same combiner (design unchanged from `7d658fd`) on the full-frame run gains
+  macro-F1 over the hindcast alone of +0.052 [+0.019, +0.083] (WIS, 2025),
+  +0.080 [+0.045, +0.116] (ERA5, 2025) and +0.075 [+0.044, +0.107] (ERA5,
+  2026), against +0.038, +0.057 and +0.052 for the sea band. Directly,
+  combination with the full frame − combination with the sea band:
+  macro-F1 +0.015 [−0.003, +0.035], +0.022 [+0.004, +0.043], +0.023
+  [+0.003, +0.043]; balanced accuracy −0.016 [−0.038, +0.008], +0.000
+  [−0.022, +0.023], +0.012 [−0.010, +0.037] (all three include zero). This
+  comparison was not planned beforehand: read it as a lead, not a result.
+  With WIS on 2025 the
+  full-frame combination is 0.82 / 0.79 against the package baseline's 0.77 /
+  0.80 (gains +0.053 [+0.018, +0.096] and −0.008 [−0.048, +0.035]), so WIS's
+  bar is still not cleared on macro-F1.
+- One plausible reading: the full-frame model over-calls "rough" less
+  (precision 0.79 against 0.62 on 2025) and misses calm days that the
+  hindcast catches, so its errors are easier for the hindcast to fix. Not
+  tested; one seed per input, so differences of about 0.02 may be seed noise.
+- **Errors by month:** the sea band's worst months are the calm summers,
+  where "smooth" against "slight" decides most stills. Accuracy (sea band /
+  full frame): July 2025 0.64 / 0.67 (372 smooth, 455 slight stills), June
+  2026 0.64 / 0.68 (217, 428), July 2026 0.72 / 0.71 (224, 523). The sea
+  band's other months range from 0.72 to 0.91. The full frame is also weak in
+  January and February 2025 (0.69 and 0.69, sea band 0.81 and 0.74). The
+  calm summers are where to look first for the loss between years.
+
 ## Status
 
 - [x] Package built and checked (`SHA256SUMS`), baselines scored (2026-11-10).
@@ -241,7 +292,8 @@ camera adds. Gains with 95 % intervals from a paired bootstrap over days.
 - [x] Runs on the desktop GPU (2026-11-14): year split, day split.
 - [x] Camera + hindcast combination (2026-11-14): the camera adds macro-F1
       +0.04 to +0.06 over the hindcast alone; WIS's bar not cleared.
-- [ ] Full-frame ablation (running, ends about 06:00 on 2026-11-14).
+- [x] Full-frame ablation (2026-11-14): alone, below the sea band on 2025
+      (balanced accuracy −0.07); with a hindcast, level or slightly better.
 - [x] ERA5 baseline (2026-11-13): standardized for 2022-01 to 2026-10, package
       rebuilt from a clean tree (commit `fdff589`, `dirty: false`, `SHA256SUMS`
       checked).

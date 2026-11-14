@@ -369,6 +369,9 @@ def test_provenance_and_ro_crate(tmp_path: Path):
     assert rec["input_files"][0]["sha256"].startswith("ca978112")
     p = write_provenance(rec, tmp_path / "p.yaml")
     assert yaml.safe_load(p.read_text())["artifact_id"] == "x"
+    start = {"commit": "abc", "branch": "main", "dirty": False}
+    rec = build_provenance(artifact_id="x", inputs=[], outputs=[], git=start)
+    assert rec["git"] == start
     crate = write_ro_crate(
         tmp_path,
         name="t",

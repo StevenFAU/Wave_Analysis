@@ -89,12 +89,18 @@ def build_provenance(
     upstream_manifests: Iterable[str | Path] = (),
     notes: str | None = None,
     repo: Path | None = None,
+    git: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Assemble a provenance record (checksums every input and output file)."""
+    """Assemble a provenance record (checksums every input and output file).
+
+    ``git`` is the :func:`git_state` taken when the work started; give it for
+    long jobs, because the checkout may move on before the record is written
+    (``None``: read it now).
+    """
     return {
         "artifact_id": artifact_id,
         "created_at": utcnow().isoformat().replace("+00:00", "Z"),
-        "git": git_state(repo),
+        "git": dict(git) if git is not None else git_state(repo),
         "pipeline": {
             "command": command or " ".join([Path(sys.argv[0]).name, *sys.argv[1:]]),
             "config": dict(config) if config else None,
