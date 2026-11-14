@@ -100,7 +100,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     seed = int(args.seed if args.seed is not None else cfg.get("seed", 0))
     torch.manual_seed(seed)
-    torch.backends.cudnn.benchmark = True
+    # cuDNN's kernel autotuner on NVIDIA GPUs. On ROCm the same switch makes MIOpen
+    # search kernels that it compiles at run time, and with PyTorch's ROCm wheels
+    # that compile fails (its bundled compiler finds no C++ standard headers);
+    # MIOpen's precompiled kernels work, and the desktop timings used them.
+    torch.backends.cudnn.benchmark = torch.version.hip is None
     device = torch.device(
         ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
     )
@@ -274,6 +278,7 @@ def main(argv: list[str] | None = None) -> int:
         "device": str(device),
         "gpu": torch.cuda.get_device_name(device) if device.type == "cuda" else None,
         "torch": torch.__version__,
+        "hip": torch.version.hip,
         "limit_per_partition": args.limit,
         "seed": seed,
     }

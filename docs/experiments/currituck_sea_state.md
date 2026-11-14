@@ -167,8 +167,10 @@ jitter, ±2° rotation and mild colour changes.
       clean worktree): 100 stills per partition, one epoch, 70 s end to end;
       every output file written, provenance `dirty: false`. Its numbers mean
       nothing (100 training stills).
-- [ ] Runs on the H200: year split, day split, full-frame ablation
-      ([cluster guide](../operations/cluster.md)).
+- [x] Desktop GPU ready (2026-11-13): ROCm environment, timings and a GPU
+      check on the real package; the three runs take about 9.5 h there
+      ([cluster guide, desktop section](../operations/cluster.md#training-on-the-desktop-gpu-rocm)).
+- [ ] Runs: year split, day split, full-frame ablation (desktop GPU or H200).
 - [x] ERA5 baseline (2026-11-13): standardized for 2022-01 to 2026-10, package
       rebuilt from a clean tree (commit `fdff589`, `dirty: false`, `SHA256SUMS`
       checked).

@@ -8,6 +8,11 @@ separately (`docs/REPRODUCIBILITY.md`).
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
 ### Added (2026-11-13)
+- Training on the desktop's AMD GPU: `deploy/local/setup_rocm_env.sh` (PyTorch for
+  ROCm in `.venv-rocm`), `deploy/local/train_sea_state.sh` (the three runs in a row),
+  `--micro-batch` (a batch computed in pieces, same update) and `--amp` in
+  `scripts/train_sea_state.py`; cuDNN benchmark mode stays off on ROCm, where MIOpen's
+  run-time kernel compile fails. Timings in `docs/operations/cluster.md`.
 - ERA5 baseline in the `currituck_sea_state_v0` package (2022-01 to 2026-10,
   every still): balanced accuracy 0.73 on 2025 (WIS 0.77) and 0.75 on 2026,
   where it is the only physics baseline. The nearest sea grid point is a damped

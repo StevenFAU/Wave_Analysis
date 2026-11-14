@@ -176,3 +176,70 @@ prediction, and `provenance.yaml` the commit, inputs and GPU.
 | `BACKBONE` | the config's `convnext_tiny` | `resnet50` also works |
 | `EPOCHS`, `LIMIT` | config, all stills | smoke tests |
 | `STAGE` | `1` | copy the package to the node's local disk (`$TMPDIR`) before training |
+
+## Training on the desktop GPU (ROCm)
+
+The same three runs fit on the desktop's AMD card (Radeon RX 6800 XT class,
+gfx1030, 17.2 GB), without waiting for a cluster account. Set up and timed on
+2026-11-13; no run started yet.
+
+**Environment (once, no sudo):** `bash deploy/local/setup_rocm_env.sh` builds
+`.venv-rocm` with uv.lock's versions and PyTorch 2.14.0 for ROCm 7.2 (a 6.2 GB
+download, 16 GB installed). The project's `.venv` stays CPU-only. The GPU is
+reachable because the logged-in user has access to `/dev/kfd` and
+`/dev/dri/renderD128`.
+
+**Measured speeds** (`convnext_tiny`, training steps on batches of 64;
+loading and augmenting stills on the CPU gives ~1,000 sea crops/s and ~400
+full frames/s with 8 workers, so the GPU sets the pace):
+
+| Input | Precision | Pieces of | Train | Predict | GPU memory |
+|---|---|---|---|---|---|
+| sea crop 168 × 900 | bf16 (the config) | 64 | 12.9 img/s | | 12.3 GB |
+| sea crop | fp16 | 64 | 70 img/s | | 12.3 GB |
+| sea crop | **fp32** | **32** | **53 img/s** | 171 img/s | 10.9 GB (64 at once: out of memory) |
+| full frame 509 × 900 | fp16 | 16 | 22.9 img/s | | 9.5 GB |
+| full frame | **fp32** | **8** | **17.4 img/s** | 53 img/s | 8.4 GB (16: out of memory) |
+
+- **fp32, not bf16:** the card has no bf16 hardware, and bf16 runs five times
+  slower. fp16 is 25–35 % faster than fp32 but would need loss scaling, which
+  the training code does not have; fp32 needs nothing new.
+- **Pieces (`--micro-batch`):** each batch of 64 is computed in pieces whose
+  gradients are summed before the optimizer step, the loss divided by the
+  whole batch's class weight, so the update is the full batch's (test
+  `test_micro_batches_give_the_same_update`; ConvNeXt has no batch
+  normalization).
+- **No cuDNN benchmark mode on ROCm:** with it, MIOpen compiles kernels at run
+  time and fails (`'type_traits' file not found`); the script turns it off
+  when `torch.version.hip` is set.
+- A 1,000-still, one-epoch check on the real package ran at the speeds
+  above plus ~6 s per epoch for starting the loader workers.
+
+**Expected time**, 15 epochs each, run one after the other:
+
+| Run | Per epoch | Whole run |
+|---|---|---|
+| year split, sea crop (the main result) | ~6.6 min | ~1 h 50 min |
+| day split, sea crop | ~8.8 min | ~2 h 20 min |
+| year split, full frame (ablation) | ~20 min | ~5 h 15 min |
+| all three | | **~9.5 h** |
+
+**Start** (the package is on the internal disk, so the WebCOOS drive does not
+matter; the desktop may feel slower while the GPU is busy):
+
+```bash
+systemd-run --user --collect --unit wave-analysis-train -p Nice=5 --working-directory="$PWD" bash deploy/local/train_sea_state.sh
+```
+
+```bash
+journalctl --user -u wave-analysis-train -f    # follow; Ctrl+C stops following, not the runs
+```
+
+```bash
+systemctl --user stop wave-analysis-train      # stop
+```
+
+Each run writes `runs/desktop_<split>_<input>_<UTC time>/`, with the same
+files as a cluster run (section 8). The log prints `(null): No such file or
+directory` from the ROCm libraries at start-up; the launcher filters it out,
+and it is harmless.
