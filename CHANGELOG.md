@@ -16,6 +16,10 @@ separately (`docs/REPRODUCIBILITY.md`).
 - Full-frame ablation: alone, below the sea band on 2025 (balanced accuracy
   −0.07 [−0.10, −0.04]) and level on 2026; with a hindcast, level or slightly
   better (macro-F1 +0.02, not planned beforehand).
+- `scripts/sea_state_haze_check.py`: sea-band sharpness of every still and a fog
+  test of a trained model. The Currituck camera has grown hazier each year (93 % of
+  2026 stills below the blurriest third of 2022-2024); haze of that size lowers the
+  model's calm calls only from 0.73 to 0.67-0.70, against 0.49 seen in 2025.
 
 ### Fixed (2026-11-14)
 - `scripts/train_sea_state.py` records the git commit at the start of a run, not

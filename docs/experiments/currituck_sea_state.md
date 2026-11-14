@@ -279,6 +279,44 @@ Differences full frame − sea band on the same stills, paired bootstrap over da
   January and February 2025 (0.69 and 0.69, sea band 0.81 and 0.74). The
   calm summers are where to look first for the loss between years.
 
+### Why the calm days fail in 2025 and 2026
+
+Checked on 2026-11-14 with the sea-band run's saved predictions and its
+weights (inference only): `scripts/sea_state_haze_check.py` writes
+`<run>/haze_check/`.
+
+- **At the same buoy height, the camera calls calm seas less often in later
+  years.** Share called "smooth" for buoy Hs 0.3–0.4 m: 0.93 on the val weeks
+  of 2022–2024, 0.64 in 2025, 0.56 in 2026; for 0.4–0.45 m: 0.72, 0.49, 0.44.
+  The calm days themselves are no closer to the 0.5 m line: the median Hs of
+  "smooth" stills is 0.42–0.45 m in every year. WIS also calls calm less
+  often in 2025 at 0.4–0.45 m (0.81 to 0.61), so part of the change may lie in
+  the sea or the buoy, not the camera. (Val chose the camera's epoch, so its
+  val numbers are a little optimistic.)
+- **The images have changed: the camera has grown hazier year after year.**
+  Sharpness of the sea band (variance of the Laplacian): share of stills below
+  the blurriest third of 2022–2024 is 19 % in 2022, 33 % in 2023, 44 % in
+  2024, 69 % in 2025, 93 % in 2026. The raw JPEGs have been about a third
+  smaller since mid-2025, and the stills look milky, as if a film covers the
+  housing. In 2022–2024 haze went with storms: 84 % of "rough" stills lie in
+  the blurriest third, 25 % of "smooth" ones.
+- **Haze of the measured size explains only a small part.** Median
+  sharpness is 582 on the val stills, 273 in 2025 and 115 in 2026. The val
+  stills blurred to 191 or 97, a little beyond the real years, are called
+  calm 0.70 and 0.67–0.68 of the time instead of 0.73; only much heavier blur
+  (sharpness 3–20) brings 0.47–0.56. A milky veil alone gives 0.71. The real
+  drop was to 0.49. Synthetic blur is not the real degradation, but
+  within 2025 too the haziest calm stills are not the worst (recall 0.54 in
+  the blurriest third, 0.38 in the middle one).
+- **Not yet tested:** what else changed between years in the band: the beach
+  and surf zone (sandbars move, and they change how much breaking a given
+  offshore height makes), colour and exposure, and compression.
+- **For the next run:** the model has learned this camera as it looked in
+  2022–2024. Train with recent stills and test on a later period (the day
+  split, which mixes years, does not show the loss); add blur and
+  compression to the augmentation; and track the camera's sharpness as a
+  quality field.
+
 ## Status
 
 - [x] Package built and checked (`SHA256SUMS`), baselines scored (2026-11-10).
@@ -294,6 +332,8 @@ Differences full frame − sea band on the same stills, paired bootstrap over da
       +0.04 to +0.06 over the hindcast alone; WIS's bar not cleared.
 - [x] Full-frame ablation (2026-11-14): alone, below the sea band on 2025
       (balanced accuracy −0.07); with a hindcast, level or slightly better.
+- [x] Calm-day diagnosis (2026-11-14): the camera has grown hazier each year;
+      haze of that size explains only a small part of the loss.
 - [x] ERA5 baseline (2026-11-13): standardized for 2022-01 to 2026-10, package
       rebuilt from a clean tree (commit `fdff589`, `dirty: false`, `SHA256SUMS`
       checked).
