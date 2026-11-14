@@ -72,7 +72,8 @@ def main(argv: list[str] | None = None) -> int:
     names = list(cfg["task"]["classes"]["names"])
     k = len(names)
     boot = cfg["evaluation"]["bootstrap"]
-    labels = [f for f in prov["input_files"] if str(f).endswith("labels.csv")]
+    paths = [str(f["path"] if isinstance(f, dict) else f) for f in prov["input_files"]]
+    labels = [f for f in paths if f.endswith("labels.csv")]
     if not labels:
         raise SystemExit(f"no package labels.csv among the inputs of {run / 'provenance.yaml'}")
     package = Path(str(labels[0])).parent

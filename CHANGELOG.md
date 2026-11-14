@@ -7,6 +7,13 @@ separately (`docs/REPRODUCIBILITY.md`).
 
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
+### Added (2026-11-14)
+- First results of `currituck_sea_state_v0` (desktop GPU): on the held-out year
+  2025 the camera alone scores balanced accuracy 0.73, below WIS (0.77) and level
+  with ERA5; `scripts/sea_state_fusion.py` shows it adds macro-F1 +0.04 to +0.06
+  to either hindcast (intervals above zero), without clearing WIS on both
+  metrics. Details in `docs/experiments/currituck_sea_state.md`.
+
 ### Added (2026-11-13)
 - Training on the desktop's AMD GPU: `deploy/local/setup_rocm_env.sh` (PyTorch for
   ROCm in `.venv-rocm`), `deploy/local/train_sea_state.sh` (the three runs in a row),

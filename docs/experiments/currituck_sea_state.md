@@ -160,6 +160,74 @@ date or time), outside the crop. **No horizontal flips:** the camera is fixed,
 and a mirrored scene is not one it can see. Augmentation is a 0.85–1.0 scale
 jitter, ±2° rotation and mild colour changes.
 
+## Results (2026-11-14, desktop GPU)
+
+Runs at commit `f8967e0` on the desktop's RX 6800 XT class GPU (fp32, batches
+of 64 in pieces of 32; [cluster guide](../operations/cluster.md#training-on-the-desktop-gpu-rocm)),
+one seed each. Folders `runs/desktop_<split>_<input>_20261114T0150Z/` on the
+desktop (not in the backup).
+
+### The camera alone
+
+| Split / test | Chosen epoch (val macro-F1) | Balanced acc. | Macro-F1 | QW kappa | Hindcast on the same stills |
+|---|---|---|---|---|---|
+| year / 2025 | 15 (0.734) | 0.73 [0.69, 0.77] | 0.73 [0.68, 0.77] | 0.78 [0.75, 0.81] | WIS 0.77 / 0.80; ERA5 0.73 / 0.76 |
+| year / 2026 | | 0.71 [0.64, 0.76] | 0.71 [0.63, 0.75] | 0.71 [0.65, 0.76] | ERA5 0.75 / 0.77 |
+| day / test | 12 (0.790) | 0.78 [0.65, 0.84] | 0.78 [0.65, 0.82] | 0.80 [0.76, 0.83] | WIS (74 % of stills) 0.75 / 0.78, camera there 0.80 / 0.79 |
+
+- **On the held-out year the camera does not beat WIS.** It ties ERA5 on
+  2025 and is below it on 2026. Recall by class on 2025 (smooth, slight,
+  moderate, rough): camera 0.49, 0.88, 0.84, 0.73; WIS 0.59, 0.89, 0.87, 0.73.
+  It calls "rough" 284 times for 243 rough stills (WIS: 199), so its rough
+  precision is 0.62 against WIS's 0.89. Confusion matrix on 2025:
+  `[657, 681, 0, 0] / [270, 4149, 294, 18] / [0, 196, 1494, 89] / [0, 0, 66, 177]`.
+- **It does not carry over well between years.** On held-out days it beats WIS
+  on the same stills; on the held-out year it does not. The loss is mostly on
+  "smooth" (recall 0.75 on held-out days, 0.49 in 2025). Something that changes
+  from year to year (sandbars, camera aim or exposure, season mix) may carry
+  part of what it learned; not yet examined.
+- **It overfits:** training loss 0.04 by epoch 15, while val macro-F1 rose
+  slowly and val balanced accuracy peaked at epoch 8 (0.83).
+- **Its errors differ from WIS's.** On 2025 the camera is right on 9.9 % of the
+  stills WIS gets wrong, WIS on 13.2 % of the camera's errors; on calm stills
+  at least one of the two is right 79 % of the time, WIS alone 59 %
+  (descriptive, an upper bound for any combination).
+
+### The camera with the hindcast
+
+Is there information in the image that the hindcast lacks?
+`scripts/sea_state_fusion.py` (design fixed and committed before scoring, `7d658fd`):
+a weighted multinomial logistic regression on the camera's class
+log-probabilities and log Hs of the hindcast, fitted on the year split's val
+weeks, scored once on each test. The fair comparison is the same regression
+on the hindcast alone, fitted on the same stills: the difference is what the
+camera adds. Gains with 95 % intervals from a paired bootstrap over days.
+
+| Test (combiner fitted on) | Camera + hindcast: bal. acc. / macro-F1 | Hindcast alone, refitted | **Gain from the camera** (bal. acc. / macro-F1) | Package hindcast baseline |
+|---|---|---|---|---|
+| WIS, 2025 (2,335 val stills, 98 days) | 0.84 [0.80, 0.87] / 0.77 [0.72, 0.81] | 0.82 / 0.74 | +0.019 [−0.018, +0.050] / **+0.038 [+0.007, +0.065]** | 0.77 / 0.80 |
+| ERA5, 2025 (3,470, 149 days) | 0.83 [0.80, 0.86] / 0.77 [0.72, 0.81] | 0.81 / 0.72 | +0.024 [−0.006, +0.051] / **+0.057 [+0.022, +0.092]** | 0.73 / 0.76 |
+| ERA5, 2026 (same fit) | 0.83 [0.77, 0.87] / 0.74 [0.67, 0.80] | 0.81 / 0.69 | +0.020 [−0.006, +0.044] / **+0.052 [+0.023, +0.079]** | 0.75 / 0.77 |
+
+- **The camera adds a modest, consistent amount.** Macro-F1 rises by 0.04 to
+  0.06 on all three tests with intervals above zero; balanced accuracy by about
+  0.02, with intervals that include zero. All six gains have the same sign,
+  with two hindcasts and two years.
+- **Against the package's WIS baseline, the trade changes, not the total.** The
+  class-weighted combiner gains recall on the rare classes (2025, with WIS:
+  smooth 0.82, rough 0.88) and loses precision (rough 0.56). Its balanced
+  accuracy is far above the baseline's (0.84 against 0.77) and its macro-F1 a
+  little below it (0.77 against 0.80, gain −0.022 [−0.064, +0.020]). Most of the
+  balanced-accuracy jump comes from refitting with class weights (the hindcast
+  alone, refitted, reaches 0.82), not from the camera. So **the bar set
+  beforehand (beat WIS on both metrics) is not cleared**.
+  Confusion matrix on 2025 (with WIS):
+  `[1092, 246, 0, 0] / [495, 3754, 482, 0] / [0, 69, 1545, 165] / [0, 0, 29, 214]`.
+- Limits: one seed; one camera; the camera's epoch was chosen on the same val
+  weeks the combiner is fitted on, which makes the camera look slightly better
+  there than on new data, and the combiner may trust it a little too much (this
+  works against the combination on the test years).
+
 ## Status
 
 - [x] Package built and checked (`SHA256SUMS`), baselines scored (2026-11-10).
@@ -170,7 +238,10 @@ jitter, ±2° rotation and mild colour changes.
 - [x] Desktop GPU ready (2026-11-13): ROCm environment, timings and a GPU
       check on the real package; the three runs take about 9.5 h there
       ([cluster guide, desktop section](../operations/cluster.md#training-on-the-desktop-gpu-rocm)).
-- [ ] Runs: year split, day split, full-frame ablation (desktop GPU or H200).
+- [x] Runs on the desktop GPU (2026-11-14): year split, day split.
+- [x] Camera + hindcast combination (2026-11-14): the camera adds macro-F1
+      +0.04 to +0.06 over the hindcast alone; WIS's bar not cleared.
+- [ ] Full-frame ablation (running, ends about 06:00 on 2026-11-14).
 - [x] ERA5 baseline (2026-11-13): standardized for 2022-01 to 2026-10, package
       rebuilt from a clean tree (commit `fdff589`, `dirty: false`, `SHA256SUMS`
       checked).
