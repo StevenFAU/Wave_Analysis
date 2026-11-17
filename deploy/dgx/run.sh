@@ -60,26 +60,28 @@ push)
         echo "commit first: the server runs a commit, not a working tree" >&2
         exit 1
     fi
+    # Uploads can be slow (about 2 Mbit/s through FAU's bastion on 2026-11-17) and
+    # break: rsync resumes a broken transfer (--partial-dir) and gives a file its
+    # final name only once it is complete. Note that stopping this script does not
+    # stop a transfer already handed to the shared login (it holds the open file).
+    put() { rsync -t --partial-dir=.rsync-partial --info=progress2 -e "ssh -T -o BatchMode=yes" "$@"; }
     r mkdir -p "$BASE"/{repo,packages,bin,cache/torch/hub/checkpoints,runs,logs,envs}
-    # 1. the code of this commit, with the commit written beside it (no .git on the server)
+    # 1. the code of this commit (about 5 MB), unpacked beside its final place and
+    #    renamed with the commit written in it (no .git on the server)
     if r test -f "$BASE/repo/$COMMIT/GIT_COMMIT"; then
         say "code $COMMIT already there"
     else
-        git archive --format=tar --prefix="$COMMIT/" HEAD | r tar -x -C "$BASE/repo"
-        echo "$COMMIT" | r "cat > $BASE/repo/$COMMIT/GIT_COMMIT"
+        r rm -rf "$BASE/repo/$COMMIT.part"
+        git archive --format=tar --prefix="$COMMIT.part/" HEAD | r tar -x -C "$BASE/repo"
+        r "echo $COMMIT > $BASE/repo/$COMMIT.part/GIT_COMMIT && mv $BASE/repo/$COMMIT.part $BASE/repo/$COMMIT"
         say "code $COMMIT copied"
     fi
     # 2. uv, to build the environment from uv.lock
-    if ! r test -x "$BASE/bin/uv"; then
-        r "cat > $BASE/bin/uv.part && chmod 755 $BASE/bin/uv.part && mv $BASE/bin/uv.part $BASE/bin/uv" <"$(command -v uv)"
-    fi
+    put --chmod=F755 "$(command -v uv)" "$GPU_HOST:$BASE/bin/uv"
     say "uv $(r "$BASE/bin/uv" --version | awk '{print $2}')"
     # 3. the ImageNet weights the config's backbone starts from
-    for f in "$HOME"/.cache/torch/hub/checkpoints/convnext_tiny-*.pth; do
-        dest="$BASE/cache/torch/hub/checkpoints/$(basename "$f")"
-        r test -f "$dest" || r "cat > $dest.part && mv $dest.part $dest" <"$f"
-        say "weights $(basename "$f")"
-    done
+    put "$HOME"/.cache/torch/hub/checkpoints/convnext_tiny-*.pth "$GPU_HOST:$BASE/cache/torch/hub/checkpoints/"
+    say "weights there"
     # 4. the package, as one tar, checked by its SHA-256 at both ends
     src="data/processed/packages/$PKG"
     tarf="data/interim/k8s/$PKG.tar"
@@ -89,18 +91,16 @@ push)
         tar -C data/processed/packages -cf "$tarf.part" "$PKG" && mv "$tarf.part" "$tarf"
         sha256sum "$tarf" | cut -d' ' -f1 >"$tarf.sha256"
     fi
+    say "package $PKG ($(du -h "$tarf" | cut -f1)) ..."
+    put "$tarf" "$GPU_HOST:$BASE/packages/$PKG.tar"
     want="$(cat "$tarf.sha256")"
-    have="$(r "sha256sum $BASE/packages/$PKG.tar 2>/dev/null | cut -d' ' -f1" || true)"
-    if [[ "$have" == "$want" ]]; then
-        say "package $PKG already there"
-    else
-        say "uploading $PKG ($(du -h "$tarf" | cut -f1)) ..."
-        dd if="$tarf" bs=4M status=progress | r "cat > $BASE/packages/$PKG.tar.part"
-        have="$(r sha256sum "$BASE/packages/$PKG.tar.part" | cut -d' ' -f1)"
-        [[ "$have" == "$want" ]] || { echo "upload damaged: $have != $want" >&2; exit 1; }
-        r mv "$BASE/packages/$PKG.tar.part" "$BASE/packages/$PKG.tar"
-        say "package $PKG uploaded and checked"
+    have="$(r sha256sum "$BASE/packages/$PKG.tar" | cut -d' ' -f1)"
+    if [[ "$have" != "$want" ]]; then
+        r rm -f "$BASE/packages/$PKG.tar"
+        echo "package damaged on the server ($have != $want): removed; run push again" >&2
+        exit 1
     fi
+    say "package $PKG there and checked"
     ;;
 setup)
     r test -f "$BASE/repo/$COMMIT/GIT_COMMIT" || { echo "commit $COMMIT is not on the server: run.sh push" >&2; exit 1; }

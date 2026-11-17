@@ -44,7 +44,9 @@ separately (`docs/REPRODUCIBILITY.md`).
   container, the way FAU's CAAI lab uses its H200 server (the lab does not run
   jobs through Rancher). Same pieces as `deploy/k8s` (code of one commit, package
   tar checked by SHA-256, environment from uv.lock), on the server's data disk;
-  one GPU per run, picked as the least busy with enough free memory.
+  one GPU per run, picked as the least busy with enough free memory. Uploads go
+  by rsync, which resumes a broken transfer: the route through FAU's bastion
+  carried about 2 Mbit/s on 2026-11-17 (heavy packet loss; the home line does 34).
   `deploy/container/{setup,train}.sh` run inside the container for both routes
   (`train.sh` was `deploy/k8s/train_in_pod.sh`).
 

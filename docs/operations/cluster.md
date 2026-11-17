@@ -235,6 +235,11 @@ How it is put together:
   96 GB of memory, 32 GB `/dev/shm` and 8 GB `/scratch` in memory for the
   unpacked package, as your own user, labelled `app=wave-analysis`. It keeps
   running after you log out; its log is `logs/<run>.log`, results `runs/<run>`.
+- **Uploads are slow:** about 2 Mbit/s through the bastion on 2026-11-17 (8 % of
+  packets resent; the home line itself uploads 34 Mbit/s), so the 3 GB package
+  takes about 3.5 hours. `push` uses rsync, which resumes a broken transfer;
+  run it again after a break. Stopping `push` does not stop a transfer already
+  handed to the shared login: it finishes in the background.
 - **GPU choice:** `GPU=<n>` picks one; otherwise the least busy GPU with at
   least `MIN_FREE_GB` (40) GB free over a 10 s sample. On 2026-11-17 all eight
   were 70–99 % busy with 16–117 GB free each.
