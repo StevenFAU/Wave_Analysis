@@ -177,12 +177,79 @@ prediction, and `provenance.yaml` the commit, inputs and GPU.
 | `EPOCHS`, `LIMIT` | config, all stills | smoke tests |
 | `STAGE` | `1` | copy the package to the node's local disk (`$TMPDIR`) before training |
 
-## Kubernetes (FAU's DGX cluster, through Rancher)
+## GPU server over SSH (FAU's H200 server, the lab's way)
+
+The CAAI lab works on its H200 server directly: log in by SSH, run your work in
+a Docker container, and take only the GPUs you need of the eight (lab advice,
+2026-11-17). There is no scheduler; the server is shared and usually busy, so a
+run shares a GPU with other people's work. Everything is driven from the desktop
+with `deploy/dgx/run.sh`.
+
+**Logging in.** The server is reached only through the HPC *bastion* host, which
+is public (no VPN needed); the university VPN does not route to the server
+itself. Both take the HPC password (set at the Research Computing access page,
+separate from the university password). Before the first login to the server,
+log in once to the HPC login host from the bastion, which creates the home
+folder. `~/.ssh/config` on the desktop:
+
+```
+Host <bastion-alias>
+    HostName <bastion host>
+    User <netid>
+    ServerAliveInterval 30          # idle connections are dropped otherwise
+
+Host <server-alias>
+    HostName <server host>
+    User <netid>
+    ProxyJump <bastion-alias>
+    ControlMaster auto              # later ssh/scp reuse the first login ...
+    ControlPath ~/.ssh/cm-%C
+    ControlPersist 8h               # ... for 8 hours
+    ServerAliveInterval 60
+```
+
+`ssh <server-alias>` asks for the password twice (bastion, then server). Leave
+that window open: `run.sh` works through it without asking again.
+
+```bash
+export GPU_HOST=<server-alias>
+deploy/dgx/run.sh check     # docker group, free disk, how busy each GPU is (10 s average)
+deploy/dgx/run.sh push      # the code of this commit, the package (one 3 GB tar, SHA-256 checked), ImageNet weights, uv
+deploy/dgx/run.sh setup     # the Python environment of uv.lock, in a container (needs PyPI; once per lock)
+deploy/dgx/run.sh train station --limit 64 --epochs 1   # smoke test
+deploy/dgx/run.sh train station                         # the run
+deploy/dgx/run.sh train station --class-weights none    # the unweighted comparison
+deploy/dgx/run.sh status; deploy/dgx/run.sh logs <run> -f; deploy/dgx/run.sh fetch <run>
+```
+
+How it is put together:
+
+- **Where:** everything under `/raid/scratch/<netid>/wave-analysis` on the
+  server's data disk, mounted at `/data` in the containers. The system disk is
+  nearly full (95 % on 2026-11-17, which is also why Kubernetes stopped placing
+  work there): nothing goes in the home folder, and the only thing on the system
+  disk is the small `python:3.12.16-slim-trixie` image.
+- **Containers:** the same image, environment, code and package as the
+  Kubernetes route below (`deploy/container/setup.sh` and `train.sh` run inside).
+  A run is `docker run -d` with one GPU (`--gpus device=<n>`), 24 CPU cores,
+  96 GB of memory, 32 GB `/dev/shm` and 8 GB `/scratch` in memory for the
+  unpacked package, as your own user, labelled `app=wave-analysis`. It keeps
+  running after you log out; its log is `logs/<run>.log`, results `runs/<run>`.
+- **GPU choice:** `GPU=<n>` picks one; otherwise the least busy GPU with at
+  least `MIN_FREE_GB` (40) GB free over a 10 s sample. On 2026-11-17 all eight
+  were 70–99 % busy with 16–117 GB free each.
+
+## Kubernetes (FAU's DGX cluster, through Rancher) — not used
+
+> **Not used (2026-11-17):** the lab works on the H200 server over SSH instead
+> (section above), and the server's node has carried a `disk-pressure` taint
+> since 2026-10-28. Kept for a cluster that schedules GPU work through
+> Kubernetes.
 
 FAU offers its H200 machine as a Kubernetes cluster, managed in Rancher, rather
 than through Slurm: a run is a Kubernetes *job* that asks for one GPU, and
 everything is driven from the desktop with `deploy/k8s/run.sh` (prepared and
-checked on 2026-11-14; not run yet).
+checked on 2026-11-14; not run).
 
 **Once, on the desktop:** the university VPN up; `kubectl` in `~/.local/bin`;
 the cluster's kubeconfig, downloaded in Rancher (cluster page, "Download

@@ -19,7 +19,7 @@ spec:
       containers:
         - name: train
           image: python:3.12.16-slim-trixie   # the environment's Python; PyTorch's wheels bring CUDA 13.0
-          command: ["bash", "/data/repo/__COMMIT__/deploy/k8s/train_in_pod.sh"]
+          command: ["bash", "/data/repo/__COMMIT__/deploy/container/train.sh"]
           env:
             - {name: RUN, value: "__RUN__"}
             - {name: SPLIT, value: "__SPLIT__"}

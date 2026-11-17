@@ -39,6 +39,15 @@ separately (`docs/REPRODUCIBILITY.md`).
   helper pod, upload with checksums, environment from uv.lock, one-GPU job).
   `git_state` reads the commit of a `git archive` tree from its `GIT_COMMIT` file.
 
+### Added (2026-11-17)
+- `deploy/dgx/run.sh`: training on a shared GPU server over SSH in a Docker
+  container, the way FAU's CAAI lab uses its H200 server (the lab does not run
+  jobs through Rancher). Same pieces as `deploy/k8s` (code of one commit, package
+  tar checked by SHA-256, environment from uv.lock), on the server's data disk;
+  one GPU per run, picked as the least busy with enough free memory.
+  `deploy/container/{setup,train}.sh` run inside the container for both routes
+  (`train.sh` was `deploy/k8s/train_in_pod.sh`).
+
 ### Fixed (2026-11-14)
 - `sources.ndbc.buoycam.caption_band_rows`: the caption is a fixed 30-row band in
   both strip formats (measured); it was scaled to 25 rows for 2304 × 246 strips.

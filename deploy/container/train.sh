@@ -1,6 +1,8 @@
 #!/bin/bash
-# Runs INSIDE the training pod (deploy/k8s/train-job.yaml), not on the desktop.
-# The variables come from the job: RUN, SPLIT, COMMIT, ENV_DIR, PKG, CONFIG,
+# Runs INSIDE the training container, not on the desktop: started by
+# deploy/dgx/run.sh (Docker on a GPU server over SSH) or deploy/k8s/train-job.yaml.
+# /data holds the code, package, environment and runs; /scratch is in memory.
+# The variables come from the caller: RUN, SPLIT, COMMIT, ENV_DIR, PKG, CONFIG,
 # EXTRA_ARGS, NUM_WORKERS, TORCH_HOME.
 set -euo pipefail
 echo "run $RUN: split $SPLIT, commit $COMMIT, on $(hostname) at $(date -u +%FT%TZ)"
