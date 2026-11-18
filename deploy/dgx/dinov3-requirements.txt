@@ -1,0 +1,10 @@
+# Libraries DINOv3's trainer (facebookresearch/dinov3, branch FINO, commit 81aae9a) needs
+# beyond the project's environment (uv.lock: torch, torchvision, timm, numpy, pandas, ...).
+# Installed with --no-deps into their own folder on the server by deploy/dgx/pretrain.sh
+# setup, so the project's environment stays as uv.lock builds it. Found by importing
+# dinov3.train.train (2026-11-18).
+omegaconf==2.3.0
+antlr4-python3-runtime==4.9.3
+termcolor==3.3.0
+submitit==1.5.4
+cloudpickle==3.1.3
