@@ -379,6 +379,16 @@ Currituck fusion (balanced accuracy up, macro-F1 level). Whether a combiner
 without class weights would keep the gains without the smooth false alarms is
 a new question for a new pre-set test, not a rescue of this one.
 
+**Test 2b (fixed 2026-11-18 after Test 2 was scored, before 2b was run).**
+Everything as Test 2 (same camera average, features, val strips, test strips
+and bar), except that **neither combiner uses class weights**
+(`scripts/buoycam_fusion.py --class-weights none`, output in
+`fusion_unweighted/`). The camera + ERA5 combiner must gain over ERA5 alone in
+balanced accuracy **and** macro-F1, each 95 % interval above zero (bootstrap over
+whole test buoys). Test 2's result is what suggested 2b, and it is scored on the
+same test buoys, so a pass here is a follow-up finding, not a confirmation: that
+needs strips the choice has not seen (later months, or the time split).
+
 ## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
 
 Exploratory, nothing trained (`scripts/buoycam_horizon.py`, questions fixed in its

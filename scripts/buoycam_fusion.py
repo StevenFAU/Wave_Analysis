@@ -24,9 +24,16 @@ Known caveats: the val buoys carry less swell (mean share 0.40) than the test bu
 camera's epochs were chosen on the same val buoys, which makes the combiner trust the
 camera slightly too much, against the fusion on the test buoys.
 
-    python scripts/buoycam_fusion.py --run runs/<v1 ensemble> [--package-v0 <dir>]
+**Test 2b** (fixed 2026-11-18 after Test 2 was scored, before this variant was run):
+everything as above except that *neither* combiner uses class weights
+(``--class-weights none``). Test 2 failed on macro-F1 through smooth-sea false alarms,
+which the weights encourage; 2b asks whether the camera's gains survive without them.
+Because Test 2's result suggested it, 2b is a follow-up, not a confirmation.
 
-Writes ``<run>/fusion/fusion.json`` and ``report.md``.
+    python scripts/buoycam_fusion.py --run runs/<v1 ensemble> [--class-weights none]
+
+Writes ``<run>/fusion/`` (Test 2) or ``<run>/fusion_unweighted/`` (Test 2b):
+``fusion.json`` and ``report.md``.
 """
 
 from __future__ import annotations
@@ -72,6 +79,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--era5", type=Path, default=data_dir("processed") / "era5/buoycam/era5_at_buoys.parquet"
     )
+    ap.add_argument(
+        "--class-weights", choices=("inverse_frequency", "none"), default="inverse_frequency",
+        help="weights of both combiners: Test 2 (inverse_frequency) or Test 2b (none)",
+    )  # fmt: skip
     args = ap.parse_args(argv)
     run = args.run
     info = json.loads((run / "metrics.json").read_text())["run"]
@@ -125,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     x_both = np.hstack([x_cam, x_era])
     y = d["class"].to_numpy(dtype=np.int64)
     fit = (d["partition"] == "val").to_numpy()
-    w = inverse_frequency_weights(y[fit], k)
+    w = inverse_frequency_weights(y[fit], k) if args.class_weights == "inverse_frequency" else None
     both = fit_logistic(x_both[fit], y[fit], k, sample_weight=w, l2=L2)
     alone = fit_logistic(x_era[fit], y[fit], k, sample_weight=w, l2=L2)
 
@@ -170,6 +181,7 @@ def main(argv: list[str] | None = None) -> int:
             "l2": L2,
             "p_floor": P_FLOOR,
             "fit_on": "val buoys",
+            "class_weights": args.class_weights,
             "features": "log p_camera, log ERA5 total, wind sea, swell",
             "max_gap": MAX_GAP,
         },
@@ -182,11 +194,12 @@ def main(argv: list[str] | None = None) -> int:
         "gains_of_camera_plus_era5": gains,
         "bar_met": met,
     }
-    out = run / "fusion"
+    test = "Test 2" if args.class_weights == "inverse_frequency" else "Test 2b"
+    out = run / ("fusion" if args.class_weights == "inverse_frequency" else "fusion_unweighted")
     out.mkdir(exist_ok=True)
     (out / "fusion.json").write_text(json.dumps(results, indent=1, default=str))
     lines = [
-        f"# Test 2, camera + ERA5, {run.name}\n",
+        f"# {test}, camera + ERA5 (class weights: {args.class_weights}), {run.name}\n",
         f"Combiners fitted on {results['fit_strips']:,} val strips ({results['fit_buoys']} buoys); "
         f"scored on {results['test_strips']:,} test strips ({results['test_buoys']} buoys). "
         f"ERA5 coverage: {coverage}.\n",
