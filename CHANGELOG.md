@@ -50,6 +50,14 @@ separately (`docs/REPRODUCIBILITY.md`).
   `deploy/container/{setup,train}.sh` run inside the container for both routes
   (`train.sh` was `deploy/k8s/train_in_pod.sh`).
 
+- `scripts/buoycam_bar.py`: scores a buoy-camera run against the bar fixed before
+  training (paired bootstrap of the gain over ERA5, over whole buoys or buoy-days)
+  and writes `bar.json` into the run.
+- First buoy-camera result (station split, one H200): the camera does not beat ERA5
+  on the test buoys (balanced accuracy 0.70 against 0.74, gain −0.03 [−0.15, +0.01];
+  macro-F1 0.65 against 0.77, −0.12 [−0.39, −0.03]); it mostly calls the sea one
+  class too calm. `docs/experiments/ndbc_buoycam_sea_state.md`.
+
 ### Fixed (2026-11-14)
 - `sources.ndbc.buoycam.caption_band_rows`: the caption is a fixed 30-row band in
   both strip formats (measured); it was scaled to 25 rows for 2304 × 246 strips.

@@ -194,6 +194,29 @@ weighting does. Then the time split.
    only once the data store has them; the comparison uses the strips ERA5
    covers, and its coverage is reported.
 
+## First result: station split (2026-11-17)
+
+Run `buoy-station-20261117t2310`: the config as written (weighted, seed 0,
+10 epochs, epoch 9 chosen on validation macro-F1), one shared H200, 55 min,
+commit `5145b11` (`deploy/dgx/run.sh`). Scored with `scripts/buoycam_bar.py`
+on the 12 test buoys, on the 5,642 strips (91 %) that ERA5 covers:
+
+| | balanced accuracy | macro-F1 |
+|---|---|---|
+| camera | 0.701 | 0.648 |
+| ERA5 at each buoy | 0.735 | 0.771 |
+| gain (95 % interval over buoys) | −0.034 [−0.154, +0.013] | −0.123 [−0.385, −0.026] |
+
+**The bar is not met.** ERA5 is better on macro-F1 (interval below zero);
+balanced accuracy is level within the interval. The camera mostly calls the
+sea one class too calm: 29 % of moderate strips are called slight and 23 % of
+rough ones moderate (ERA5: 92–93 % recall on both). It finds smooth seas more
+often than ERA5 (recall 0.56 against 0.26, 85 strips), at the price of calling
+107 slight strips smooth. The weakest test buoy is 41043 (49 % correct). Not
+yet known: whether the class weights cause the downward lean (the unweighted
+run answers that, as a reported comparison, not a second try at the bar), and
+how much a second seed moves these numbers.
+
 ## Status
 
 - [x] Pairing and package (2026-11-14, `7b8a93c`): 41,091 strips at 79
@@ -203,12 +226,12 @@ weighting does. Then the time split.
       buoys. To complete the last test days: download again after 2026-11-20.
 - [x] Training code for six-view strips, a CPU test of the whole path
       (2026-11-14).
-- [ ] Training: approved by Steven 2026-11-14, **on hold**: the desktop GPU
-      overheated and shut the machine down at the first timing test
-      ([desktop GPU](../operations/cluster.md#training-on-the-desktop-gpu-rocm)).
-      Needs a GPU with working cooling (this one checked, or the FAU
-      cluster). The FAU route is ready: `deploy/k8s/run.sh` runs the job on
-      one H200 through Kubernetes ([cluster guide](../operations/cluster.md#kubernetes-faus-dgx-cluster-through-rancher)),
-      waiting for the administrators to clear the GPU machine's full disk
-      and give a namespace.
+- [x] Training, station split (2026-11-17, on FAU's H200 server over SSH,
+      [cluster guide](../operations/cluster.md#gpu-server-over-ssh-faus-h200-server-the-labs-way)):
+      bar not met (above). The desktop GPU stays unused until its cooling is
+      fixed.
+- [ ] Running (started 2026-11-18 00:06 UTC, one GPU each): the unweighted
+      station run, the time split, and the station run with seed 1.
+- [ ] Time split against ERA5 on all test days: download ERA5 again after
+      2026-11-20 and rescore the saved predictions.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.
