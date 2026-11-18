@@ -77,6 +77,14 @@ separately (`docs/REPRODUCIBILITY.md`).
   (does the motion help?) and V2-2 (camera vs ERA5 in metres) and the published reference
   points (Kamagata 2026, Choi 2020, Kim 2023, Yang 2026) fixed before training.
 - `deploy/dgx/run.sh train`: `TRAIN_SCRIPT` picks the trainer, `TAG` names the run.
+- Choi 2020, Kim 2023 and Yang 2026 read in full (PDFs supplied by Steven): Choi used one
+  view per sample with the same buoys and days in train and test (84.05 %); Kim's label is
+  the *average* wave height (0.631 x H_s), one value for each of 30 one-hour sessions, with a
+  random frame split; Yang is simulation only (attitude cut RMSE 0.098 -> 0.073 m).
+  `compare_papers.py` takes Kim's classes on 0.631 x H_s.
+- WebCOOS video: `webcoos historical --product video` (the archive's mp4 tree) and
+  `scripts/webcoos_video_sample.sh` (a test set of rough and typical days, then six sample
+  weeks, one clip per 30-min CDIP record in daylight); CDIP 243 for Jennette.
 - `scripts/compare_papers.py`: every published measure (Kamagata 2026 RMSE/R²/Pearson,
   Choi 2020 calm/rough, Kim 2023 bins, WMO classes) and bars V2-1/V2-2 from the v2 runs.
 - `docs/literature/benchmark_targets.md`: every comparable published result (camera,

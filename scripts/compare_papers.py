@@ -12,8 +12,9 @@ with 95 % intervals from a bootstrap over whole buoys:
 * **Choi et al. 2020** (NDBC buoy cameras, 84 %): accuracy on calm (< 1.52 m) vs
   rough (> 3.05 m) strips, the predicted H_s split at 2.285 m.
 * **Kim et al. 2023** (one fixed camera, 78.3 % snapshot): accuracy in Kim's five
-  classes of 0.5 m from 0.75 to 3.25 m (strips outside left out). Kim's label is an
-  "average wave height" whose definition is not verified; here it is H_s.
+  classes of 0.5 m of the *average* wave height, 0.75 to 3.25 m (strips outside left
+  out). Kim's Table 1 gives both heights for each of its 30 days; the average is
+  0.631 x H_s (median; 0.611-0.643), so the classes are taken on 0.631 x H_s.
 * The WMO classes of v0 (balanced accuracy, macro-F1), from the predicted H_s.
 * **Bar V2-2**: RMSE of each height against ERA5's (total, wind-wave, swell; line
   fitted on the training strips), paired over the same strips.
@@ -44,7 +45,9 @@ HEIGHTS = ("hs", "wind_wave", "swell")
 LABELS = {"hs": "Hs_label_m", "wind_wave": "wind_wave_label_m", "swell": "swell_label_m"}
 ERA5 = {"hs": "era5_hs_m", "wind_wave": "era5_windsea_m", "swell": "era5_swell_m"}
 CHOI_LOW, CHOI_HIGH = 1.52, 3.05
-KIM_EDGES = [0.75, 1.25, 1.75, 2.25, 2.75, 3.25]
+KIM_EDGES = [0.75, 1.25, 1.75, 2.25, 2.75, 3.25]  # average wave height, m
+#: Average over significant wave height in Kim et al.'s Table 1 (median of its 30 days).
+KIM_HAVE_OVER_HS = 0.631
 PUBLISHED = {
     "kamagata2026": {"rmse_m": 0.586, "r2": 0.107, "pearson": 0.436},
     "choi2020": {"accuracy": 0.84},
@@ -105,8 +108,9 @@ def score_arm(d: pd.DataFrame, kw: dict, bounds: list[float]) -> dict:
         kw,
     )
     out["choi2020_n"] = int(c.sum())
-    k = (y >= KIM_EDGES[0]) & (y < KIM_EDGES[-1])
-    yk, pk = np.digitize(y[k], KIM_EDGES[1:-1]), np.clip(np.digitize(p[k], KIM_EDGES[1:-1]), 0, 4)
+    ya, pa = KIM_HAVE_OVER_HS * y, KIM_HAVE_OVER_HS * p
+    k = (ya >= KIM_EDGES[0]) & (ya < KIM_EDGES[-1])
+    yk, pk = np.digitize(ya[k], KIM_EDGES[1:-1]), np.clip(np.digitize(pa[k], KIM_EDGES[1:-1]), 0, 4)
     out["kim2023_accuracy"] = ci(yk.astype(float), pk.astype(float), acc, g[k], kw)
     out["kim2023_n"] = int(k.sum())
     yc, pc = sea_state_class(y, bounds), sea_state_class(p, bounds)
@@ -214,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
             f"- Choi 2020 (84 %): {r['choi2020_accuracy']['value']:.1%} [{r['choi2020_accuracy']['ci'][0]:.1%}, "
             f"{r['choi2020_accuracy']['ci'][1]:.1%}] on {r['choi2020_n']:,} calm/rough strips",
             f"- Kim 2023 (78.3 % snapshot): {r['kim2023_accuracy']['value']:.1%} [{r['kim2023_accuracy']['ci'][0]:.1%}, "
-            f"{r['kim2023_accuracy']['ci'][1]:.1%}] on {r['kim2023_n']:,} strips in 0.75-3.25 m",
+            f"{r['kim2023_accuracy']['ci'][1]:.1%}] on {r['kim2023_n']:,} strips with average height 0.75-3.25 m (H_s 1.19-5.15 m)",
             f"- WMO classes from predicted H_s: balanced accuracy {r['wmo_classes']['balanced_accuracy']:.3f}, "
             f"macro-F1 {r['wmo_classes']['f1_macro']:.3f}",
             *[f"- {h}: RMSE {r[h]['rmse_m']['value']:.3f} m, bias {r[h]['bias_m']:+.3f} m, R2 {r[h]['r2']['value']:.3f}, "

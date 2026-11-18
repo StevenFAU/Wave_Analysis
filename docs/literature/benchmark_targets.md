@@ -6,7 +6,7 @@ and searches of 2026-11-18. Evidence levels as in the landscape review: **V1** f
 text read, **V2** abstract or publisher record, **V3** project notes, **S** screened
 only. The full texts of Choi 2020, Kim 2023 and Yang 2026 sit behind publisher access
 (ScienceDirect, SSRN refused automated and browser access on 2026-11-18); their
-numbers here are V2/V3.
+numbers were V2/V3 until Steven supplied the PDFs on 2026-11-18; all four are now V1.
 
 **How to read a comparison.** A published number belongs to its own data, labels and
 split. A model "improves on" it only where the task and measure match, and a number
@@ -17,12 +17,12 @@ the same claim as one at unseen sites. Each row says which of our tests matches 
 
 | Work | Platform, input | Labels | Split | Their result | Our matching test |
 |---|---|---|---|---|---|
-| Choi et al. 2020, *Ocean Eng.* 201 (V2) | **NDBC buoy cameras**, one strip | same buoy's H_s, ~30 min offset | not stated | **84 %** calm (< 1.52 m) vs rough (> 3.05 m) | same task at 12 unseen buoys: v0 classifier 98 % [97, 99] (indicative); v2 heights model |
-| Choi et al. 2020, ship part (V2) | container-ship video, 16 frames | shipboard wave radar | not stated | MSE 0.0177 (RMSE ≈ 0.13 m if m²) | none (no ship data) |
-| Kim et al. 2023, *Ocean Eng.* 288 (V2/V3) | one fixed camera on a WEC, grayscale; snapshot or up to 300-s video | seafloor AWAC, "average wave height" | not verified | **78.3 %** snapshot, **93.2 %** 180-s video, 5 classes of 0.5 m (0.75-3.25 m) | Kim's bins on v2 heights (buoy cameras); at a shore camera with video (Currituck, Jennette, Oak Island) once the WebCOOS video sample is in |
+| Choi et al. 2020, *Ocean Eng.* 201 (**V1**) | **NDBC buoy cameras**, one view (lower half, 224²), 20 buoys, 2018-03/05 | same buoy's H_s 30 min earlier | 35,696 / 8,924 examples, same buoys and days in both | **84.05 % ± 0.14** calm (< 1.52 m) vs rough (> 3.05 m) | same task at 12 unseen buoys: v0 classifier 98 % [97, 99] (indicative); v2 heights model |
+| Choi et al. 2020, ship part (**V1**) | container-ship video, 16 frames at 1 s | shipboard wave radar | 2,675 / 344 clips, not described | RMSE 0.133 m, MAE 0.089 m | none (no ship data) |
+| Kim et al. 2023, *Ocean Eng.* 288 (**V1**) | one fixed camera on a WEC, grayscale, 1 h a day for 30 days; snapshot or up to 300-s video | seafloor AWAC, **average** wave height (0.631 × H_s), one value per day | random frames / clips (same hour in train and test) | **78.3 %** snapshot, **93.2 %** 180-s video, 5 classes of 0.5 m (0.75-3.25 m) | Kim's bins on v2 heights (buoy cameras); at a shore camera with video (Currituck, Jennette, Oak Island) once the WebCOOS video sample is in |
 | Kamagata et al. 2026, arXiv:2607.11998 (**V1**) | shore video, 16 frames at 10 fps, V-JEPA + SlowFast | **not stated** (traceable to no instrument) | 6 scenes train; 5 held-out videos (Oak Island E/W, Xishawan) | H_s **RMSE 0.586 m, R² 0.107, Pearson 0.436**; T_p 1.42 s; direction 37° | v2 heights at unseen buoys; Oak Island stills (and video) with CDIP 200 labels, the same views |
 | Kamagata et al. 2026, arXiv:2606.13302 (**V1**) | shore video, ViViT | expert + timestack + optical-flow pseudo-labels | 4 held-out scenes | T_p RMSE 0.80 s | period from WebCOOS video against CDIP T_p (needs video) |
-| Yang et al. 2026, *Ocean Eng.* 352 (V2/V3) | ship camera + IMU attitude, **simulation** | virtual buoys | unseen simulated states | RMSE 0.032 m (simulated); image only 0.098 → + attitude 0.073 | Bar V2-1: horizon attitude + images vs images, real data |
+| Yang et al. 2026, *Ocean Eng.* 352 (**V1**) | ship camera + IMU attitude at 2 Hz, **simulation** (Unity/Crest, 47 sea states) | virtual buoys | K-fold over pooled samples; unseen states separately | RMSE 0.032 m (simulated); image only 0.098 → + attitude 0.073 | Bar V2-1: horizon attitude + images vs images, real data |
 | Xu et al. 2024, *JMSE* 12:2003 (V1 via MDPI) | one shore camera, Qingdao, 1 frame/min, 1920 × 1080 | Waverider MKIII nearby, hourly, interpolated to minutes | **random 6:2:2 of frames** | MAE 0.04 m, MAPE 8.5 % with wind, temperature, humidity, pressure and tide as inputs; image-only CR 57.7 %; wind-sea vs swell images 94 % | a random split of our data beside our station split shows what that protocol adds |
 | Buscombe et al. 2020, *Coast. Eng.* 155 (V2) | IR / RGB at Duck and Santa Cruz | instrument-derived | not verified, single sites | RMSE 0.14 m (IR), 0.11 m (oblique RGB) | single-site shore tests (Currituck day split) |
 | Vorkapic et al. 2024, *Ocean Eng.* 309 (V2); Pobar et al. 2026, *IEEE OJ-ITS* 7 (S) | ship bridge camera, Beaufort 1-8, real + synthetic | **observers** | not verified | 96 % within one class; mean F1 62 % | Beaufort from the buoy's own wind (an instrument) on buoy cameras |

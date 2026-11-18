@@ -1538,7 +1538,7 @@ def build_parser() -> argparse.ArgumentParser:
     whi.add_argument(
         "--product",
         default="stills",
-        help="stills (default), timex or brt (10-minute products, from 2024)",
+        help="stills (default), timex or brt (10-minute products, from 2024), or video (the clips)",
     )
     whi.add_argument("--start", help="UTC start (default: the camera's first month)")
     whi.add_argument("--end", help="UTC end, exclusive (default: now)")

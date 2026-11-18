@@ -156,6 +156,10 @@ ONPREM_PRODUCTS: dict[str, tuple[str, str]] = {
     "stills": ("jpg", ""),
     "timex": ("timex", "timex."),
     "brt": ("brt", "brt."),
+    # The clips themselves (``<camera>-YYYY-MM-DD-HHMMSSZ.mp4``, listed in the
+    # archive's mp4 tree; 2026-11-18: about every 10 min in daylight, 20 fps,
+    # 2688 x 1520 at currituck_hampton_inn; back to at least 2024-03).
+    "video": ("mp4", ""),
 }
 
 #: Group directory of each camera in the on-premise archive (as given by WebCOOS).
@@ -637,7 +641,7 @@ _LISTING_ROW = re.compile(
     r'<a href="(?P<href>[^"]+)">[^<]*</a>\s+'
     r"(?P<modified>\d{2}-[A-Za-z]{3}-\d{4} \d{2}:\d{2})\s+(?P<size>\d+|-)"
 )
-_STILL_NAME = re.compile(r"^(?P<camera>.+)-(?P<stamp>\d{4}-\d{2}-\d{2}-\d{6})Z\.jpg$")
+_STILL_NAME = re.compile(r"^(?P<camera>.+)-(?P<stamp>\d{4}-\d{2}-\d{2}-\d{6})Z\.(?:jpg|mp4)$")
 
 
 def parse_listing(html: str) -> pd.DataFrame:

@@ -175,9 +175,9 @@ the two levels applies.
 |---|---|---|
 | Kamagata2026 | V1 | arXiv v1 PDF; see the section above |
 | Kamagata2026Tp | V1 | arXiv:2606.13302 PDF, read 2026-09-26 |
-| Choi2020 | V2/V3 | Crossref and Semantic Scholar abstract; details from project notes |
-| Kim2023 | V2/V3 | publisher abstract; details from project notes |
-| Yang2026 | V2/V3 | publisher abstract; details from project notes |
+| Choi2020 | **V1** | full PDF (supplied by Steven), read 2026-11-18; see papers/choi2020.md |
+| Kim2023 | **V1** | full PDF (supplied by Steven), read 2026-11-18; see papers/kim2023.md |
+| Yang2026 | **V1** | full PDF (supplied by Steven), read 2026-11-18; see papers/yang2026.md |
 | Yin2025 | V1 | *Sci. Data* article and figshare record |
 | Guimaraes2020 | V1 | landscape review, Tier 1 table |
 | Kwon2023 | V1 | landscape review, Tier 1 table |

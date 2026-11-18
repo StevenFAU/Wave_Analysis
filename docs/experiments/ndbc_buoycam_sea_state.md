@@ -440,8 +440,8 @@ our 95 % intervals over test buoys, not tested against):
 | Paper | Their task and data | Their number | Ours, from the same predictions |
 |---|---|---|---|
 | Kamagata et al. 2026 | H_s in metres from coastal video, 5 held-out videos, label source not stated | RMSE 0.586 m, R² 0.107, Pearson 0.436 | RMSE, R², Pearson of H_s at the 12 unseen buoys |
-| Choi et al. 2020 | NDBC buoy cameras, calm (< 1.52 m) vs rough (> 3.05 m), split not verified | 84 % accuracy | the same two classes at the unseen buoys (predicted H_s split at 2.285 m) |
-| Kim et al. 2023 | one fixed camera, 5 classes of 0.5 m (0.75–3.25 m), one site | 78.3 % snapshot, 93.2 % 180-s video | the same bins on our H_s (Kim's "average wave height" definition to be verified) |
+| Choi et al. 2020 | NDBC buoy cameras (one view), calm (< 1.52 m) vs rough (> 3.05 m), same buoys in train and test | 84.05 % accuracy | the same two classes at the unseen buoys (predicted H_s split at 2.285 m) |
+| Kim et al. 2023 | one fixed camera, 5 classes of 0.5 m of the *average* wave height (0.75–3.25 m), 30 one-hour sessions, random frame split | 78.3 % snapshot, 93.2 % 180-s video | the same classes on 0.631 × our H_s (Kim's Table 1 ratio; definition verified 2026-11-18, before v2 was scored) |
 | Yang et al. 2026 | ship camera + attitude, **simulation** | RMSE 0.032 m (simulated) | no number to set beside it; Bar V2-1 is its question on real data |
 
 **Bars** (paired bootstrap over the 12 test buoys, 1,000 draws):
