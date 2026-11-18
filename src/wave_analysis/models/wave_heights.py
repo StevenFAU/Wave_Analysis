@@ -116,8 +116,24 @@ class MultiViewRegressor(nn.Module):
         pretrained: bool = True,
     ) -> None:
         super().__init__()
-        net = build_model(backbone, 1, pretrained=pretrained)
-        if backbone == "convnext_tiny":
+        if backbone.startswith("timm:"):
+            # Any timm backbone, e.g. "timm:convnext_tiny.dinov3_lvd1689m" (DINOv3) or
+            # "timm:vit_base_patch14_reg4_dinov2.lvd142m" (DINOv2); ViTs take any view size.
+            import timm
+
+            name = backbone.removeprefix("timm:")
+            kw = (
+                {"dynamic_img_size": True, "dynamic_img_pad": True}
+                if name.startswith(("vit", "eva"))
+                else {}
+            )
+            net = timm.create_model(name, pretrained=pretrained, num_classes=0, **kw)
+            feat = int(net.num_features)
+        else:
+            net = build_model(backbone, 1, pretrained=pretrained)
+        if backbone.startswith("timm:"):
+            pass
+        elif backbone == "convnext_tiny":
             seq = getattr(net, "classifier")  # noqa: B009
             feat = seq[2].in_features
             seq[2] = nn.Identity()
@@ -200,8 +216,14 @@ def fit_heights(
     huber_delta: float = 1.0,
     log: Callable[[str], object] = print,
     names: Sequence[str] = ("hs", "wind_wave", "swell"),
+    lp_epochs: int = 0,
 ) -> HeightsFit:
-    """Train for ``settings.epochs``; keep the epoch with the lowest validation RMSE of the first height."""
+    """Train for ``settings.epochs``; keep the epoch with the lowest validation RMSE of the first height.
+
+    ``lp_epochs`` > 0: the backbone (``model.encoder``) stays frozen for the first
+    ``lp_epochs`` epochs and only the rest learns (linear probing, then fine-tuning:
+    Kumar et al. 2022's LP-FT, which keeps the pretrained features better under shift).
+    """
     model.to(device).to(memory_format=torch.channels_last)
     opt = torch.optim.AdamW(model.parameters(), lr=settings.lr, weight_decay=settings.weight_decay)
     steps = settings.epochs * max(1, len(train_loader))
@@ -214,8 +236,15 @@ def fit_heights(
     best = (math.inf, -1)
     best_state: dict[str, torch.Tensor] = {}
     history: list[dict[str, float]] = []
+    encoder = getattr(model, "encoder", None)
     for epoch in range(1, settings.epochs + 1):
         model.train()
+        if encoder is not None and lp_epochs:
+            frozen = epoch <= lp_epochs
+            for prm in encoder.parameters():
+                prm.requires_grad_(not frozen)
+            if frozen:
+                encoder.eval()  # also keeps its normalisation statistics fixed
         t0, total, n = time.monotonic(), 0.0, 0
         for x, y in train_loader:
             x = _to_device(x, device)

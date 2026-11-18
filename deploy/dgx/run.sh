@@ -182,7 +182,7 @@ docker run -d --rm --name wave-$run --label app=wave-analysis --label run=$run \
     --mount type=tmpfs,destination=/scratch,tmpfs-size=8g \
     --user \$(id -u):\$(id -g) -e HOME=/scratch -v $BASE:/data \
     -e RUN=$run -e SPLIT=$split -e COMMIT=$COMMIT -e ENV_DIR=/data/envs/$LOCK -e PKG=$PKG \
-    -e CONFIG=$CONFIG -e "EXTRA_ARGS=$extra" -e NUM_WORKERS=22 -e TORCH_HOME=/data/cache/torch \
+    -e CONFIG=$CONFIG -e "EXTRA_ARGS=$extra" -e NUM_WORKERS=22 -e TORCH_HOME=/data/cache/torch -e HF_HOME=/data/cache/hf \
     -e PYTHONUNBUFFERED=1 -e TRAIN_SCRIPT=${TRAIN_SCRIPT:-scripts/train_sea_state.py} \
     $IMAGE bash -c 'bash /data/repo/$COMMIT/deploy/container/train.sh >/data/logs/$run.log 2>&1; s=\$?;
         echo "finished with exit code \$s at \$(date -u +%FT%TZ)" >>/data/logs/$run.log; exit \$s' >/dev/null

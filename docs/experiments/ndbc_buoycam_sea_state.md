@@ -467,6 +467,27 @@ the difference below zero (paired bootstrap over test buoys). It asks whether th
 camera adds anything that an anemometer and a wave model at the same buoy do not.
 Reported beside it: ERA5 alone, camera + wind, the camera alone.
 
+### Bar B1: a better backbone (fixed 2026-11-18, before any B1 run)
+
+The backbone review (`reports/Vision backbones for wave cameras.md`, notes in
+`research_notes/`) found that among pretrained networks of similar size, published
+wave studies moved by 0.1-2 points when the backbone changed, and that self-supervised
+DINOv3 features keep fine detail and survive image corruption far better than
+ImageNet-supervised ones (frozen ConvNeXt-Tiny: depth error 0.448 against 0.666; mean
+corruption error 19.6 for DINOv3 ViTs against 24.1 for DINOv2). The cleanest test is
+the like-for-like swap: **the same ConvNeXt-Tiny, DINOv3 weights**
+(`timm:convnext_tiny.dinov3_lvd1689m`, distilled from DINOv3, 2025; Meta's DINOv3
+licence: research use with acknowledgement) in place of the ImageNet weights, with v2
+arm A's recipe unchanged (images only, full fine-tuning, 10 epochs, the epoch chosen on
+validation RMSE of H_s), three seeds averaged.
+
+**Bar B1:** the DINOv3 average must lower the test RMSE of H_s **and** of the wind-wave
+height against v2 arm A's average, each interval of the difference below zero (paired
+bootstrap over the 12 test buoys). Every published measure is reported for both
+(`scripts/compare_papers.py`). Frozen probes of larger self-supervised ViTs (DINOv2
+ViT-B/14, DINOv3 ViT-B/16) and LP-FT are follow-ups, judged on the validation buoys
+first.
+
 ## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
 
 Exploratory, nothing trained (`scripts/buoycam_horizon.py`, questions fixed in its

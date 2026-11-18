@@ -79,6 +79,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--aux", choices=("none", "horizon"), default="none", help="per-view extra inputs"
     )
+    ap.add_argument(
+        "--backbone", help="override model.backbone (e.g. timm:convnext_tiny.dinov3_lvd1689m)"
+    )
+    ap.add_argument(
+        "--lp-epochs",
+        type=int,
+        help="override model.lp_epochs (backbone frozen for the first N epochs)",
+    )
     ap.add_argument("--epochs", type=int)
     ap.add_argument("--batch-size", type=int)
     ap.add_argument("--num-workers", type=int)
@@ -94,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     mcfg = cfg["model"]
     settings = TrainSettings.from_config(
         mcfg, epochs=args.epochs, batch_size=args.batch_size, num_workers=args.num_workers,
-        amp=args.amp, pretrained=False if args.no_pretrained else None,
+        amp=args.amp, pretrained=False if args.no_pretrained else None, backbone=args.backbone,
     )  # fmt: skip
     seed = int(args.seed if args.seed is not None else cfg.get("seed", 0))
     torch.manual_seed(seed)
@@ -174,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     result = fit_heights(
         model, loader(parts[TRAIN], True), loader(parts[VAL], False), val_true,
         settings=settings, mean=mean, std=std, device=device, log=log, names=tnames,
+        lp_epochs=int(args.lp_epochs if args.lp_epochs is not None else mcfg.get("lp_epochs", 0)),
     )  # fmt: skip
     log(f"chosen epoch {result.best_epoch} (val RMSE {tnames[0]} {result.best_rmse_m:.3f} m)")
     model.load_state_dict(result.state_dict)

@@ -85,6 +85,11 @@ separately (`docs/REPRODUCIBILITY.md`).
 - WebCOOS video: `webcoos historical --product video` (the archive's mp4 tree) and
   `scripts/webcoos_video_sample.sh` (a test set of rough and typical days, then six sample
   weeks, one clip per 30-min CDIP record in daylight); CDIP 243 for Jennette.
+- Backbones from timm in the heights model (`timm:<name>`, e.g. DINOv3's ConvNeXt-Tiny and
+  DINOv2/DINOv3 ViTs; `timm` added to the `ml` extra), `--backbone` and `--lp-epochs`
+  (LP-FT) in `train_wave_heights.py`; Bar B1 (DINOv3 ConvNeXt-Tiny vs ImageNet) fixed
+  before its runs. Shore video: `scripts/webcoos_video_clips.py` pairs clips with CDIP
+  and cuts 64 frames at 2 fps (448 x 336, unstretched).
 - `scripts/buoycam_combined.py` (Test 3, fixed before v2 was scored): camera + ERA5 + the
   buoy's wind against ERA5 + wind, ridge fitted on the val buoys.
 - `scripts/compare_papers.py`: every published measure (Kamagata 2026 RMSE/R²/Pearson,
