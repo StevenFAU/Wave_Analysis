@@ -68,6 +68,25 @@ separately (`docs/REPRODUCIBILITY.md`).
   its calls follow wind-wave height more than swell height; over 24 held-out
   buoys, swell share predicts the under-call (Spearman −0.89).
 
+### Added (2026-11-18, whole-clip video: windows, pixel spectrum, shipping)
+- Shore video, whole-clip bars M3-M5 implemented and their recipe fixed before scoring
+  (`docs/experiments/webcoos_video.md`, "Whole-clip implementation"):
+  `scripts/webcoos_video_clips.py windows` cuts every clip whole at 4 fps into its
+  K = floor(duration / 16 s) windows (one stored zip per clip, about 35 MB a 10-min clip)
+  and computes its pixel spectrum (`wave_analysis.processing.pixel_spectrum`, recipe v1:
+  4 x 4 px blocks, Welch spectra, water chosen without labels by the wave band's share of
+  the brightness-rate spectrum, peak above a fitted power-law background);
+  `scripts/train_video_probe.py --windows` caches V-JEPA 2 and DINOv3 features per
+  window, trains the 25 fold/seed window probes in lock step (`StackedProbes`, checked
+  against separate training), reads each clip by its midpoint window and by all its
+  windows, and adds the record pooler (`RecordPooler`), ridge heads on the spectrum and
+  the scores of M3-M5 (also on clips with K >= 15).
+- `scripts/webcoos_video_clips.py ship`: bulk data to the GPU server through the
+  project's R2 bucket (36 Mbit/s up, 20 MB/s down, signed links, SHA-256 checks), since
+  the SSH route through FAU's bastion carried 1.46 Mbit/s. The server does not download
+  from WebCOOS itself: the agreed pace is one request at a time, and the desktop's sample
+  download holds it.
+
 ### Added (2026-11-18, architecture review and whole-clip bars)
 - `reports/Wave camera architectures beyond backbones.md` (notes in `research_notes/`
   under the same name): what to train beyond the backbone choice, ranked by value for

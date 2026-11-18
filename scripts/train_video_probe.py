@@ -550,6 +550,15 @@ def _loader(rows: WindowRows, sampler: _Epoch, workers: int) -> torch.utils.data
                                        pin_memory=True, persistent_workers=workers > 0)  # fmt: skip
 
 
+def _predict_chunked(
+    probes: StackedProbes, n_h: int, x: torch.Tensor, chunk: int = 64
+) -> torch.Tensor:
+    """All probes on windows ``x``, ``chunk`` windows at a time (bounds the stacked activations)."""
+    return torch.cat(
+        [probes.predict(list(range(n_h)), x[s : s + chunk]) for s in range(0, len(x), chunk)], dim=1
+    )
+
+
 def window_probes_oof(rows: WindowRows, clip_of: np.ndarray, clips: pd.DataFrame, cfg: dict,
                       dev: torch.device, workers: int, name: str) -> np.ndarray:  # fmt: skip
     """Out-of-fold predictions (natural units) for every window, seeds averaged in log space.
@@ -661,7 +670,7 @@ def window_probes_oof(rows: WindowRows, clip_of: np.ndarray, clips: pd.DataFrame
             mk = va_m[:, ids_np]  # [H, R]
             if not mk.any():
                 continue
-            out = probes.predict(list(range(n_h)), xb.to(dev, non_blocking=True))  # [H, R, n]
+            out = _predict_chunked(probes, n_h, xb.to(dev, non_blocking=True))  # [H, R, n]
             y = (ywin[ids.to(dev)][None] - mu_t) / sd_t
             m_t = torch.as_tensor(mk, device=dev, dtype=torch.float32)[..., None]
             sse += (((out - y) ** 2) * m_t).sum(dim=(1, 2))
@@ -685,7 +694,7 @@ def window_probes_oof(rows: WindowRows, clip_of: np.ndarray, clips: pd.DataFrame
         for xb, ids in _loader(rows, smp_all, min(workers, 8)):
             ids_np = ids.numpy()
             out = (
-                probes.predict(list(range(n_h)), xb.to(dev, non_blocking=True)) * sd_t + mu_t
+                _predict_chunked(probes, n_h, xb.to(dev, non_blocking=True)) * sd_t + mu_t
             )  # [H, R, n]
             wgt = (hf[:, None] == fold[clip_of[ids_np]][None]).astype(
                 np.float32
@@ -987,6 +996,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--no-extract", action="store_true", help="window features from the cache only")
     ap.add_argument("--whole-clip-only", action="store_true", help="skip the 64-frame arms (M1/M2)")
+    ap.add_argument("--clip-arms-only", action="store_true",
+                    help="with --windows: the same clips, but only the 64-frame arms (M1/M2), so the "
+                         "two halves can run as two containers")  # fmt: skip
     args = ap.parse_args(argv)
     cfg = load_yaml(args.config)
     if args.epochs:
@@ -1046,13 +1058,14 @@ def main(argv: list[str] | None = None) -> int:
                     f"T_p RMSE {rmse(d['Tp_label_s'], d[f'pred_tp_{c}']):.2f} s ({time.time() - t0:.0f} s)")  # fmt: skip
         d.to_csv(args.out / "predictions.csv", index=False)
         res = scores(d, cols, cfg)
-    if args.windows:
+    if args.windows and not args.clip_arms_only:
         w = whole_clip(args, cfg, clips, dev)
         w.to_csv(args.out / "predictions_whole_clip.csv", index=False)
         res["whole_clip"] = whole_clip_scores(w, cfg)
     res["run"] = {"config": str(args.config), "package": str(args.package), "limit": args.limit,
                   "features_from": str(args.features_from) if args.features_from else None,
                   "windows": str(args.windows) if args.windows else None,
+                  "n_clips": len(clips), "clip_ids_sha256": hashlib.sha256("\n".join(clips["clip_id"]).encode()).hexdigest(),
                   "window_cache": str(window_cache_dir(cfg, args.window_cache)) if args.windows else None}  # fmt: skip
     (args.out / "metrics.json").write_text(json.dumps(res, indent=1, default=str))
     text = report(res, cfg["heads"]["primary"]) if "arms" in res else ""

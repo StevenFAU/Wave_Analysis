@@ -53,5 +53,9 @@ evaluation:
     hs_average: energy           # sqrt(mean(H_s^2)); mean of log H_s reported beside it
     tp_average: geometric
     reported: [clip mean-log H_s, pooled (learned record pooler), clip-image (DINOv3 per window), pixel spectrum alone, Kim 5-class at 1 / 11 / K windows]
+    # Implementation and pixel-spectrum recipe v1, fixed 2026-11-18 before scoring
+    # (docs/experiments/webcoos_video.md, "Whole-clip implementation"): windows cut by
+    # scripts/webcoos_video_clips.py windows; spectrum wave_analysis.processing.pixel_spectrum
+    # (RECIPE = 1); ridge heads alpha 1 on standardised inputs (train_video_probe.RIDGE_ALPHA).
   reported: [video minus shuffled, video minus image (DINOv3), per camera, Kamagata metrics at Oak Island, Kim 5-class accuracy]
   first_scored_run: at least 15 local dates framed; interim until the sample download finishes
