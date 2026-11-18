@@ -68,6 +68,23 @@ separately (`docs/REPRODUCIBILITY.md`).
   its calls follow wind-wave height more than swell height; over 24 held-out
   buoys, swell share predicts the under-call (Spearman −0.89).
 
+### Added (2026-11-18, results and shore video)
+- v2 results (three seeds per arm, 12 unseen buoys): the camera alone gives H_s RMSE
+  0.450 m, R² 0.81, Pearson 0.915 (Kamagata 2026: 0.586 m, 0.107, 0.436) and 99.1 % on
+  Choi 2020's calm/rough task (84 %), but 69 % on Kim 2023's five classes (78 %). V2-1
+  not met: the horizon attitude makes H_s worse (+0.038 m). V2-2: the camera beats ERA5
+  on the wind-wave height (0.215 against 0.341 m), not on the total.
+- Test 3 not met: camera + ERA5 + wind against ERA5 + wind, H_s 0.258 against 0.259 m;
+  wind-wave height 0.199 against 0.286 m (−0.087 [−0.114, −0.060]).
+- Backbone review `reports/Vision backbones for wave cameras.md` (notes in
+  `research_notes/`): DINOv3 for the buoy strips, V-JEPA 2 ViT-L (64 frames at 4 fps) for
+  shore video, frozen probes first.
+- Shore video vs single image (`docs/experiments/webcoos_video.md`, design fixed before
+  scoring): frames now 64 at 4 fps, 256 px high, overlays masked; frozen V-JEPA 2 (video,
+  still, shuffled) and DINOv3 (image) arms, attentive and mean probes, folds of dates
+  (`scripts/train_video_probe.py`, `wave_analysis.models.video_probe`); `run.sh sync` for
+  growing packages, `KIND=video`; `transformers` in the `ml` extra.
+
 ### Added (2026-11-18, v2)
 - Wave heights in metres: `wave_analysis.models.wave_heights` (`MultiViewRegressor`: one
   backbone per view, optional per-view horizon roll and pitch, a one-layer transformer over

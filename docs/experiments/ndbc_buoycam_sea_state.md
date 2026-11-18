@@ -455,6 +455,44 @@ our 95 % intervals over test buoys, not tested against):
   height. Expected from v0 and v1: the camera wins the first and not the
   second.
 
+### v2 results (2026-11-18)
+
+Three seeds per arm (seeds 0 and 1 at `acbc5bf`, seed 2 at `fc05193`, the training
+code unchanged between them), each arm the mean of its seeds' log heights; scored once
+with `scripts/compare_papers.py` at the 12 unseen test buoys (6,183 strips; intervals
+from a bootstrap over whole test buoys).
+
+| Measure (H_s unless named) | Arm A, images | Arm B, + horizon | Published |
+|---|---|---|---|
+| RMSE | **0.450 m** [0.390, 0.509] | 0.488 m [0.415, 0.555] | Kamagata 0.586 m |
+| R² | **0.81** [0.73, 0.86] | 0.78 [0.67, 0.84] | Kamagata 0.107 |
+| Pearson | **0.915** [0.890, 0.933] | 0.910 [0.883, 0.930] | Kamagata 0.436 |
+| Bias | −0.16 m | −0.23 m | |
+| Calm vs rough (3,190 strips) | **99.1 %** [97.9, 99.7] | 98.7 % [96.9, 99.6] | Choi 84.05 % (same buoys and days) |
+| Kim's five classes (4,791 strips) | 69.4 % [61.8, 77.9] | 68.0 % [59.4, 77.3] | Kim 78.3 % snapshot, 93.2 % video (random frames) |
+| Wind-wave height RMSE | 0.219 m (R² 0.93) | 0.223 m | |
+| Swell height RMSE | 0.597 m (R² 0.54) | 0.650 m | |
+
+- **V2-1 not met.** Arm B minus arm A: H_s +0.038 m [+0.018, +0.057] (the horizon
+  makes the total height *worse*), wind-wave +0.005 m [−0.001, +0.010]. Arm B was the
+  better arm on the validation buoys (0.449 against 0.470 m) and the worse one on the
+  test buoys, the same val/test gap in swell seen since v0. On real buoys the measured
+  motion adds nothing the images do not already carry; Yang 2026's gain from attitude
+  (simulation) does not carry over.
+- **V2-2: the camera beats ERA5 on the wind sea, not on the total.** Wind-wave height
+  0.215 against ERA5's 0.341 m (−0.126 [−0.187, −0.065]; arm B −0.122). Total height
+  0.434 against 0.267 m (+0.167 [+0.091, +0.242]) and swell 0.582 against 0.361 m:
+  ERA5 wins both, as expected from Q-M8.
+- **Against the papers.** At buoys it never saw, the camera alone is ahead of
+  Kamagata 2026 on every measure they report (RMSE, R², Pearson; their data are shore
+  video at five held-out clips, ours open-ocean buoys, so this is a side-by-side, not a
+  test) and ahead of Choi 2020's calm/rough accuracy on a harder split. It is **below
+  Kim 2023's snapshot accuracy** (69 % against 78 %; the upper end of our interval,
+  77.9 %, falls just short). Kim's test frames come from the same hours as training
+  frames and each hour has one label, which our split forbids; whether a random split of
+  our strips would pass 78 % is a separate, labelled-as-such check. The camera calls the
+  total height too low (bias −0.16 m), the swell it cannot see.
+
 ### Test 3: the best estimate from everything at the buoy (fixed 2026-11-18, before v2 was scored)
 
 `scripts/buoycam_combined.py`: a ridge regression (standardised features, alpha 1.0)
@@ -466,6 +504,20 @@ without the camera) in RMSE of H_s **and** of the wind-wave height, each interva
 the difference below zero (paired bootstrap over test buoys). It asks whether the
 camera adds anything that an anemometer and a wave model at the same buoy do not.
 Reported beside it: ERA5 alone, camera + wind, the camera alone.
+
+**Result (2026-11-18): not met.** The rule picked arm B (validation RMSE 0.449 against
+0.470 m). Ridge fitted on 6,172 val strips, scored on 6,045 test strips at 12 buoys:
+
+| Target | camera + ERA5 + wind | ERA5 + wind (the bar) | ERA5 alone | camera alone | difference to the bar |
+|---|---|---|---|---|---|
+| H_s | 0.258 m | 0.259 m | 0.259 m | 0.473 m | −0.001 [−0.052, +0.049] |
+| wind-wave height | **0.199 m** | 0.286 m | 0.306 m | 0.220 m | **−0.087 [−0.114, −0.060]** |
+
+For the total height the camera adds nothing once ERA5 is there; for the wind sea it
+cuts the error of ERA5 + wind by 30 %, an interval well below zero. The bar asked for
+both, so it is not met. The division of labour is clear: ERA5 carries the swell and so
+the total height; the camera carries the wind sea, and the buoy's anemometer adds
+little to either (camera + wind 0.205 m against camera alone 0.220 m).
 
 ### Bar B1: a better backbone (fixed 2026-11-18, before any B1 run)
 
@@ -543,4 +595,10 @@ without it).
       both about +0.05, intervals reach below zero; the gain is in calm seas,
       found at two test buoys).
 - [ ] v1 time split (three seeds), after the ERA5 download of 2026-11-20.
+- [x] v2 heights (2026-11-18, three seeds per arm): camera alone H_s RMSE 0.450 m,
+      R² 0.81 at unseen buoys; V2-1 not met (the horizon does not help); V2-2 met
+      for the wind sea (0.215 against ERA5's 0.341 m), not for the total.
+- [x] Test 3 (2026-11-18): not met; the camera cuts ERA5 + wind's wind-wave error
+      by 30 % and adds nothing to the total height.
+- [ ] Bar B1 (DINOv3 ConvNeXt-Tiny), three seeds running.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.

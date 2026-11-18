@@ -29,6 +29,19 @@ the same claim as one at unseen sites. Each row says which of our tests matches 
 | Visual-range sea-state dataset, *Symmetry* 14:1487 (2022) (S) | 100,800 images, 4 sea states | not verified | not verified | 81.8 % (NASNet-Mobile) | none until read |
 | Ocean Dynamics 2025, doi:10.1007/s10236-025-01743-x (S) | shore video **timestacks**, no learning | not verified | two months, one site | H_s RMSE 0.12 / 0.09 m, r 0.76 / 0.80 | the physics baseline for shore video |
 
+## Where we stand (2026-11-18)
+
+Numbers from `docs/experiments/ndbc_buoycam_sea_state.md` ("v2 results", "Test 3"):
+three-seed averages at 12 buoys the model never saw, intervals over whole buoys.
+
+| Work | Their number | Ours, on our data and split | Reading |
+|---|---|---|---|
+| Kamagata 2026 | H_s RMSE 0.586 m, R² 0.107, Pearson 0.436 | 0.450 m [0.39, 0.51], R² 0.81, Pearson 0.915 (buoy cameras) | ahead on every measure; theirs is shore video, the Oak Island test is the like-for-like one (video experiment) |
+| Choi 2020 | 84.05 % calm vs rough, same buoys and days | 99.1 % [97.9, 99.7], unseen buoys | ahead, on a harder split |
+| Kim 2023 | 78.3 % snapshot, 93.2 % video, random frames | 69.4 % [61.8, 77.9] (buoy cameras, unseen buoys) | **behind** on snapshots; their split shares hours between train and test; the shore video test answers the video half |
+| Yang 2026 | attitude cuts RMSE 0.098 → 0.073 m (simulation) | horizon attitude makes H_s worse (+0.038 m [+0.018, +0.057]) | their gain does not carry to real buoys |
+| ERA5 at the buoy | — | wind-wave height: camera 0.215 m against ERA5 0.341 m; total H_s: ERA5 0.267 m against camera 0.434 m; both together cut ERA5 + wind's wind-wave error 30 % | the camera is the wind-sea instrument; swell needs the wave model |
+
 ## Other sensors (context: what an image of the sea surface can reach)
 
 | Work | Sensor | Their result |
