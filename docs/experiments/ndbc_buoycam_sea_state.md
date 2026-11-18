@@ -744,6 +744,63 @@ either arm's three single-seed RMSEs), backbones are settled for the strips and 
 work moves to fusion (stage 2) and new outputs (stage 3). The arm with the lower
 out-of-fold H_s RMSE is the camera model for stages 2 and 3.
 
+## Stage 2: partition-aware fusion (fixed 2026-11-18, before any fusion was fitted or scored)
+
+Rank 3 of the architecture review. The camera reads the wind sea better than ERA5
+(Test 1, V2-2), but adding it to ERA5 + wind left the total height level (Test 3),
+because swell carries two thirds of the energy at the test buoys. A combiner should
+therefore keep the wave model's swell and replace only its wind sea.
+
+**First, do the partitions add as energies?** (`scripts/buoycam_partition_check.py`.)
+NDBC computes WVHT = 4 sqrt(m0) on board and splits the same spectrum at a separation
+frequency into swell (SwH) and wind waves (WWH), so WVHT² = SwH² + WWH² should hold up to
+the 0.1 m rounding of the three reported values. **It does, on all 295,547 records of the
+79 camera buoys** (2026-08-12 to 11-15): every record lies inside the rounding bound
+(|WVHT² - SwH² - WWH²| <= 0.1 (WVHT + SwH + WWH) + 0.0075 m²), and for seas of 2 m and
+more, sqrt(SwH² + WWH²) is within 4 % of WVHT for 99 % of records (largest gap 5.7 %), as
+rounding alone would allow. ERA5's own three heights add the same way to within 1 % at
+91 % of buoy-hours (median gap 0.04 %). The rule H_s² = swell² + wind-wave² is therefore
+used as a physical relation, not a fitted one.
+
+**Fusion** (`scripts/buoycam_partition_fusion.py`, choices in its header). Inputs per
+strip: the stage-1 camera's out-of-fold heights and the spread of its wind-wave height;
+ERA5's total, wind-sea and swell heights at the buoy; the buoy's wind speed and gust;
+and five gate features that say how well the camera can see (its spread, the sun's
+elevation, the number of usable views, their mean grey and mean contrast). Every
+combiner that predicts fold k is fitted on the other four folds' strips, whose camera
+heights are themselves out of fold.
+
+- **Comparator (the bar):** Test 3's ERA5 + wind ridge, refitted under the folds. Its
+  outputs are a total T and a wind sea W.
+- **Main candidate, the gated partition swap:** H_s² = T² + k g (b C² - W²) and wind
+  sea² = g b C² + (1 - g) W², where C is the camera's wind-wave height, g (0 to 1) is a
+  learned gate on the five features that falls back to the comparator where the camera
+  cannot see, b rescales the camera, and k (0 to 2) is how much of the wind-sea
+  correction reaches the total (k = 1 is the full swap (T² - W²) + C²). With g = 0 the
+  candidate is the comparator, so the bar asks only whether the camera's wind sea adds
+  information.
+- **Beside it, not part of the bar:** the partition rule on raw ERA5 with nothing fitted
+  (H_s² = swh² - shww² + C²); the full swap (k = 1), gated and with the gate open; the
+  same gated fusion on raw ERA5 with fitted scales; Test 3's full ridge with the camera;
+  gradient boosting on every input; ERA5 with a line; the camera alone. TabPFN is not
+  run, because its weights need a non-commercial licence to be accepted.
+
+**Bar S2.** The gated partition swap must lower the out-of-fold RMSE of H_s **and** of
+the wind-wave height against ERA5 + wind, each 95 % interval of the difference below
+zero (paired bootstrap over whole buoys; the camera arm is stage 1's winner on
+out-of-fold H_s RMSE). Reported beside it: the bootstrap over station groups, every
+other candidate, and where the gate closes (by light and by camera spread).
+
+**Confirmation on new weeks (fixed now, run when the data exist).** The 12 test buoys
+have served Tests 2, 2b and 3, so a pass here is confirmed on strips archived after the
+package (from 2026-11-14 16:00 UTC), with the same light rules and labels. Each new strip
+is predicted by the three seed models of its own buoy's fold, so its buoy stays unseen,
+and fused by the combiners fitted for that fold (no refitting). The bar is the same two
+conditions. The set needs ERA5, which runs about 5 days behind real time, and a `.spec`
+snapshot saved after the weeks it labels. It is large enough to score when ERA5 covers
+at least 7 days after the package (about 6,000 strips at 70 or more buoys), which is
+expected around 2026-11-26.
+
 ## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
 
 Exploratory, nothing trained (`scripts/buoycam_horizon.py`, questions fixed in its
@@ -814,4 +871,7 @@ without it).
       leaves Kim's five-class accuracy at 69 %: the gap to Kim is not the split.
 - [ ] Grouped cross-validation (2026-11-18): package `ndbc_buoycam_heights_v2cv`, five
       folds over the 43 groups; bar B2-CV fixed before any run.
+- [ ] Stage 2, partition-aware fusion (2026-11-18): NDBC's partition adds as energies on
+      every record; bar S2 fixed before any fusion. Confirmation on new weeks from about
+      2026-11-26.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.
