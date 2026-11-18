@@ -62,6 +62,12 @@ separately (`docs/REPRODUCIBILITY.md`).
   class weights, no difference; the time split beats each buoy's majority class
   (+0.32 balanced accuracy) but not ERA5 on the 41 % of test strips it covers.
 
+- `scripts/buoycam_swell_check.py` (research question Q-M8): the buoy camera sees the
+  wind sea, not the swell. Within each buoy and class its too-calm share rises by
+  0.20 [0.15, 0.25] from the least- to the most-swell third of strips (ERA5: flat);
+  its calls follow wind-wave height more than swell height; over 24 held-out
+  buoys, swell share predicts the under-call (Spearman −0.89).
+
 ### Fixed (2026-11-14)
 - `sources.ndbc.buoycam.caption_band_rows`: the caption is a fixed 30-row band in
   both strip formats (measured); it was scaled to 25 rows for 2304 × 246 strips.

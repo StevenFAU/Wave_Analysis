@@ -99,8 +99,13 @@ so that commits and results can reference them.
   wind-sea part beside a wave model that carries the swell. Answerable from
   the saved buoy-camera predictions and NDBC's own split of each record into
   swell and wind-wave height (`swell_height_m`, `wind_wave_height_m` in the
-  package), without training. *(2026-11-18; the buoy-camera model calls the
-  sea one class too calm, which this would explain.)*
+  package), without training. *Answered for the buoy cameras (2026-11-18,
+  `scripts/buoycam_swell_check.py`): yes. Within each buoy and class, the
+  camera's too-calm share rises by 0.20 [0.15, 0.25] from the least- to the
+  most-swell third (ERA5: flat); its calls follow wind-wave height (slope
+  0.68) more than swell height (0.37); over 24 held-out buoys, swell share
+  predicts the under-call (Spearman −0.89).
+  [Experiment](../experiments/ndbc_buoycam_sea_state.md).*
 
 ### Generalisation
 - **Q-G1** Can a model trained on one coast transfer to South Florida?

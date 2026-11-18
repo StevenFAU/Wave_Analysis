@@ -251,6 +251,43 @@ varies from run to run. At Currituck the camera added skill *to* a hindcast
 rather than replacing it; the same test here (camera with ERA5 against ERA5
 alone) would need its own bar, fixed before it is run.
 
+## Why it calls the sea too calm: it sees the wind sea, not the swell (2026-11-18)
+
+Exploratory check on the saved predictions (`scripts/buoycam_swell_check.py`,
+research question Q-M8; questions fixed before looking). NDBC splits each
+record's spectrum into swell (SwH) and wind-wave (WWH) height; *swell share* is
+SwH² / (SwH² + WWH²). Judged run, 6,156 test strips at 12 buoys; intervals by
+bootstrap over buoys:
+
+1. **More swell, more "too calm".** Within each true class, the camera calls
+   the sea at least one class too calm on 12 % of the third of strips with
+   least swell, 24 % of the middle third and 34 % of the third with most:
+   +0.22 [+0.16, +0.27]. **Within each buoy and class**, so that place, light
+   and camera are fixed: +0.20 [+0.15, +0.25]. ERA5 on the same strips: flat
+   (2 %, 2 %, 4 %; +0.01 [−0.02, +0.04]).
+2. **Its calls follow the wind waves.** Standardised slopes of the camera's
+   expected class on log wind-wave and log swell height: 0.68 and 0.37
+   (difference +0.16 to +0.46). The true class depends on both about equally
+   (0.58 and 0.49).
+3. **Per buoy.** Over the 24 buoys held out of training (validation and test),
+   the more swell a buoy carries, the further the camera under-calls there
+   (Spearman −0.89). The test buoys carry more swell (mean share 0.67) than
+   the training buoys (0.62), and the validation buoys far less (0.40): the
+   epoch chosen on validation is chosen where swell matters least, which fits
+   the seed-to-seed spread on the test buoys.
+
+The same holds in all four runs (too-calm gain +0.22 to +0.32; within buoys
++0.15 to +0.28), including the time split at buoys seen in training, where the
+model has learned each buoy's usual swell and its calls follow swell and wind
+waves about equally (0.54 and 0.58).
+
+**Reading.** Six small snapshots show whitecaps and short, steep wind waves;
+long swell is low and smooth and nearly invisible in them. The camera measures
+the wind sea, and guesses the swell from what it learned is typical. Wave
+models do the opposite well: they carry swell from far away. This points the
+next experiments at a division of labour (camera for the wind sea, the wave
+model for the swell) rather than at more image-only models of total height.
+
 ## Status
 
 - [x] Pairing and package (2026-11-14, `7b8a93c`): 41,091 strips at 79
