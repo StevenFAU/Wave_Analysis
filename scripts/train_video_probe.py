@@ -19,17 +19,37 @@ Design fixed before any clip was scored: ``docs/experiments/webcoos_video.md``
    still, 95 % interval from a bootstrap over dates); per camera; Kamagata's measures at
    Oak Island; Kim's five classes.
 
+**Whole clips** (bars M3-M5, with ``--windows``; ``docs/experiments/webcoos_video.md``,
+"Whole-clip bars"): every clip's K non-overlapping 16-s windows (cut by
+``scripts/webcoos_video_clips.py windows``) go through the same frozen V-JEPA 2 (``video``
+order) and DINOv3 (each window's middle frame), cached per clip in ``--window-cache``.
+One attentive probe per encoder is trained on every window of the training clips, each
+window carrying its clip's label, with the folds, inner validation dates, seeds and
+hyperparameters above; the 25 (fold, seed) probes of an encoder learn side by side from
+one pass over the cache per epoch (each probe takes its own training windows from each
+read batch, in its own order, in mini-batches of the configured size). A clip is then
+read two ways: ``window`` (the window holding its midpoint) and ``clip`` (all K windows:
+energy mean of H_s, geometric mean of T_p). Beside them: the mean of log H_s, a learned
+record pooler (``pooled``), the DINOv3 probe read the same two ways, Kim's classes from
+1, 11 and K windows, and ridge heads on the pixel spectrum (the package's
+``pixel_spectrum.csv``): the spectrum alone, the spectrum with the ``clip`` T_p (bar M5)
+and the ``clip`` T_p alone (a recalibration control).
+
     python scripts/train_video_probe.py --config configs/experiments/webcoos_video_v1.yaml \\
-        --package data/processed/packages/webcoos_video_v1 --out runs/<name> [--limit 16]
+        --package data/processed/packages/webcoos_video_v1 --out runs/<name> [--limit 16] \\
+        [--windows <dir of <camera>/<clip>.zip> --window-cache <dir>]
 """
 
 from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
+import os
 import sys
 import time
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -45,11 +65,17 @@ from wave_analysis.evaluation.uncertainty import paired_block_bootstrap_ci
 from wave_analysis.models.video_probe import (
     AttentiveProbe,
     MeanProbe,
+    RecordPooler,
     arm_order,
+    centred_windows,
+    energy_mean,
+    geometric_mean,
+    midpoint_window,
     normalise,
     pool_tokens,
     square_tiles,
 )
+from wave_analysis.processing.pixel_spectrum import FEATURES as SPECTRUM_FEATURES
 
 TARGETS = {"hs": ("Hs_label_m", "m"), "tp": ("Tp_label_s", "s")}
 KIM_EDGES = [0.75, 1.25, 1.75, 2.25, 2.75, 3.25]  # average wave height (m), Kim et al. 2023
@@ -335,6 +361,553 @@ def report(res: dict, primary: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+# --- Whole clips: bars M3-M5 ---------------------------------------------------------
+
+WINDOW_FEATURES_VERSION = 1  # bump when the window extraction changes: a new cache folder
+WINDOW_ARMS = {"video": "vjepa2", "image": "dinov3"}  # cached per window; "vmean" feeds pooled
+READ_BATCH = 256  # windows read from the cache at a time, shared by the probes
+
+
+def window_cache_dir(cfg: dict, root: Path) -> Path:
+    """The cache folder of these encoders and this frame recipe (a short hash of them)."""
+    enc = cfg["encoders"]
+    key = {"v": WINDOW_FEATURES_VERSION, "frames": cfg["data"]["frames"], "tile": cfg["data"]["tile_px"],
+           "vjepa2": {k: enc["vjepa2"][k] for k in ("hf_id", "layers", "pool")},
+           "dinov3": {k: enc["dinov3"][k] for k in ("timm", "layers", "pool")}}  # fmt: skip
+    return root / hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def _feature_path(cache: Path, camera: str, clip_id: str, kind: str) -> Path:
+    return cache / camera / f"{clip_id}.{kind}.npy"
+
+
+class Windows(torch.utils.data.Dataset):
+    """Window ``w`` of a clip: its 64 frames from the clip's zip, as two square tiles."""
+
+    def __init__(self, items: list[tuple[str, int]], n_frames: int) -> None:
+        self.items, self.n = items, n_frames
+        self._zips: dict[str, zipfile.ZipFile] = {}
+
+    def __len__(self) -> int:
+        return len(self.items)
+
+    def __getitem__(self, i: int) -> tuple[torch.Tensor, int]:
+        path, w = self.items[i]
+        z = self._zips.get(path)
+        if z is None:
+            for old in self._zips.values():  # windows come in clip order: keep one zip open
+                old.close()
+            self._zips = {path: (z := zipfile.ZipFile(path))}
+        f = np.stack([np.asarray(Image.open(z.open(f"{w * self.n + k:04d}.jpg")).convert("RGB"))
+                      for k in range(self.n)])  # fmt: skip
+        return torch.from_numpy(square_tiles(f)).permute(0, 1, 4, 2, 3).contiguous(), i
+
+
+def _save(path: Path, a: np.ndarray) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + f".part{os.getpid()}")
+    with open(tmp, "wb") as fh:
+        np.save(fh, a)
+    tmp.rename(path)
+
+
+@torch.no_grad()
+def extract_windows(args: argparse.Namespace, cfg: dict, clips: pd.DataFrame, cache: Path) -> None:
+    """Cache per clip ``<clip>.video.npy`` [K, tiles, layers, 128, D] (V-JEPA 2, frames in order),
+    ``<clip>.image.npy`` [K, tiles, layers, 16, D] (DINOv3, each window's middle frame) and
+    ``<clip>.vmean.npy`` [K, tiles, layers, D] (the video tokens' mean), float16.
+    Clips already cached are skipped, so a cache grows with the package."""
+    todo = clips[[not all(_feature_path(cache, c, i, k).exists() for k in ("video", "image", "vmean"))
+                  for c, i in zip(clips["camera"], clips["clip_id"], strict=True)]].reset_index(drop=True)  # fmt: skip
+    log(f"window features in {cache}: {len(clips) - len(todo):,} clips cached, {len(todo):,} to extract "
+        f"({int(todo['K'].sum()):,} windows)")  # fmt: skip
+    if todo.empty:
+        return
+    dev = torch.device(args.device)
+    amp = (
+        torch.autocast("cuda", dtype=torch.bfloat16)
+        if dev.type == "cuda"
+        else torch.autocast("cpu", enabled=False)
+    )
+    n_frames, tile = int(cfg["data"]["frames"]), int(cfg["data"]["tile_px"])
+    items = [(str(args.windows / c / f"{i}.zip"), w)
+             for c, i, k in zip(todo["camera"], todo["clip_id"], todo["K"], strict=True) for w in range(int(k))]  # fmt: skip
+    owner = [(j, w) for j, k in enumerate(todo["K"]) for w in range(int(k))]
+    loader = torch.utils.data.DataLoader(Windows(items, n_frames), batch_size=4, num_workers=args.num_workers,
+                                         pin_memory=True)  # fmt: skip
+    import timm
+    from transformers import VJEPA2Model
+
+    enc = cfg["encoders"]
+    vj = (
+        VJEPA2Model.from_pretrained(enc["vjepa2"]["hf_id"], torch_dtype=torch.bfloat16)
+        .to(dev)
+        .eval()
+    )
+    grid_v = (
+        n_frames // int(vj.config.tubelet_size),
+        tile // int(vj.config.patch_size),
+        tile // int(vj.config.patch_size),
+    )
+    pool_v = tuple(enc["vjepa2"]["pool"])
+    store, hooks = _hooked([vj.encoder.layer[i] for i in enc["vjepa2"]["layers"]])
+    dn = timm.create_model(enc["dinov3"]["timm"], pretrained=True, num_classes=0).to(dev).eval()
+    patch_d = int(dn.patch_embed.patch_size[0])
+    grid_d, pool_d = (1, tile // patch_d, tile // patch_d), tuple(enc["dinov3"]["pool"])
+    acc: dict[int, dict[str, list]] = {}
+    t0, n_done = time.time(), 0
+    for b, (x, idx) in enumerate(loader):
+        x = x.to(dev, non_blocking=True)  # [B, 2, T, 3, H, H] uint8
+        bsz = x.shape[0]
+        store.clear()
+        with amp:
+            vj(
+                pixel_values_videos=normalise(x.flatten(0, 1)).to(torch.bfloat16),
+                skip_predictor=True,
+            )
+            inter = dn.forward_intermediates(normalise(x[:, :, n_frames // 2].flatten(0, 1)),
+                                             indices=list(enc["dinov3"]["layers"]), output_fmt="NLC",
+                                             intermediates_only=True)  # fmt: skip
+        fv = torch.stack([pool_tokens(h, grid_v, pool_v) for h in store], dim=1)  # [B*2, L, n, D]
+        fv = fv.reshape(bsz, 2, *fv.shape[1:])
+        fi = torch.stack([pool_tokens(h, grid_d, pool_d) for h in inter], dim=1)
+        fi = fi.reshape(bsz, 2, *fi.shape[1:])
+        out = {"video": fv.half().cpu().numpy(), "vmean": fv.mean(dim=3).half().cpu().numpy(),
+               "image": fi.half().cpu().numpy()}  # fmt: skip
+        for k, i in enumerate(idx.tolist()):
+            j, w = owner[i]
+            kk = int(todo["K"].iloc[j])
+            a = acc.setdefault(j, {n: [None] * kk for n in out})
+            for n in out:
+                a[n][w] = out[n][k]
+            if all(v is not None for v in a["video"]):
+                c, cid = todo["camera"].iloc[j], todo["clip_id"].iloc[j]
+                for n in out:
+                    _save(_feature_path(cache, c, cid, n), np.stack(a[n]))
+                del acc[j]
+                n_done += 1
+        if b % 250 == 0:
+            log(
+                f"  windows: {min((b + 1) * 4, len(items)):,}/{len(items):,} ({n_done:,} clips), {time.time() - t0:.0f} s"
+            )
+    for h in hooks:
+        h.remove()
+    del vj, dn
+    torch.cuda.empty_cache()
+    log(f"window features of {len(todo):,} clips written ({time.time() - t0:.0f} s)")
+
+
+class WindowRows(torch.utils.data.Dataset):
+    """Cached window features read in batches: an item is an array of global window ids."""
+
+    def __init__(self, paths: list[str], clip_of: np.ndarray, w_of: np.ndarray) -> None:
+        self.paths, self.clip_of, self.w_of = paths, clip_of, w_of
+        self.shape = tuple(np.load(paths[0], mmap_mode="r").shape[1:])
+        self._mm: dict[int, np.ndarray] = {}
+
+    def __len__(self) -> int:
+        return len(self.clip_of)
+
+    def __getitem__(self, ids: np.ndarray) -> tuple[torch.Tensor, torch.Tensor]:
+        out = np.empty((len(ids), *self.shape), np.float16)
+        for k, g in enumerate(ids):
+            c = int(self.clip_of[g])
+            mm = self._mm.get(c)
+            if mm is None:
+                mm = self._mm[c] = np.load(self.paths[c], mmap_mode="r")
+            out[k] = mm[self.w_of[g]]
+        return torch.from_numpy(out), torch.as_tensor(ids)
+
+
+def _batches(
+    rows: WindowRows, ids_list: list[np.ndarray], workers: int
+) -> torch.utils.data.DataLoader:
+    return torch.utils.data.DataLoader(rows, batch_size=None, sampler=ids_list, num_workers=workers,
+                                       pin_memory=True, persistent_workers=False)  # fmt: skip
+
+
+def _val_split(
+    fold_days: np.ndarray, trall: np.ndarray, f: int, seed: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """The inner validation of ``out_of_fold``: one training date (or 15 % of clips in smoke tests)."""
+    tr_days = np.array(sorted(set(fold_days[trall])))
+    if len(tr_days) >= 3:
+        vday = np.random.default_rng(1000 * f + int(seed)).choice(tr_days)
+        return trall[fold_days[trall] == vday], trall[fold_days[trall] != vday]
+    perm = np.random.default_rng(int(seed)).permutation(trall)
+    return perm[: max(1, len(perm) // 7)], perm[max(1, len(perm) // 7) :]
+
+
+def window_probes_oof(rows: WindowRows, clip_of: np.ndarray, clips: pd.DataFrame, cfg: dict,
+                      dev: torch.device, workers: int, name: str) -> np.ndarray:  # fmt: skip
+    """Out-of-fold predictions (natural units) for every window, seeds averaged in log space.
+
+    The 25 (fold, seed) attentive probes train side by side on one stream of read batches.
+    """
+    hp = cfg["heads"]
+    bs, epochs = int(hp["batch_size"]), int(hp["epochs"])
+    ylog = np.log(clips[[TARGETS[t][0] for t in TARGETS]].to_numpy(dtype=float))
+    fold, days = clips["fold"].to_numpy(), clips["local_day"].to_numpy()
+    n_w = len(clip_of)
+    p, n_layers, t, dim = rows.shape
+    ywin = torch.as_tensor(ylog[clip_of], dtype=torch.float32, device=dev)
+    heads = []
+    for f in sorted(set(fold)):
+        trall = np.flatnonzero(fold != f)
+        mu, sd = ylog[trall].mean(0), ylog[trall].std(0) + 1e-6
+        for seed in hp["seeds"]:
+            va_c, tr_c = _val_split(days, trall, f, int(seed))
+            tr = np.isin(clip_of, tr_c)
+            torch.manual_seed(int(seed))
+            m = AttentiveProbe(n_layers, dim, p * t, ylog.shape[1], d=int(hp["d"]), heads=int(hp["heads"]),
+                               dropout=float(hp["dropout"])).to(dev)  # fmt: skip
+            opt = torch.optim.AdamW(
+                m.parameters(), lr=float(hp["lr"]), weight_decay=float(hp["weight_decay"])
+            )
+            steps = epochs * max(1, int(np.ceil(tr.sum() / bs)))
+            sched = torch.optim.lr_scheduler.OneCycleLR(
+                opt, max_lr=float(hp["lr"]), total_steps=steps, pct_start=0.1
+            )
+            heads.append({"f": f, "seed": int(seed), "m": m, "opt": opt, "sched": sched,
+                          "mu": torch.as_tensor(mu, dtype=torch.float32, device=dev),
+                          "sd": torch.as_tensor(sd, dtype=torch.float32, device=dev),
+                          "tr": torch.as_tensor(tr, device=dev), "va": torch.as_tensor(np.isin(clip_of, va_c), device=dev),
+                          "rng": np.random.default_rng(int(seed)), "px": None, "py": None,
+                          "best": np.inf, "state": copy.deepcopy(m.state_dict())})  # fmt: skip
+
+    def step(h: dict, x: torch.Tensor, y: torch.Tensor) -> None:
+        h["m"].train()
+        loss = nn.functional.smooth_l1_loss(h["m"](x), y)
+        h["opt"].zero_grad(set_to_none=True)
+        loss.backward()
+        h["opt"].step()
+        h["sched"].step()
+
+    train_ids = np.flatnonzero(torch.stack([h["tr"] for h in heads]).any(0).cpu().numpy())
+    val_ids = np.flatnonzero(torch.stack([h["va"] for h in heads]).any(0).cpu().numpy())
+    val_batches = [val_ids[s : s + READ_BATCH] for s in range(0, len(val_ids), READ_BATCH)]
+    log(
+        f"{name}: {len(heads)} probes on {n_w:,} windows of {len(clips):,} clips; {len(train_ids):,} train in some fold"
+    )
+    t0 = time.time()
+    for ep in range(epochs):
+        perm = np.random.default_rng(10_000 + ep).permutation(train_ids)
+        batches = [np.sort(perm[s : s + READ_BATCH]) for s in range(0, len(perm), READ_BATCH)]
+        for xb, ids in _batches(rows, batches, workers):
+            xb, ids = xb.to(dev, non_blocking=True), ids.to(dev, non_blocking=True)
+            for h in heads:
+                sel = torch.nonzero(h["tr"][ids]).squeeze(1)
+                if not len(sel):
+                    continue
+                sel = sel[torch.as_tensor(h["rng"].permutation(len(sel)), device=dev)]
+                x, y = xb[sel], (ywin[ids[sel]] - h["mu"]) / h["sd"]
+                if h["px"] is not None:
+                    x, y = torch.cat([h["px"], x]), torch.cat([h["py"], y])
+                while len(x) >= bs:
+                    step(h, x[:bs], y[:bs])
+                    x, y = x[bs:], y[bs:]
+                h["px"], h["py"] = (x, y) if len(x) else (None, None)
+        for h in heads:  # the epoch's last, partial mini-batch
+            if h["px"] is not None:
+                step(h, h["px"], h["py"])
+                h["px"] = h["py"] = None
+        sse = [0.0] * len(heads)
+        cnt = [0] * len(heads)
+        with torch.no_grad():
+            for xb, ids in _batches(rows, val_batches, workers):
+                xb, ids = xb.to(dev, non_blocking=True), ids.to(dev, non_blocking=True)
+                for k, h in enumerate(heads):
+                    sel = torch.nonzero(h["va"][ids]).squeeze(1)
+                    if len(sel):
+                        h["m"].eval()
+                        y = (ywin[ids[sel]] - h["mu"]) / h["sd"]
+                        sse[k] += float(((h["m"](xb[sel]) - y) ** 2).sum())
+                        cnt[k] += y.numel()
+        for k, h in enumerate(heads):
+            v = sse[k] / max(1, cnt[k])
+            if v < h["best"]:
+                h["best"], h["state"] = v, copy.deepcopy(h["m"].state_dict())
+        if ep % 10 == 0 or ep == epochs - 1:
+            log(f"  {name} epoch {ep + 1}/{epochs}: validation MSE {np.mean(sse) / max(1, np.mean(cnt)):.3f} "
+                f"(mean of probes), {time.time() - t0:.0f} s")  # fmt: skip
+    pred = np.zeros((n_w, ylog.shape[1]))
+    for h in heads:
+        h["m"].load_state_dict(h["state"])
+        h["m"].eval()
+    all_batches = [np.arange(s, min(n_w, s + READ_BATCH)) for s in range(0, n_w, READ_BATCH)]
+    wfold = torch.as_tensor(fold[clip_of], device=dev)
+    with torch.no_grad():
+        for xb, ids in _batches(rows, all_batches, workers):
+            xb, ids = xb.to(dev, non_blocking=True), ids.to(dev, non_blocking=True)
+            for f in sorted(set(fold)):
+                sel = torch.nonzero(wfold[ids] == f).squeeze(1)
+                if not len(sel):
+                    continue
+                hs = [h for h in heads if h["f"] == f]
+                acc = sum(h["m"](xb[sel]) * h["sd"] + h["mu"] for h in hs) / len(hs)
+                pred[ids[sel].cpu().numpy()] = acc.cpu().numpy()
+    return np.exp(pred)
+
+
+def fit_pooler(x: torch.Tensor, mask: torch.Tensor, y: torch.Tensor, tr: np.ndarray, va: np.ndarray,
+               hp: dict, seed: int) -> nn.Module:  # fmt: skip
+    """``fit_head`` for the record pooler (inputs with a window mask)."""
+    torch.manual_seed(seed)
+    _, w, p, n_layers, dim = x.shape
+    head = RecordPooler(n_layers, dim, y.shape[1], max_windows=w, n_tiles=p, d=int(hp["d"]),
+                        heads=int(hp["heads"]), dropout=float(hp["dropout"])).to(x.device)  # fmt: skip
+    opt = torch.optim.AdamW(
+        head.parameters(), lr=float(hp["lr"]), weight_decay=float(hp["weight_decay"])
+    )
+    epochs, bs = int(hp["epochs"]), int(hp["batch_size"])
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=float(hp["lr"]),
+                                                total_steps=epochs * max(1, int(np.ceil(len(tr) / bs))), pct_start=0.1)  # fmt: skip
+    rng = np.random.default_rng(seed)
+    best, best_state = np.inf, copy.deepcopy(head.state_dict())
+    vi = torch.as_tensor(va, device=x.device)
+    for _ in range(epochs):
+        head.train()
+        order = tr[rng.permutation(len(tr))]
+        for s in range(0, len(order), bs):
+            b = torch.as_tensor(order[s : s + bs], device=x.device)
+            loss = nn.functional.smooth_l1_loss(head(x[b], mask[b]), y[b])
+            opt.zero_grad(set_to_none=True)
+            loss.backward()
+            opt.step()
+            sched.step()
+        head.eval()
+        with torch.no_grad():
+            v = float(nn.functional.mse_loss(head(x[vi], mask[vi]), y[vi]))
+        if v < best:
+            best, best_state = v, copy.deepcopy(head.state_dict())
+    head.load_state_dict(best_state)
+    return head.eval()
+
+
+def pooled_oof(
+    vmean: np.ndarray, mask: np.ndarray, clips: pd.DataFrame, cfg: dict, dev: torch.device
+) -> np.ndarray:
+    """``out_of_fold`` for the record pooler on each clip's window mean tokens."""
+    hp = cfg["heads"]
+    x = torch.from_numpy(vmean).to(dev)
+    mk = torch.from_numpy(mask).to(dev)
+    ylog = np.log(clips[[TARGETS[t][0] for t in TARGETS]].to_numpy(dtype=float))
+    fold, days = clips["fold"].to_numpy(), clips["local_day"].to_numpy()
+    pred = np.zeros_like(ylog)
+    for f in sorted(set(fold)):
+        te, trall = np.flatnonzero(fold == f), np.flatnonzero(fold != f)
+        mu, sd = ylog[trall].mean(0), ylog[trall].std(0) + 1e-6
+        y = torch.as_tensor((ylog - mu) / sd, dtype=torch.float32, device=dev)
+        acc = np.zeros((len(te), ylog.shape[1]))
+        for seed in hp["seeds"]:
+            va, tr = _val_split(days, trall, f, int(seed))
+            head = fit_pooler(x, mk, y, tr, va, hp, int(seed))
+            with torch.no_grad():
+                ti = torch.as_tensor(te, device=dev)
+                acc += head(x[ti], mk[ti]).cpu().numpy() * sd + mu
+        pred[te] = acc / len(hp["seeds"])
+    return np.exp(pred)
+
+
+RIDGE_ALPHA = 1.0  # on standardised inputs; recipe fixed before scoring
+
+
+def ridge_oof(
+    x: np.ndarray, y: np.ndarray, fold: np.ndarray, alpha: float = RIDGE_ALPHA
+) -> np.ndarray:
+    """Out-of-fold ridge predictions of ``y`` from ``x`` [clips, features] over the same folds.
+
+    Inputs standardised on each training fold (a missing value becomes the training
+    mean), intercept not penalised.
+    """
+    pred = np.full(len(y), np.nan)
+    for f in sorted(set(fold)):
+        te, tr = fold == f, fold != f
+        mu = np.nanmean(x[tr], axis=0)
+        sd = np.nanstd(x[tr], axis=0)
+        sd = np.where(sd > 0, sd, 1.0)
+        z = np.nan_to_num((x - mu) / sd, nan=0.0)
+        ym = y[tr].mean()
+        a = z[tr].T @ z[tr] + alpha * np.eye(z.shape[1])
+        beta = np.linalg.solve(a, z[tr].T @ (y[tr] - ym))
+        pred[te] = z[te] @ beta + ym
+    return pred
+
+
+def whole_clip(
+    args: argparse.Namespace, cfg: dict, clips: pd.DataFrame, dev: torch.device
+) -> pd.DataFrame:
+    """Features, probes and readouts of the whole-clip arms: one row per clip, ``pred_<t>_<arm>`` columns."""
+    cache = window_cache_dir(cfg, args.window_cache)
+    if not args.no_extract:
+        extract_windows(args, cfg, clips, cache)
+    k = clips["K"].to_numpy().astype(int)
+    clip_of = np.repeat(np.arange(len(clips)), k)
+    w_of = np.concatenate([np.arange(n) for n in k])
+    start = np.concatenate([[0], np.cumsum(k)[:-1]])
+    d = clips.copy()
+    mid = np.array([midpoint_window(dur, n) for dur, n in zip(clips["duration_s"], k, strict=True)])
+    span = [centred_windows(m, n) for m, n in zip(mid, k, strict=True)]
+    d["midpoint_window"] = mid
+    for arm, enc in WINDOW_ARMS.items():
+        paths = [
+            str(_feature_path(cache, c, i, arm))
+            for c, i in zip(clips["camera"], clips["clip_id"], strict=True)
+        ]
+        rows = WindowRows(paths, clip_of, w_of)
+        t0 = time.time()
+        pw = window_probes_oof(
+            rows, clip_of, clips, cfg, dev, args.num_workers, f"{arm} windows ({enc})"
+        )
+        np.save(args.out / f"window_predictions_{arm}.npy", pw)
+        sfx = "" if arm == "video" else "_image"
+        hs, tp = pw[:, 0], pw[:, 1]
+        per = [slice(s, s + n) for s, n in zip(start, k, strict=True)]
+        d[f"pred_hs_window{sfx}"] = hs[start + mid]
+        d[f"pred_tp_window{sfx}"] = tp[start + mid]
+        d[f"pred_hs_clip{sfx}"] = [float(energy_mean(hs[q])) for q in per]
+        d[f"pred_tp_clip{sfx}"] = [float(geometric_mean(tp[q])) for q in per]
+        if arm == "video":
+            d["pred_hs_clip_meanlog"] = [float(geometric_mean(hs[q])) for q in per]
+            d["pred_tp_clip_meanlog"] = d["pred_tp_clip"]
+            d["pred_hs_span11"] = [
+                float(energy_mean(hs[s + a : s + b])) for s, (a, b) in zip(start, span, strict=True)
+            ]
+            d["pred_tp_span11"] = [
+                float(geometric_mean(tp[s + a : s + b]))
+                for s, (a, b) in zip(start, span, strict=True)
+            ]
+        log(f"{arm} windows: clip H_s RMSE {rmse(d['Hs_label_m'], d[f'pred_hs_clip{sfx}']):.3f} m, window "
+            f"{rmse(d['Hs_label_m'], d[f'pred_hs_window{sfx}']):.3f} m; clip T_p RMSE "
+            f"{rmse(d['Tp_label_s'], d[f'pred_tp_clip{sfx}']):.2f} s, window {rmse(d['Tp_label_s'], d[f'pred_tp_window{sfx}']):.2f} s "
+            f"({time.time() - t0:.0f} s)")  # fmt: skip
+    # pooled: the record pooler on each window's mean video tokens
+    vm = [
+        np.load(_feature_path(cache, c, i, "vmean"))
+        for c, i in zip(clips["camera"], clips["clip_id"], strict=True)
+    ]
+    kmax = int(k.max())
+    x = np.zeros((len(clips), kmax, *vm[0].shape[1:]), np.float16)
+    mask = np.zeros((len(clips), kmax), bool)
+    for j, a in enumerate(vm):
+        x[j, : len(a)], mask[j, : len(a)] = a, True
+    pp = pooled_oof(x, mask, clips, cfg, dev)
+    d["pred_hs_pooled"], d["pred_tp_pooled"] = pp[:, 0], pp[:, 1]
+    # ridge heads on the pixel spectrum (T_p only)
+    fold, ytp = clips["fold"].to_numpy(), np.log(clips["Tp_label_s"].to_numpy(dtype=float))
+    spec = clips[list(SPECTRUM_FEATURES)].to_numpy(dtype=float)
+    lclip = np.log(d["pred_tp_clip"].to_numpy(dtype=float))[:, None]
+    for arm, xx in (
+        ("spectrum", spec),
+        ("clip_spectrum", np.hstack([lclip, spec])),
+        ("clip_ridge", lclip),
+    ):
+        d[f"pred_tp_{arm}"] = np.exp(ridge_oof(xx, ytp, fold))
+        d[f"pred_hs_{arm}"] = np.nan
+    d["pred_tp_pixel_raw"], d["pred_hs_pixel_raw"] = clips["T_pix_s"].to_numpy(dtype=float), np.nan
+    return d
+
+
+WHOLE_ARMS = ["window", "clip", "clip_meanlog", "span11", "pooled", "window_image", "clip_image",
+              "spectrum", "clip_spectrum", "clip_ridge", "pixel_raw"]  # fmt: skip
+WHOLE_DIFFS = [  # (first, second, target): RMSE of first minus second
+    ("clip", "window", "hs"), ("clip", "window", "tp"), ("clip_spectrum", "clip", "tp"),  # M3, M4, M5
+    ("clip_meanlog", "window", "hs"), ("clip_meanlog", "clip", "hs"), ("pooled", "clip", "hs"),
+    ("pooled", "clip", "tp"), ("clip_image", "window_image", "hs"), ("clip_image", "window_image", "tp"),
+    ("clip_image", "clip", "hs"), ("clip_image", "clip", "tp"), ("clip_ridge", "clip", "tp"),
+    ("clip_spectrum", "clip_ridge", "tp"), ("spectrum", "clip", "tp"), ("span11", "window", "hs"),
+]  # fmt: skip
+WHOLE_BARS = {"M3 (H_s)": ("clip", "window", "hs"), "M4 (T_p)": ("clip", "window", "tp"),
+              "M5 (T_p)": ("clip_spectrum", "clip", "tp")}  # fmt: skip
+
+
+def _whole_scores_on(d: pd.DataFrame, cfg: dict) -> dict:
+    b = cfg["evaluation"]["bootstrap"]
+    kw = {"n_boot": int(b["n_boot"]), "alpha": float(b["alpha"]), "seed": int(b["seed"])}
+    g = d["local_day"].to_numpy()
+    res: dict[str, Any] = {"n_clips": len(d), "n_dates": int(d["local_day"].nunique()),
+                           "n_windows": int(d["K"].sum()), "by_camera_n": d["camera"].value_counts().to_dict(),
+                           "arms": {}, "differences": {}}  # fmt: skip
+    for c in WHOLE_ARMS:
+        r: dict[str, Any] = {}
+        for t, (lab, unit) in TARGETS.items():
+            p = d[f"pred_{t}_{c}"].to_numpy(dtype=float)
+            if np.isnan(p).all():
+                continue
+            y = d[lab].to_numpy()
+            r[t] = {f"rmse_{unit}": rmse(y, p), "r2": r2(y, p), "pearson": pearson(y, p), f"bias_{unit}": float(np.mean(p - y)),
+                    "by_camera_rmse": {cam: rmse(gg[lab], gg[f"pred_{t}_{c}"]) for cam, gg in d.groupby("camera")}}  # fmt: skip
+        if "hs" in r:
+            r["kim2023_accuracy"], r["kim2023_n"] = kim_accuracy(
+                d["Hs_label_m"].to_numpy(), d[f"pred_hs_{c}"].to_numpy()
+            )
+        oak = d[d["camera"].str.startswith("oakisland")]
+        if len(oak) > 2:
+            o: dict[str, Any] = {
+                "n": len(oak),
+                "tp_rmse_s": rmse(oak["Tp_label_s"], oak[f"pred_tp_{c}"]),
+            }
+            if "hs" in r:
+                y, p = oak["Hs_label_m"].to_numpy(), oak[f"pred_hs_{c}"].to_numpy()
+                o |= {"hs_rmse_m": rmse(y, p), "hs_r2": r2(y, p), "hs_pearson": pearson(y, p)}
+            r["oak_island"] = o
+        res["arms"][c] = r
+    for a, o, t in WHOLE_DIFFS:
+        lab = TARGETS[t][0]
+        v, lo, hi = paired_block_bootstrap_ci(
+            d[lab].to_numpy(), d[f"pred_{t}_{a}"], d[f"pred_{t}_{o}"], rmse, groups=g, **kw
+        )
+        res["differences"][f"{a} minus {o}: {t}"] = [float(v), float(lo), float(hi)]
+    res["bars"] = {
+        k: bool(res["differences"][f"{a} minus {o}: {t}"][2] < 0)
+        for k, (a, o, t) in WHOLE_BARS.items()
+    }
+    return res
+
+
+def whole_clip_scores(d: pd.DataFrame, cfg: dict) -> dict:
+    """Scores of the whole-clip arms on all clips and on the clips with K >= 15."""
+    long = d[d["K"] >= 15]
+    return {"all": _whole_scores_on(d, cfg), "k_ge_15": _whole_scores_on(long, cfg) if len(set(long["local_day"])) > 1 else None,
+            "kim2023_windows": {"1 (midpoint)": "window", "11 (176 s)": "span11", "K (whole clip)": "clip"},
+            "ridge_alpha": RIDGE_ALPHA, "spectrum_features": list(SPECTRUM_FEATURES)}  # fmt: skip
+
+
+def whole_clip_report(res: dict) -> str:
+    lines = []
+    for key, title in (("all", "all clips"), ("k_ge_15", "clips with K >= 15")):
+        r = res.get(key)
+        if not r:
+            continue
+        lines += [f"\n## Whole clips, {title}: {r['n_clips']:,} clips, {r['n_windows']:,} windows, {r['n_dates']} dates\n",
+                  "| arm | H_s RMSE (m) | H_s R² | H_s Pearson | T_p RMSE (s) | T_p R² | T_p Pearson | Kim 5-class acc. |",
+                  "|---|---|---|---|---|---|---|---|"]  # fmt: skip
+        for c, a in r["arms"].items():
+            h = a.get("hs")
+            hs = f"{h['rmse_m']:.3f} | {h['r2']:.3f} | {h['pearson']:.3f}" if h else "— | — | —"
+            kim = f"{a['kim2023_accuracy']:.3f} (n {a['kim2023_n']})" if h else "—"
+            lines.append(
+                f"| {c} | {hs} | {a['tp']['rmse_s']:.2f} | {a['tp']['r2']:.3f} | {a['tp']['pearson']:.3f} | {kim} |"
+            )
+        lines += [
+            "",
+            "Differences in RMSE (first minus second; 95 % interval, bootstrap over dates):",
+            "",
+        ]
+        lines += [
+            f"- {k}: {v[0]:+.3f} [{v[1]:+.3f}, {v[2]:+.3f}]" for k, v in r["differences"].items()
+        ]
+        lines += [
+            "",
+            "Bars: " + ", ".join(f"{k} {'met' if v else 'not met'}" for k, v in r["bars"].items()),
+        ]
+        oak = {c: a["oak_island"] for c, a in r["arms"].items() if "oak_island" in a}
+        if oak:
+            lines += ["", f"Oak Island T_p RMSE (Kamagata 2026 held-out: {KAMAGATA['tp_rmse_s']} s): "
+                      + ", ".join(f"{c} {o['tp_rmse_s']:.2f} s" for c, o in oak.items())]  # fmt: skip
+    return "\n".join(lines) + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--config", type=Path, required=True)
@@ -355,6 +928,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit", type=int, help="first N clips only (smoke test)")
     ap.add_argument("--epochs", type=int, help="override the config's head epochs (smoke test)")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument(
+        "--windows", type=Path, help="whole-clip windows, <camera>/<clip>.zip (bars M3-M5)"
+    )
+    ap.add_argument(
+        "--window-cache",
+        type=Path,
+        help="per-clip window features (default <out>/features/windows)",
+    )
+    ap.add_argument("--no-extract", action="store_true", help="window features from the cache only")
+    ap.add_argument("--whole-clip-only", action="store_true", help="skip the 64-frame arms (M1/M2)")
     args = ap.parse_args(argv)
     cfg = load_yaml(args.config)
     if args.epochs:
@@ -364,6 +947,20 @@ def main(argv: list[str] | None = None) -> int:
     clips = pd.read_csv(args.package / "clips.csv")
     clips = clips[(clips["sun_elevation_deg"] >= float(cfg["data"]["min_sun_elevation_deg"]))
                   & clips["Hs_label_m"].gt(0) & clips["Tp_label_s"].gt(0)].sort_values("clip_id").reset_index(drop=True)  # fmt: skip
+    if args.windows:  # whole clips: the clips with windows, their K and pixel spectrum
+        win = pd.read_csv(args.package / "windows.csv")[["clip_id", "K"]]
+        spec = pd.read_csv(args.package / "pixel_spectrum.csv")[
+            ["clip_id", "T_pix_s", *SPECTRUM_FEATURES]
+        ]
+        n0 = len(clips)
+        clips = clips.merge(win, on="clip_id").merge(spec, on="clip_id")
+        there = [
+            (args.windows / c / f"{i}.zip").exists()
+            for c, i in zip(clips["camera"], clips["clip_id"], strict=True)
+        ]
+        clips = clips[np.array(there, dtype=bool) & clips["K"].ge(1)].reset_index(drop=True)
+        log(f"whole clips: {len(clips):,} of {n0:,} clips have windows in {args.windows}")
+        args.window_cache = args.window_cache or args.out / "features" / "windows"
     if args.limit:  # a smoke test: clips from as many dates as possible, so folds exist
         clips = (clips.assign(_k=clips.groupby("local_day").cumcount()).sort_values(["_k", "clip_id"])
                  .head(args.limit).drop(columns="_k").sort_values("clip_id").reset_index(drop=True))  # fmt: skip
@@ -374,35 +971,44 @@ def main(argv: list[str] | None = None) -> int:
         f"{len(clips):,} clips, {clips['local_day'].nunique()} dates, {clips['camera'].value_counts().to_dict()}"
     )
 
-    fdir = args.features_from or args.out / "features"
-    if args.features_from:
-        cached = pd.read_csv(fdir / "clips.csv")
-        if list(cached["clip_id"]) != list(clips["clip_id"]):
-            raise SystemExit(f"{fdir} holds features of other clips")
-    else:
-        extract(args, cfg, clips, fdir)
-
     dev = torch.device(args.device)
-    arms = [a for e in cfg["encoders"].values() for a in e["arms"]]
     d = clips.copy()
-    cols = []
-    for arm in arms:
-        feats = np.load(fdir / f"{arm}.npy", mmap_mode="r")
-        for kind in ("attentive", "mean"):
-            t0 = time.time()
-            p = out_of_fold(kind, feats, clips, cfg, dev)
-            c = f"{arm}_{kind}"
-            cols.append(c)
-            for j, t in enumerate(TARGETS):
-                d[f"pred_{t}_{c}"] = p[:, j]
-            log(f"{c}: H_s RMSE {rmse(d['Hs_label_m'], d[f'pred_hs_{c}']):.3f} m, "
-                f"T_p RMSE {rmse(d['Tp_label_s'], d[f'pred_tp_{c}']):.2f} s ({time.time() - t0:.0f} s)")  # fmt: skip
-    d.to_csv(args.out / "predictions.csv", index=False)
-    res = scores(d, cols, cfg)
+    res: dict[str, Any] = {}
+    if not args.whole_clip_only:
+        fdir = args.features_from or args.out / "features"
+        if args.features_from:
+            cached = pd.read_csv(fdir / "clips.csv")
+            if list(cached["clip_id"]) != list(clips["clip_id"]):
+                raise SystemExit(f"{fdir} holds features of other clips")
+        else:
+            extract(args, cfg, clips, fdir)
+        arms = [a for e in cfg["encoders"].values() for a in e["arms"]]
+        cols = []
+        for arm in arms:
+            feats = np.load(fdir / f"{arm}.npy", mmap_mode="r")
+            for kind in ("attentive", "mean"):
+                t0 = time.time()
+                p = out_of_fold(kind, feats, clips, cfg, dev)
+                c = f"{arm}_{kind}"
+                cols.append(c)
+                for j, t in enumerate(TARGETS):
+                    d[f"pred_{t}_{c}"] = p[:, j]
+                log(f"{c}: H_s RMSE {rmse(d['Hs_label_m'], d[f'pred_hs_{c}']):.3f} m, "
+                    f"T_p RMSE {rmse(d['Tp_label_s'], d[f'pred_tp_{c}']):.2f} s ({time.time() - t0:.0f} s)")  # fmt: skip
+        d.to_csv(args.out / "predictions.csv", index=False)
+        res = scores(d, cols, cfg)
+    if args.windows:
+        w = whole_clip(args, cfg, clips, dev)
+        w.to_csv(args.out / "predictions_whole_clip.csv", index=False)
+        res["whole_clip"] = whole_clip_scores(w, cfg)
     res["run"] = {"config": str(args.config), "package": str(args.package), "limit": args.limit,
-                  "features_from": str(args.features_from) if args.features_from else None}  # fmt: skip
+                  "features_from": str(args.features_from) if args.features_from else None,
+                  "windows": str(args.windows) if args.windows else None,
+                  "window_cache": str(window_cache_dir(cfg, args.window_cache)) if args.windows else None}  # fmt: skip
     (args.out / "metrics.json").write_text(json.dumps(res, indent=1, default=str))
-    text = report(res, cfg["heads"]["primary"])
+    text = report(res, cfg["heads"]["primary"]) if "arms" in res else ""
+    if "whole_clip" in res:
+        text += whole_clip_report(res["whole_clip"])
     (args.out / "report.md").write_text(text, encoding="utf-8")
     print(text)
     return 0

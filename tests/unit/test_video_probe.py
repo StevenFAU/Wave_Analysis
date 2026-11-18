@@ -10,7 +10,12 @@ torch = pytest.importorskip("torch")
 from wave_analysis.models.video_probe import (  # noqa: E402
     AttentiveProbe,
     MeanProbe,
+    RecordPooler,
     arm_order,
+    centred_windows,
+    energy_mean,
+    geometric_mean,
+    midpoint_window,
     pool_tokens,
     square_tiles,
 )
@@ -56,3 +61,39 @@ def test_heads_shapes(cls: str) -> None:
         else MeanProbe(4, 32, 2, d=16)
     )
     assert head(x).shape == (3, 2)
+
+
+def test_midpoint_window() -> None:
+    assert midpoint_window(600.0, 37) == 18  # 300 s lies in window 18 (288-304 s)
+    assert midpoint_window(20.65, 1) == 0
+    assert midpoint_window(33.0, 2) == 1  # 16.5 s lies in the second window
+    assert midpoint_window(600.0, 15) == 14  # fewer frames than the length: the last window
+    with pytest.raises(ValueError):
+        midpoint_window(10.0, 0)
+
+
+def test_centred_windows() -> None:
+    assert centred_windows(18, 37) == (13, 24)  # 11 windows, 176 s around the midpoint
+    assert centred_windows(2, 37) == (0, 11)  # shifted inside the clip
+    assert centred_windows(36, 37) == (26, 37)
+    assert centred_windows(3, 7) == (0, 7)  # fewer than 11: all of them
+
+
+def test_averages() -> None:
+    h = np.array([1.0, 2.0, 2.0])
+    assert np.isclose(energy_mean(h), np.sqrt(3.0))
+    assert np.isclose(geometric_mean(np.array([2.0, 8.0])), 4.0)
+    assert energy_mean(h) >= geometric_mean(h)
+
+
+def test_record_pooler_ignores_padding() -> None:
+    torch.manual_seed(0)
+    head = RecordPooler(4, 32, 2, max_windows=8, d=16, heads=2, dropout=0.0).eval()
+    x = torch.randn(1, 8, 2, 4, 32)
+    mask = torch.zeros(1, 8, dtype=torch.bool)
+    mask[0, :5] = True
+    a = head(x, mask)
+    x2 = x.clone()
+    x2[0, 5:] = 99.0  # padded windows must not matter
+    assert a.shape == (1, 2)
+    assert torch.allclose(a, head(x2, mask), atol=1e-5)

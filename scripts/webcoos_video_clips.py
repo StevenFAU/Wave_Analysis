@@ -3,7 +3,9 @@
 
     python scripts/webcoos_video_clips.py pair     [cameras...]   # labels -> data/processed/video/clips.parquet
     python scripts/webcoos_video_clips.py frames   [--workers 6]  # 64 frames at 4 fps per clip, 256 px high JPEG
+    python scripts/webcoos_video_clips.py windows  [--workers 4]  # every 16-s window of each clip + its pixel spectrum
     python scripts/webcoos_video_clips.py pack                    # data/processed/packages/<name>/ (clips + frames + SHA256SUMS)
+    GPU_HOST=<lab-host> python scripts/webcoos_video_clips.py ship      # the windows to the GPU server, through Cloudflare R2
 
 **Pair.** Every clip under ``data/raw/webcoos_video/<camera>/`` (downloaded by
 ``scripts/webcoos_video_sample.sh``) gets its start (file name), length (``ffprobe``,
@@ -25,18 +27,49 @@ frame) and the video model (all 64), so the two see identical pixels. About 1.5 
 per clip: small enough to send to the GPU server, where the 2592-2688 px originals
 (30-90 MB) are not.
 
+**Windows** (the whole-clip bars M3-M5, ``docs/experiments/webcoos_video.md``). Each
+clip is cut whole at 4 fps, 256 px high, masks first, and its first ``64 K`` frames are
+kept: K = floor(duration / 16 s) non-overlapping 16-s windows from the clip's start
+(fewer if the stream holds fewer frames than its stated length). They are stored as
+one uncompressed zip per clip, ``data/processed/video/windows_4fps/<camera>/<clip>.zip``
+(``0000.jpg`` ...; window w is frames 64 w .. 64 w + 63), the very JPEG files ffmpeg
+writes, so the pixels are made the same way as the 64-frame cut's. Beside each zip a
+JSON file holds K, the zip's SHA-256 and the clip's pixel spectrum
+(``wave_analysis.processing.pixel_spectrum``, computed from the same frames). About
+30-40 MB per 10-min clip.
+
 **Pack.** ``data/processed/packages/<name>/``: ``clips.csv`` (the usable clips that
-have all their frames), ``frames/`` (hard links, no second copy) and ``SHA256SUMS``.
-The package grows as clips download; ``deploy/dgx/run.sh sync`` sends only new files.
+have all their frames), ``frames/`` (hard links, no second copy) and ``SHA256SUMS``;
+with windows cut, also ``windows.csv`` (K and checksum per clip) and
+``pixel_spectrum.csv`` (the spectrum's features) and ``pixel_spectrum_S.npz`` (the
+averaged spectra). The package grows as clips download; ``deploy/dgx/run.sh sync``
+sends only new files. The windows themselves travel apart (``ship``).
+
+**Ship.** The windows are about 35 MB a clip, 25 times the 64-frame cut, and the SSH
+route to the GPU server carried 1.5-2 Mbit/s (2026-11-17/18), about 16-21 GB a day.
+``ship`` sends them through the project's Cloudflare R2 bucket instead (36 Mbit/s up
+from the desktop, 20 MB/s down to the server, measured 2026-11-18): new zips go up in
+batches to a staging prefix (``--bwlimit``, so the home line keeps room for the
+running downloads), the server fetches each through a short-lived signed link (kept
+off command lines), checks its SHA-256 and lists it in ``VERIFIED``, and the staged
+copies are deleted. R2 credentials never leave the desktop. Server folder:
+``<BASE>/video_windows/<name>/<camera>/<clip>.zip`` (``/data/video_windows/...`` in the
+containers).
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
+import os
+import shutil
 import subprocess
 import sys
+import tempfile
+import time
+import zipfile
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -45,6 +78,8 @@ import pandas as pd
 
 from wave_analysis.config import data_dir, portable_path, repo_root
 from wave_analysis.ingest.durable import atomic_open
+from wave_analysis.processing.pixel_spectrum import RECIPE as SPECTRUM_RECIPE
+from wave_analysis.processing.pixel_spectrum import block_means, pixel_spectrum
 from wave_analysis.processing.solar import solar_position
 from wave_analysis.processing.synchronize import label_from_candidates, pair_window
 from wave_analysis.sources.webcoos import ONPREM_POSITIONS, still_time
@@ -53,6 +88,8 @@ N_FRAMES, FPS, SPAN_S = 64, 4, 16
 HEIGHT = 256  # px; width follows the camera's aspect (even)
 OUT = data_dir("processed") / "video"
 FRAMES = OUT / "frames_4fps"
+WINDOWS = OUT / "windows_4fps"  # whole clips, K windows of 64 frames (bars M3-M5)
+R2_STAGING = "r2:wave-analysis-raw/staging/webcoos_video_windows"
 # Burned-in text, blacked out in the source frame (ffmpeg drawbox; iw/ih = source size).
 MASKS = {"currituck_hampton_inn": "drawbox=x=0:y=ih-170:w=560:h=170:color=black:t=fill"}
 
@@ -213,6 +250,129 @@ def frames(args: argparse.Namespace) -> int:
     return 0
 
 
+def n_windows(duration_s: float) -> int:
+    """K = floor(duration / 16 s), the clip's non-overlapping 16-s windows from its start."""
+    return int(np.floor(duration_s / SPAN_S + 1e-9))
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _windows(job: tuple[str, str, float, str, str]) -> dict:
+    """Cut one clip whole (4 fps, 256 px, masks), keep its K windows, zip them, and add its spectrum.
+
+    A zip already there is kept; its spectrum is recomputed when the JSON is missing.
+    """
+    src, dest, duration, camera, clip_id = job
+    zpath, jpath = Path(dest).with_suffix(".zip"), Path(dest).with_suffix(".json")
+    if zpath.exists() and jpath.exists():
+        return json.loads(jpath.read_text())
+    k_design = n_windows(duration)
+    row: dict = {"clip_id": clip_id, "camera": camera, "duration_s": duration, "K_design": k_design}
+    tmp = Path(
+        tempfile.mkdtemp(prefix="wa-win-", dir="/dev/shm" if Path("/dev/shm").is_dir() else None)
+    )
+    try:
+        t0 = time.time()
+        if not zpath.exists():
+            vf = ",".join(
+                f for f in (MASKS.get(camera, ""), f"fps={FPS}", f"scale=-2:{HEIGHT}") if f
+            )
+            r = subprocess.run(
+                ["nice", "-n", "10", "ffmpeg", "-v", "error", "-nostdin", "-threads", "4", "-y", "-i", src,
+                 "-vf", vf, "-frames:v", str(N_FRAMES * k_design), "-q:v", "3", str(tmp / "%04d.jpg")],
+                capture_output=True, text=True, timeout=3600,
+            )  # fmt: skip
+            n = len(list(tmp.glob("*.jpg")))
+            k = min(k_design, n // N_FRAMES)
+            if k < 1:
+                return row | {
+                    "frames_decoded": n,
+                    "K": 0,
+                    "error": (r.stderr or "no frames")[-300:],
+                }
+            zpath.parent.mkdir(parents=True, exist_ok=True)
+            part = zpath.with_suffix(".zip.part")
+            with zipfile.ZipFile(part, "w", compression=zipfile.ZIP_STORED) as z:
+                for i in range(N_FRAMES * k):  # ffmpeg counts from 1, the zip from 0
+                    z.write(tmp / f"{i + 1:04d}.jpg", f"{i:04d}.jpg")
+            part.rename(zpath)
+            row["frames_decoded"] = n
+        from PIL import Image
+
+        with zipfile.ZipFile(zpath) as z:
+            names = sorted(z.namelist())
+            grey = np.stack([np.asarray(Image.open(z.open(m)).convert("L")) for m in names])
+        row.setdefault("frames_decoded", len(names))  # a kept zip: at least its frames
+        spec = pixel_spectrum(block_means(grey).reshape(len(names), -1))
+        row |= {"K": len(names) // N_FRAMES, "cut_s": round(time.time() - t0, 1),
+                "zip_bytes": zpath.stat().st_size, "zip_sha256": _sha256(zpath),
+                "frame_w": int(grey.shape[2]), "frame_h": int(grey.shape[1]), "spectrum_recipe": SPECTRUM_RECIPE,
+                "spectrum": {k2: spec[k2] for k2 in ("n_blocks", "n_live", "n_water")} | spec["features"],
+                "spectrum_f": spec["f"], "spectrum_S": spec["S"], "spectrum_background": spec["background"]}  # fmt: skip
+        with atomic_open(jpath, "w") as fh:
+            json.dump(row, fh)
+        return row
+    except Exception as e:  # one bad clip must not stop the others
+        row["error"] = repr(e)[-300:]
+        return row
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def windows(args: argparse.Namespace) -> int:
+    t = pd.read_parquet(OUT / "clips.parquet")
+    t = t[t["exclusion"] == ""]
+    if args.limit:
+        t = t.head(args.limit)
+    root = repo_root()
+    jobs = [(str(root / p if not Path(p).is_absolute() else p), str(WINDOWS / cam / cid), float(dur), cam, cid)
+            for p, cam, cid, dur in zip(t["path"], t["camera"], t["clip_id"], t["duration_s"], strict=True)]  # fmt: skip
+    todo = [j for j in jobs if not Path(j[1]).with_suffix(".json").exists()]
+    print(
+        f"{len(jobs):,} usable clips, {len(jobs) - len(todo):,} already cut, {len(todo):,} to cut",
+        flush=True,
+    )
+    done, failed, short, t0 = 0, [], [], time.time()
+    with Pool(args.workers) as pool:
+        for row in pool.imap_unordered(_windows, todo, chunksize=1):
+            done += 1
+            if "error" in row:
+                failed.append((row["clip_id"], row["error"][:120]))
+            elif row["K"] < row["K_design"]:
+                short.append((row["clip_id"], row["K"], row["K_design"]))
+            if done % 20 == 0 or done == len(todo):
+                print(
+                    f"  {done:,}/{len(todo):,} clips, {(time.time() - t0) / done:.1f} s each",
+                    flush=True,
+                )
+    print(f"cut {done - len(failed):,}; failed {len(failed)} {failed[:3]}; fewer frames than their length "
+          f"(K below floor(duration / 16)): {len(short)} {short[:5]}")  # fmt: skip
+    return 1 if failed else 0
+
+
+def _windows_tables(t: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """windows.csv, pixel_spectrum.csv and the averaged spectra of the clips in ``t`` that have windows."""
+    rows, spec, curves = [], [], {}
+    for cam, cid in zip(t["camera"], t["clip_id"], strict=True):
+        j = WINDOWS / cam / f"{cid}.json"
+        if not j.exists() or not (WINDOWS / cam / f"{cid}.zip").exists():
+            continue
+        r = json.loads(j.read_text())
+        if "error" in r or r.get("K", 0) < 1 or r.get("spectrum_recipe") != SPECTRUM_RECIPE:
+            continue
+        rows.append({k: r[k] for k in ("clip_id", "camera", "duration_s", "K_design", "K", "frames_decoded",
+                                       "frame_w", "frame_h", "zip_bytes", "zip_sha256")})  # fmt: skip
+        spec.append({"clip_id": cid, **r["spectrum"]})
+        curves[cid] = (np.asarray(r["spectrum_f"]), np.asarray(r["spectrum_S"]))
+    return pd.DataFrame(rows), pd.DataFrame(spec), curves
+
+
 def pack(args: argparse.Namespace) -> int:
     t = pd.read_parquet(OUT / "clips.parquet")
     t = t[t["exclusion"] == ""].copy()
@@ -234,8 +394,20 @@ def pack(args: argparse.Namespace) -> int:
             f.unlink()
     with atomic_open(pkg / "clips.csv", "w") as fh:
         t.to_csv(fh, index=False)
+    listed = ["clips.csv", "frames"]
+    win, spec, curves = _windows_tables(t)
+    if len(win):
+        with atomic_open(pkg / "windows.csv", "w") as fh:
+            win.sort_values("clip_id").to_csv(fh, index=False)
+        with atomic_open(pkg / "pixel_spectrum.csv", "w") as fh:
+            spec.sort_values("clip_id").to_csv(fh, index=False)
+        ids = sorted(curves)
+        np.savez_compressed(pkg / "pixel_spectrum_S.npz", clip_id=np.array(ids),
+                            **{f"f_{i}": curves[c][0] for i, c in enumerate(ids)},
+                            **{f"S_{i}": curves[c][1] for i, c in enumerate(ids)})  # fmt: skip
+        listed += ["windows.csv", "pixel_spectrum.csv", "pixel_spectrum_S.npz"]
     sums = subprocess.run(
-        "find clips.csv frames -type f -print0 | sort -z | xargs -0 sha256sum",
+        f"find {' '.join(listed)} -type f -print0 | sort -z | xargs -0 sha256sum",
         shell=True, cwd=pkg, capture_output=True, text=True, check=True,
     ).stdout  # fmt: skip
     with atomic_open(pkg / "SHA256SUMS", "w") as fh:
@@ -243,6 +415,69 @@ def pack(args: argparse.Namespace) -> int:
     size = sum(f.stat().st_size for f in keep) / 1e9
     print(f"{pkg}: {len(t):,} clips ({t['camera'].value_counts().to_dict()}), "
           f"{t['local_day'].nunique()} days, {size:.2f} GB")  # fmt: skip
+    if len(win):
+        w = t.merge(win[["clip_id", "K"]], on="clip_id")
+        print(f"  windows of {len(win):,} clips ({int(win['K'].sum()):,} windows, {win['zip_bytes'].sum() / 1e9:.1f} GB), "
+              f"{w['local_day'].nunique()} days; {len(t) - len(win):,} clips without windows yet")  # fmt: skip
+    return 0
+
+
+def _ssh(host: str, cmd: str, stdin: str | None = None) -> str:
+    return subprocess.run(["ssh", "-T", "-o", "BatchMode=yes", host, cmd], input=stdin,
+                          capture_output=True, text=True, check=True).stdout  # fmt: skip
+
+
+def ship(args: argparse.Namespace) -> int:
+    """Send the package's windows to the GPU server through R2, in checked batches."""
+    host = args.host or os.environ.get("GPU_HOST")
+    if not host:
+        raise SystemExit("set GPU_HOST (or --host) to the server name in ~/.ssh/config")
+    base = args.base or _ssh(host, "echo /raid/scratch/$(id -un)/wave-analysis").strip()
+    dest = f"{base}/video_windows/{args.name}"
+    win = pd.read_csv(data_dir("processed") / "packages" / args.name / "windows.csv")
+    _ssh(host, f"mkdir -p {dest} && touch {dest}/VERIFIED")
+    have = {
+        line.split()[1] for line in _ssh(host, f"cat {dest}/VERIFIED").splitlines() if line.strip()
+    }
+    todo = win[
+        [f"{c}/{i}.zip" not in have for c, i in zip(win["camera"], win["clip_id"], strict=True)]
+    ]
+    print(f"{len(win):,} clips with windows; {len(have):,} on the server; {len(todo):,} to send "
+          f"({todo['zip_bytes'].sum() / 1e9:.1f} GB)", flush=True)  # fmt: skip
+    t0, sent = time.time(), 0
+    for s in range(0, len(todo), args.batch):
+        b = todo.iloc[s : s + args.batch]
+        rel = [f"{c}/{i}.zip" for c, i in zip(b["camera"], b["clip_id"], strict=True)]
+        with tempfile.NamedTemporaryFile("w", suffix=".txt") as lst:
+            lst.write("\n".join(rel) + "\n")
+            lst.flush()
+            subprocess.run(["rclone", "copy", "--files-from", lst.name, "--bwlimit", args.bwlimit,
+                            "--s3-no-check-bucket", str(WINDOWS), f"{R2_STAGING}/{args.name}"], check=True)  # fmt: skip
+        links = [subprocess.run(["rclone", "link", "--expire", "12h", f"{R2_STAGING}/{args.name}/{r}"],
+                                capture_output=True, text=True, check=True).stdout.strip() for r in rel]  # fmt: skip
+        # curl reads the signed links from a config file (mode 600), never from its command line
+        cfg = "".join(
+            f'url = "{u}"\noutput = "{dest}/{r}.part"\n' for u, r in zip(links, rel, strict=True)
+        )
+        _ssh(host, f"umask 077 && cat > {dest}/.links", stdin=cfg)
+        sums = "".join(f"{h}  {r}.part\n" for h, r in zip(b["zip_sha256"], rel, strict=True))
+        out = _ssh(host, f"""set -e; cd {dest}; mkdir -p {' '.join(sorted({r.split('/')[0] for r in rel}))}
+curl -sS --fail --retry 3 --create-dirs --parallel --parallel-max 4 -K .links; rm -f .links
+cat > .sums; sha256sum -c --quiet .sums
+while read -r h p; do mv "$p" "${{p%.part}}"; echo "$h  ${{p%.part}}" >> VERIFIED; done < .sums
+rm -f .sums; echo ok""", stdin=sums)  # fmt: skip
+        if out.strip().splitlines()[-1:] != ["ok"]:
+            raise SystemExit(f"batch {s // args.batch} failed on the server: {out[-300:]}")
+        with tempfile.NamedTemporaryFile("w", suffix=".txt") as lst:
+            lst.write("\n".join(rel) + "\n")
+            lst.flush()
+            subprocess.run(
+                ["rclone", "delete", "--files-from", lst.name, f"{R2_STAGING}/{args.name}"],
+                check=True,
+            )
+        sent += int(b["zip_bytes"].sum())
+        print(f"  {s + len(b):,}/{len(todo):,} clips on the server and checked, {sent / 1e9:.1f} GB, "
+              f"{sent * 8 / 1e6 / (time.time() - t0):.1f} Mbit/s", flush=True)  # fmt: skip
     return 0
 
 
@@ -256,9 +491,27 @@ def main(argv: list[str] | None = None) -> int:
     f = sub.add_parser("frames")
     f.add_argument("--workers", type=int, default=6)
     f.set_defaults(func=frames)
+    w = sub.add_parser("windows")
+    w.add_argument("--workers", type=int, default=4)
+    w.add_argument("--limit", type=int, help="first N usable clips only (a test)")
+    w.set_defaults(func=windows)
     k = sub.add_parser("pack")
     k.add_argument("--name", default="webcoos_video_v1")
     k.set_defaults(func=pack)
+    s = sub.add_parser("ship")
+    s.add_argument("--name", default="webcoos_video_v1")
+    s.add_argument("--host", help="the server in ~/.ssh/config (default: $GPU_HOST)")
+    s.add_argument(
+        "--base",
+        help="the project's folder on the server (default: /raid/scratch/<user>/wave-analysis)",
+    )
+    s.add_argument("--batch", type=int, default=40, help="clips per batch")
+    s.add_argument(
+        "--bwlimit",
+        default="3M",
+        help="upload cap (rclone --bwlimit; the home line does about 4.3M)",
+    )
+    s.set_defaults(func=ship)
     args = ap.parse_args(argv)
     return int(args.func(args))
 

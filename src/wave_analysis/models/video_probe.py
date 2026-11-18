@@ -114,3 +114,70 @@ class MeanProbe(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """``[B, tiles, layers, tokens, D]`` to ``[B, n_out]``."""
         return self.net(x.float().mean(dim=(1, 3)).flatten(1))
+
+
+# --- Whole clips (bars M3-M5): K non-overlapping 16-s windows per clip -----------------
+
+
+def midpoint_window(duration_s: float, k: int, span_s: float = 16.0) -> int:
+    """Index of the window (counted from the clip's start) that holds the clip's midpoint."""
+    if k < 1:
+        raise ValueError("a clip needs at least one window")
+    return int(min(k - 1, np.floor(duration_s / 2 / span_s)))
+
+
+def centred_windows(mid: int, k: int, n: int = 11) -> tuple[int, int]:
+    """``[lo, hi)``: the ``n`` windows centred on window ``mid`` (Kim's 180 s: 11 x 16 s = 176 s).
+
+    Shifted to stay inside the clip; all ``k`` windows when ``k < n``.
+    """
+    lo = int(np.clip(mid - n // 2, 0, max(0, k - n)))
+    return lo, min(k, lo + n)
+
+
+def energy_mean(h: np.ndarray, axis: int | None = None) -> np.ndarray:
+    """sqrt(mean(H_s^2)): the average of heights that averages their energy."""
+    return np.sqrt(np.mean(np.square(h), axis=axis))
+
+
+def geometric_mean(t: np.ndarray, axis: int | None = None) -> np.ndarray:
+    """exp(mean(log T)): the average of periods (of positive quantities in general)."""
+    return np.exp(np.mean(np.log(t), axis=axis))
+
+
+class RecordPooler(nn.Module):
+    """A learned record pooler (``pooled``): one attention block over a clip's windows.
+
+    Input ``[B, W, tiles, layers, D]``: each window's mean token per tile and layer (the
+    frozen encoder's cached tokens averaged), with a mask ``[B, W]`` of real windows.
+    Each layer is projected to ``d`` and the layers averaged (as in
+    :class:`AttentiveProbe`); every (window, tile) is one token, tagged with learned
+    window-position and tile embeddings (EchoJEPA tags clips the same way); one
+    self-attention block, then a learned query reads the record out.
+    """
+
+    def __init__(self, n_layers: int, dim: int, n_out: int, max_windows: int = 64, n_tiles: int = 2,
+                 d: int = 256, heads: int = 4, dropout: float = 0.2) -> None:  # fmt: skip
+        super().__init__()
+        self.proj = nn.ModuleList(
+            nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, d)) for _ in range(n_layers)
+        )
+        self.pos = nn.Parameter(torch.randn(max_windows, 1, d) * 0.02)
+        self.tile = nn.Parameter(torch.randn(1, n_tiles, d) * 0.02)
+        self.block = nn.TransformerEncoderLayer(
+            d, heads, 2 * d, dropout, batch_first=True, norm_first=True
+        )
+        self.query = nn.Parameter(torch.randn(1, 1, d) * 0.02)
+        self.cross = nn.MultiheadAttention(d, heads, dropout=dropout, batch_first=True)
+        self.norm = nn.LayerNorm(d)
+        self.head = nn.Sequential(nn.Dropout(dropout), nn.Linear(d, n_out))
+
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        """``[B, W, tiles, layers, D]`` and ``[B, W]`` (True = a real window) to ``[B, n_out]``."""
+        b, w, p, n_layers, _ = x.shape
+        z = torch.stack([self.proj[i](x[:, :, :, i].float()) for i in range(n_layers)]).mean(0)
+        z = (z + self.pos[:w] + self.tile).reshape(b, w * p, -1)
+        pad = ~mask.repeat_interleave(p, dim=1)
+        z = self.block(z, src_key_padding_mask=pad)
+        o, _ = self.cross(self.query.expand(b, -1, -1), z, z, key_padding_mask=pad)
+        return self.head(self.norm(o[:, 0]))
