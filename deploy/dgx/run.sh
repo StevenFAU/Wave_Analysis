@@ -93,14 +93,16 @@ push)
     src="data/processed/packages/$PKG"
     tarf="data/interim/k8s/$PKG.tar"
     mkdir -p "$(dirname "$tarf")"
-    if [[ ! -f "$tarf" || "$src/SHA256SUMS" -nt "$tarf" ]]; then
-        say "packing $src ..."
-        tar -C data/processed/packages -cf "$tarf.part" "$PKG" && mv "$tarf.part" "$tarf"
-        sha256sum "$tarf" | cut -d' ' -f1 >"$tarf.sha256"
-    fi
     content="$(sha256sum "$src/SHA256SUMS" | cut -d' ' -f1)"
     if [[ "$(r cat "$BASE/packages/$PKG.content" 2>/dev/null || true)" == "$content" ]]; then
         say "package $PKG already there (content $content)"
+    elif [[ ! -f "$tarf" || "$src/SHA256SUMS" -nt "$tarf" ]] && ! {
+        say "packing $src ..."
+        tar -C data/processed/packages -cf "$tarf.part" "$PKG" && mv "$tarf.part" "$tarf" &&
+            sha256sum "$tarf" | cut -d' ' -f1 >"$tarf.sha256"
+    }; then
+        echo "packing $src failed" >&2
+        exit 1
     elif [[ -n "${BASE_PKG:-}" ]] && r test -f "$BASE/packages/$BASE_PKG.tar" &&
         python3 - "$src/SHA256SUMS" "data/processed/packages/$BASE_PKG/SHA256SUMS" <<'PY'
 import sys
