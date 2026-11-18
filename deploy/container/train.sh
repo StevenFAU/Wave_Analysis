@@ -3,7 +3,7 @@
 # deploy/dgx/run.sh (Docker on a GPU server over SSH) or deploy/k8s/train-job.yaml.
 # /data holds the code, package, environment and runs; /scratch is in memory.
 # The variables come from the caller: RUN, SPLIT, COMMIT, ENV_DIR, PKG, CONFIG,
-# EXTRA_ARGS, NUM_WORKERS, TORCH_HOME.
+# EXTRA_ARGS, NUM_WORKERS, TORCH_HOME, and optionally TRAIN_SCRIPT.
 set -euo pipefail
 echo "run $RUN: split $SPLIT, commit $COMMIT, on $(hostname) at $(date -u +%FT%TZ)"
 
@@ -24,6 +24,8 @@ PY
 
 # EXTRA_ARGS holds zero or more arguments, so it is split on purpose.
 # shellcheck disable=SC2086
-exec "$ENV_DIR/bin/python" scripts/train_sea_state.py \
+# TRAIN_SCRIPT: the trainer (default the sea-state classifier; scripts/train_wave_heights.py
+# for heights in metres). Both take the same core options.
+exec "$ENV_DIR/bin/python" "${TRAIN_SCRIPT:-scripts/train_sea_state.py}" \
     --config "$CONFIG" --package "/scratch/pkg/$PKG" --split "$SPLIT" \
     --amp bf16 --num-workers "$NUM_WORKERS" --out "/data/runs/$RUN" $EXTRA_ARGS

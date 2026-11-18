@@ -68,6 +68,16 @@ separately (`docs/REPRODUCIBILITY.md`).
   its calls follow wind-wave height more than swell height; over 24 held-out
   buoys, swell share predicts the under-call (Spearman −0.89).
 
+### Added (2026-11-18, v2)
+- Wave heights in metres: `wave_analysis.models.wave_heights` (`MultiViewRegressor`: one
+  backbone per view, optional per-view horizon roll and pitch, a one-layer transformer over
+  the views, log total, wind-wave and swell heights) and `scripts/train_wave_heights.py`.
+  Package `ndbc_buoycam_heights_v2` = v0's strips, partitions and labels plus wind-wave and
+  swell heights, the buoy's wind and each view's horizon motion (`views.csv`). Bars V2-1
+  (does the motion help?) and V2-2 (camera vs ERA5 in metres) and the published reference
+  points (Kamagata 2026, Choi 2020, Kim 2023, Yang 2026) fixed before training.
+- `deploy/dgx/run.sh train`: `TRAIN_SCRIPT` picks the trainer, `TAG` names the run.
+
 ### Added (2026-11-18)
 - Buoy-camera v1, the camera for the wind sea: `ndbc_buoycam_windsea_v1` labels each strip
   with NDBC's wind-wave height (window mean, ADR 0010) and keeps v0's strips, partitions

@@ -412,6 +412,49 @@ test buoys, two of which carry every calm strip, that is not yet clear of chance
 More calm-sea buoys or months, not another combiner, would settle it; no further
 variant is tried on this test set.
 
+## v2: heights in metres, against published results (fixed 2026-11-18, before v2 training)
+
+Steven's goal: the best model for this application, measured against the
+published work he is compared with. One model now gives heights in metres, so
+every paper's measure can be computed from the same predictions.
+
+**Package `ndbc_buoycam_heights_v2`:** v0's 41,091 strips, partitions, image
+bytes and total-height labels (checked), plus the window-mean wind-wave and
+swell heights (92 % of strips), the buoy's wind, and each view's de-mounted
+horizon roll and pitch (`views.csv`; each camera's median over its own strips
+removed, no labels used).
+
+**Model** (`wave_analysis.models.wave_heights.MultiViewRegressor`,
+`scripts/train_wave_heights.py`): one ConvNeXt-Tiny per view, a one-layer
+transformer over the usable views, the masked mean, three outputs (log total,
+wind-wave and swell height; Huber loss on standardised logs); no random crop or
+rotation, so the horizon keeps the buoy's real height and tilt; the epoch with
+the lowest validation RMSE of the total height is kept. **Arm A:** images only.
+**Arm B:** each view's horizon roll and pitch join its image feature. Three
+seeds per arm, each arm judged by the mean of its seeds' log heights
+(`scripts/compare_papers.py`).
+
+**Published reference points** (other data and protocols: set side by side with
+our 95 % intervals over test buoys, not tested against):
+
+| Paper | Their task and data | Their number | Ours, from the same predictions |
+|---|---|---|---|
+| Kamagata et al. 2026 | H_s in metres from coastal video, 5 held-out videos, label source not stated | RMSE 0.586 m, R² 0.107, Pearson 0.436 | RMSE, R², Pearson of H_s at the 12 unseen buoys |
+| Choi et al. 2020 | NDBC buoy cameras, calm (< 1.52 m) vs rough (> 3.05 m), split not verified | 84 % accuracy | the same two classes at the unseen buoys (predicted H_s split at 2.285 m) |
+| Kim et al. 2023 | one fixed camera, 5 classes of 0.5 m (0.75–3.25 m), one site | 78.3 % snapshot, 93.2 % 180-s video | the same bins on our H_s (Kim's "average wave height" definition to be verified) |
+| Yang et al. 2026 | ship camera + attitude, **simulation** | RMSE 0.032 m (simulated) | no number to set beside it; Bar V2-1 is its question on real data |
+
+**Bars** (paired bootstrap over the 12 test buoys, 1,000 draws):
+
+- **V2-1, does the buoy's motion help (Yang's question, real data)?** Arm B must
+  lower the RMSE of the total height **and** of the wind-wave height against
+  arm A, each interval of the difference below zero.
+- **V2-2, camera against ERA5 in metres.** For each arm: the wind-wave RMSE must
+  be below that of ERA5's wind-wave height (line fitted on the training strips),
+  and, reported the same way, the total-height RMSE against ERA5's total
+  height. Expected from v0 and v1: the camera wins the first and not the
+  second.
+
 ## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
 
 Exploratory, nothing trained (`scripts/buoycam_horizon.py`, questions fixed in its

@@ -15,7 +15,8 @@
 #   deploy/dgx/run.sh status | logs <run> [-f] | fetch <run> | stop <run>
 #
 # One GPU per run: GPU=<index> picks it, otherwise the least busy GPU with at
-# least MIN_FREE_GB (default 40) of free memory. The server is shared: this
+# least MIN_FREE_GB (default 40) of free memory. TRAIN_SCRIPT picks the trainer
+# (default scripts/train_sea_state.py) and TAG adds a word to the run's name. The server is shared: this
 # script only touches its own containers (label app=wave-analysis) and BASE.
 # The server runs the committed code: `push` refuses a working tree with
 # uncommitted changes, and each run records the commit it ran.
@@ -166,6 +167,9 @@ train)
     run="buoy-$split-$(date -u +%Y%m%dt%H%M)"
     [[ "$extra" == *"--class-weights none"* ]] && run="$run-unweighted"
     [[ "$extra" =~ --seed\ ([0-9]+) ]] && run="$run-seed${BASH_REMATCH[1]}"
+    [[ "${TAG:-}" =~ ^[a-z0-9-]*$ ]] || { echo "TAG may hold only a-z, 0-9 and -" >&2; exit 1; }
+    [[ "${TRAIN_SCRIPT:-scripts/train_sea_state.py}" =~ ^scripts/[a-z0-9_]+\.py$ ]] || { echo "bad TRAIN_SCRIPT" >&2; exit 1; }
+    [[ -n "${TAG:-}" ]] && run="$run-$TAG"
     [[ "$extra" == *"--limit"* ]] && run="$run-smoke"
     r "docker ps -a --format '{{.Names}}' | grep -qx wave-$run" && { echo "run $run is already running; wait a minute" >&2; exit 1; }
     # Detached, so it runs on after this connection closes. /scratch (memory)
@@ -179,7 +183,7 @@ docker run -d --rm --name wave-$run --label app=wave-analysis --label run=$run \
     --user \$(id -u):\$(id -g) -e HOME=/scratch -v $BASE:/data \
     -e RUN=$run -e SPLIT=$split -e COMMIT=$COMMIT -e ENV_DIR=/data/envs/$LOCK -e PKG=$PKG \
     -e CONFIG=$CONFIG -e "EXTRA_ARGS=$extra" -e NUM_WORKERS=22 -e TORCH_HOME=/data/cache/torch \
-    -e PYTHONUNBUFFERED=1 \
+    -e PYTHONUNBUFFERED=1 -e TRAIN_SCRIPT=${TRAIN_SCRIPT:-scripts/train_sea_state.py} \
     $IMAGE bash -c 'bash /data/repo/$COMMIT/deploy/container/train.sh >/data/logs/$run.log 2>&1; s=\$?;
         echo "finished with exit code \$s at \$(date -u +%FT%TZ)" >>/data/logs/$run.log; exit \$s' >/dev/null
 EOF

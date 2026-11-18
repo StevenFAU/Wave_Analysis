@@ -339,6 +339,33 @@ def main(argv: list[str] | None = None) -> int:
         written.append(fname)
     shutil.copyfile(args.config, out / "config.yaml")
     written.append("config.yaml")
+    # Per-view horizon motion (scripts/buoycam_horizon.py): each camera's
+    # mounting removed by subtracting its median angle and height over its own
+    # strips here (no labels involved), so a model can take roll and pitch.
+    if pkg.get("views_from"):
+        hz = pd.read_parquet(root / pkg["views_from"])
+        hz = hz[hz["sample_id"].isin(m[task["id_col"]])].merge(
+            m[[task["id_col"], "station_id", "camera_code"]],
+            left_on="sample_id",
+            right_on=task["id_col"],
+        )
+        key = ["station_id", "camera_code", "view"]
+        okh = hz["ok"].astype(bool)
+        med = (
+            hz[okh]
+            .groupby(key)[["angle_deg", "row_frac"]]
+            .median()
+            .rename(columns={"angle_deg": "a0", "row_frac": "r0"})
+        )
+        hz = hz.join(med, on=key)
+        hz["roll_deg"] = np.where(okh, hz["angle_deg"] - hz["a0"], np.nan)
+        hz["pitch_frac"] = np.where(okh, hz["row_frac"] - hz["r0"], np.nan)
+        vt = hz[["sample_id", "view", "roll_deg", "pitch_frac", "inlier_share", "ok"]].sort_values(
+            ["sample_id", "view"]
+        )
+        with atomic_open(out / "views.csv", "w", newline="") as fh:
+            vt.to_csv(fh, index=False, float_format="%.5g")
+        written.append("views.csv")
 
     def counts(frame: pd.DataFrame) -> dict[str, int]:
         return dict(
