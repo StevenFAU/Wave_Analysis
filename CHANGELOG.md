@@ -68,6 +68,20 @@ separately (`docs/REPRODUCIBILITY.md`).
   its calls follow wind-wave height more than swell height; over 24 held-out
   buoys, swell share predicts the under-call (Spearman −0.89).
 
+### Added (2026-11-18, architecture review and whole-clip bars)
+- `reports/Wave camera architectures beyond backbones.md` (notes in `research_notes/`
+  under the same name): what to train beyond the backbone choice, ranked by value for
+  this data, with H200 cost and the deciding experiment for each. In order: grouped
+  cross-validation over the 43 buoy groups with seed ensembles and calibrated intervals;
+  reading whole shore clips instead of one 16-s window; fusion that takes the wind sea
+  from the camera and the swell from ERA5; a pixel spectrum for wave period; period,
+  direction and spectrum outputs on the buoy strips; continued self-supervised
+  pretraining; larger video encoders only if whole-clip reading plateaus.
+- Shore video: whole-clip bars M3-M5 fixed before any clip is scored
+  (`docs/experiments/webcoos_video.md`, "Whole-clip bars"; config `whole_clip`): one
+  probe trained on every 16-s window; the whole-clip average against the midpoint window
+  for H_s (M3) and T_p (M4), and a pixel-brightness spectrum added for T_p (M5).
+
 ### Added (2026-11-18, results and shore video)
 - Backbone bars B1-B3 (three seeds each, 12 unseen buoys, each fixed before its runs):
   B1 not met (DINOv3 ConvNeXt-Tiny with arm A's full fine-tuning: worse, +0.039 m); B2

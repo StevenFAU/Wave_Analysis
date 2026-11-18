@@ -38,5 +38,20 @@ evaluation:
   bars:
     M1: video minus still, RMSE of H_s, 95 % interval below zero
     M2: video minus still, RMSE of T_p, 95 % interval below zero
+    # Whole-clip bars, fixed 2026-11-18 before any clip was scored (docs/experiments/webcoos_video.md,
+    # "Whole-clip bars"). One probe trained on every 16-s window of the training clips; the
+    # clip estimate averages all K = floor(duration / 16 s) non-overlapping windows
+    # (H_s: energy mean; T_p: geometric mean); "window" reads only the window holding the midpoint.
+    M3: clip minus window, RMSE of H_s, 95 % interval below zero
+    M4: clip minus window, RMSE of T_p, 95 % interval below zero
+    M5: clip + pixel spectrum minus clip, RMSE of T_p, 95 % interval below zero
+  whole_clip:
+    window_s: 16
+    frames_per_window: 64        # 4 fps
+    windows: all_non_overlapping # K = floor(duration_s / 16), counted from the clip start
+    single: midpoint_window
+    hs_average: energy           # sqrt(mean(H_s^2)); mean of log H_s reported beside it
+    tp_average: geometric
+    reported: [clip mean-log H_s, pooled (learned record pooler), clip-image (DINOv3 per window), pixel spectrum alone, Kim 5-class at 1 / 11 / K windows]
   reported: [video minus shuffled, video minus image (DINOv3), per camera, Kamagata metrics at Oak Island, Kim 5-class accuracy]
   first_scored_run: at least 15 local dates framed; interim until the sample download finishes

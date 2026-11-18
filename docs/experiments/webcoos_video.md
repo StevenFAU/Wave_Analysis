@@ -74,6 +74,62 @@ clips, and Kim's five classes of mean wave height (0.631 H_s, edges 0.75-3.25 m)
 and the first sample weeks); it is interim until the sample download finishes, and the
 final run uses the same code and config.
 
+## Whole-clip bars (fixed 2026-11-18, before any clip was scored)
+
+**Why.** The arms above read one 16-s window per clip, which holds one to three waves.
+The buoy's H_s is a statistic of a 30-min record: for a 17-min record its 90 % sampling
+interval is about ±12 % (Donelan & Pierson 1983), and the error grows as the record
+shortens, to roughly ±50 % (one standard deviation) for 16 s. A 16-s window also resolves
+frequency only in steps of 1/16 Hz, so it cannot measure T_p from the motion alone. Most
+clips last 10 min, i.e. 37 windows, of which the arms above read one. Kim et al. 2023 gained 12 points going from one frame
+to 180 s. These bars ask whether reading the whole clip helps, with the encoder and probe
+held fixed (`reports/Wave camera architectures beyond backbones.md`, rank 2).
+
+**Windows.** Each clip is cut into K = floor(duration / 16 s) non-overlapping 16-s
+windows from its start, 64 frames each at 4 fps, 256 px high, same masks and two squares
+as above (K = 37 for a 600-s clip). The **midpoint window** is the one that contains the
+clip's midpoint. Of the 401 clips packed so far, 43 are shorter than 240 s (down to 21 s,
+K = 1, where `clip` equals `window`): every usable clip is scored, and the bars are also
+reported on the clips with K ≥ 15.
+
+**Arms (one trained model, two ways of reading a clip).** Frozen V-JEPA 2 ViT-L tokens
+per window, as above. The attentive probe is trained on every window of the training
+clips, each window carrying its clip's label; folds, inner validation, seeds and
+hyperparameters are those of the arms above.
+
+| Arm | Test-time input | Clip estimate |
+|---|---|---|
+| `window` | the midpoint window only | the probe's output |
+| `clip` | all K windows | H_s: energy mean, sqrt(mean(H_s,w²)); T_p: exp(mean(log T_p,w)) |
+
+**Bars.**
+
+- **M3:** `clip` minus `window`, RMSE of H_s, 95 % interval below zero.
+- **M4:** the same for T_p.
+- **M5:** `clip` + pixel spectrum minus `clip`, RMSE of T_p, 95 % interval below zero.
+  The pixel spectrum is a label-free frequency spectrum of pixel brightness over the
+  whole clip (cBathy-style: FFT of brightness time series at pixels sampled on the
+  water, averaged; peak frequency and band energies as scalar features), computed from
+  the same 4-fps frames. Its exact recipe is committed with its code before the first
+  scored run. It enters as extra inputs to a ridge head beside the `clip` prediction,
+  fitted within the same folds.
+
+Same paired bootstrap over local dates (2,000 resamples) and same first-scored-run rule
+(at least 15 local dates) as M1 and M2.
+
+**Reported beside them, not bars:**
+- `clip` with the mean of log H_s instead of the energy mean.
+- `pooled`: a learned record pooler (one attention block over the K window embeddings
+  with a learned query, EchoJEPA-style) trained per clip. It is kept only if it beats
+  the `clip` average.
+- `clip-image`: frozen DINOv3 on the middle frame of every window, averaged the same
+  way. If it gains as much as `clip`, the gain comes from more looks at the sea, not from
+  motion.
+- The pixel spectrum alone (ridge head), the physics floor for T_p, beside Kamagata's
+  held-out T_p RMSE of 1.42 s.
+- Kim's five classes from one window, from the windows covering the 176 s centred on
+  the midpoint (11 windows, Kim's 180-s span), and from the whole clip.
+
 ## Progress
 
 - **Smoke test (2026-11-18, `video-days-20261118t1655-smoke-smoke`):** 24 clips from 4
