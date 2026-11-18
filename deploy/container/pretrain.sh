@@ -17,7 +17,8 @@ echo "package $PKG unpacked and intact"
 cd "/data/repo/$COMMIT"
 # the code of this commit, DINOv3's checkout and its extra libraries; torch etc. from the environment
 export PYTHONPATH="$PWD/src:$DINOV3_DIR:$EXTRA_DIR"
-export TORCHINDUCTOR_CACHE_DIR=/scratch/inductor TRITON_CACHE_DIR=/scratch/triton
+# torch.compile's kernels: not on /scratch, which Docker mounts noexec (Triton loads them as libraries)
+export TORCHINDUCTOR_CACHE_DIR=/data/cache/inductor TRITON_CACHE_DIR=/data/cache/triton
 "$ENV_DIR/bin/python" - <<'PY'
 import torch
 print(f"torch {torch.__version__}, CUDA {torch.version.cuda}, {torch.cuda.get_device_name(0)}, "

@@ -166,7 +166,7 @@ student:
   pos_embed_rope_shift_coords: null
   pos_embed_rope_jitter_coords: null
   pos_embed_rope_rescale_coords: 2.0
-  pos_embed_rope_dtype: fp32       # ours: as the released ViT-B/16
+  pos_embed_rope_dtype: fp32       # ours, but without effect: DINOv3's trainer does not pass it on (RoPE trains in bf16, as FINO)
   fp8_enabled: false
   fp8_filter: blocks
 
