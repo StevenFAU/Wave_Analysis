@@ -15,7 +15,11 @@ For the public weights (``public``) and every teacher checkpoint of the run
    the mean of its usable views;
 2. a ridge regression (standardised features, alpha from 5-fold cross-validation
    grouped by buoy) of log H_s and log wind-wave height fitted on the training
-   buoys, and its RMSE in metres at the validation buoys;
+   buoys, and its RMSE in metres at the validation buoys whose strips have the
+   training buoys' format (all but 44008, whose 216 x 384 views no training buoy
+   has: a linear probe extrapolates without bound there, 15-23 m for 4-5 m seas
+   with the public weights). The RMSE at all 12 buoys, at 44008 alone and of the
+   log heights are reported beside it;
 3. the spread of the features (mean over dimensions of their standard deviation
    across validation strips), to see a collapse.
 
@@ -107,11 +111,11 @@ def group_folds(groups: np.ndarray, k: int = 5) -> list[np.ndarray]:
     return [np.isin(groups, names[i::k]) for i in range(k)]
 
 
-def ridge_rmse(
-    xtr: np.ndarray, ytr: np.ndarray, gtr: np.ndarray, xva: np.ndarray, yva: np.ndarray
-) -> tuple[float, float]:
-    """Validation RMSE (metres) of a ridge on log heights; alpha from grouped CV on the training buoys."""
-    ok_tr, ok_va = np.isfinite(ytr), np.isfinite(yva)
+def ridge_heights(
+    xtr: np.ndarray, ytr: np.ndarray, gtr: np.ndarray, xva: np.ndarray
+) -> tuple[np.ndarray, float]:
+    """Heights (metres) at the validation strips from a ridge on log heights; alpha by grouped CV."""
+    ok_tr = np.isfinite(ytr)
     x, y, g = xtr[ok_tr].astype(np.float64), log_heights(ytr[ok_tr]), gtr[ok_tr]
     cv = []
     for alpha in ALPHAS:
@@ -121,8 +125,12 @@ def ridge_rmse(
         ]
         cv.append(float(np.mean(err)))
     best = float(ALPHAS[int(np.argmin(cv))])
-    pred = np.exp(ridge_predict(ridge_fit(x, y, best), xva[ok_va].astype(np.float64)))
-    return float(np.sqrt(np.mean((pred - yva[ok_va]) ** 2))), best
+    return np.exp(ridge_predict(ridge_fit(x, y, best), xva.astype(np.float64))), best
+
+
+def rmse_m(pred: np.ndarray, truth: np.ndarray, keep: np.ndarray) -> float:
+    ok = keep & np.isfinite(truth)
+    return float(np.sqrt(np.mean((pred[ok] - truth[ok]) ** 2)))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -200,13 +208,25 @@ def main(argv: list[str] | None = None) -> int:
             "weights": name, "step": 0 if name == "public" else int(name),
             "feature_spread": float(feats[VAL].std(axis=0).mean()),
         }  # fmt: skip
+        # The selection score leaves out validation strips of a format no training buoy has
+        # (44008's 216 x 384 views, scaled up): a linear probe extrapolates without bound there.
+        fmt = parts[VAL]["width"].to_numpy() == parts[TRAIN]["width"].mode().iloc[0]
         for tname, col in TARGETS.items():
-            rmse, alpha = ridge_rmse(
+            truth = parts[VAL][col].to_numpy(float)
+            pred, alpha = ridge_heights(
                 feats[TRAIN], parts[TRAIN][col].to_numpy(float),
-                parts[TRAIN]["station_id"].to_numpy(),
-                feats[VAL], parts[VAL][col].to_numpy(float),
+                parts[TRAIN]["station_id"].to_numpy(), feats[VAL],
             )  # fmt: skip
-            row[f"val_rmse_{tname}_m"], row[f"alpha_{tname}"] = rmse, alpha
+            ok = np.isfinite(truth)
+            row[f"val_rmse_{tname}_m"] = rmse_m(pred, truth, fmt)
+            row[f"val_rmse_{tname}_all_m"] = rmse_m(pred, truth, np.ones_like(fmt))
+            row[f"val_rmse_{tname}_other_format_m"] = (
+                rmse_m(pred, truth, ~fmt) if (~fmt).any() else np.nan
+            )
+            row[f"val_log_rmse_{tname}_all"] = float(
+                np.sqrt(np.mean((np.log(pred[ok]) - log_heights(truth[ok])) ** 2))
+            )
+            row[f"alpha_{tname}"] = alpha
         row["seconds"] = time.monotonic() - t0
         rows.append(row)
         print(
@@ -222,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
     chosen = None if ckpts.empty else ckpts.loc[ckpts["val_rmse_hs_m"].idxmin()].to_dict()
     public = table[table["weights"] == "public"]
     summary = {
-        "rule": "lowest validation ridge RMSE of H_s among the run's teacher checkpoints",
+        "rule": "lowest validation ridge RMSE of H_s (training-format buoys) among the run's teacher checkpoints",
         "chosen": chosen,
         "public": None if public.empty else public.iloc[0].to_dict(),
         "package": str(pkg), "run_dir": args.run_dir, "limit_per_partition": args.limit,

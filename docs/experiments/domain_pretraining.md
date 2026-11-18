@@ -142,6 +142,17 @@ the lowest validation H_s RMSE goes to P1**, whatever it scores against the
 off-the-shelf weights. The test buoys are never read by the probe. These ridge
 numbers are the early signal, reported beside P1, not a bar.
 
+**Change (2026-11-18, after probing only the public weights, before any continued
+checkpoint was probed):** the score leaves out validation buoy **44008**. Its views
+are 216 × 384 (scaled up to 270 × 480), a format no training buoy has, and the linear
+probe extrapolates without bound there: with the public weights it predicts 15-23 m
+for seas of 4-5 m at 44008 (bias +3.7 m), which alone lifts the validation RMSE to
+1.41 m, while the other 11 buoys score 0.33-0.97 m each. A checkpoint chosen on that
+number would be chosen on one buoy's format. **The checkpoint with the lowest H_s RMSE
+at the 11 other validation buoys goes to P1**; the RMSE at all 12, at 44008 alone and
+of the log heights are reported beside it. P1 itself is unchanged (its heads are
+trained, and it is scored at the test buoys, none of which has that format).
+
 ## Bar P1: does the continued ViT-B give better frozen features? (fixed before pretraining)
 
 - **Continued arm:** B3's frozen recipe unchanged (`scripts/train_wave_heights.py`,
