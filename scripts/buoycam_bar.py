@@ -5,7 +5,8 @@ partition the camera must beat ERA5 at each buoy **on the same strips**, in
 balanced accuracy *and* macro-F1, with the 95 % interval of the gain above zero
 (paired bootstrap over whole groups: buoys for the station split, buoy-days
 for the time split, as in the config). The time split is also held against
-each buoy's own majority class. The comparison uses the strips a baseline
+each buoy's own majority class. A config can name other baselines for the bar
+(``evaluation.bar``) and baselines to report beside it (``evaluation.report``). The comparison uses the strips a baseline
 covers (-1 in baselines.csv: ERA5 lags real time) and reports that coverage.
 
     python scripts/buoycam_bar.py runs/<run> [runs/<run> ...]
@@ -28,8 +29,9 @@ from wave_analysis.evaluation.classification import classification_report
 from wave_analysis.evaluation.uncertainty import paired_block_bootstrap_ci
 
 METRICS = ("balanced_accuracy", "f1_macro")
-#: Baselines the bar holds each split against (columns of the package's baselines.csv).
-AGAINST = {"station": ("era5_station",), "time": ("era5_time", "station_majority_time")}
+#: Baselines the bar holds each split against, unless the config names them
+#: (``evaluation.bar``; ``evaluation.report`` adds baselines scored beside it).
+AGAINST = {"station": ("era5",), "time": ("era5", "station_majority")}
 
 
 def metric(name: str, k: int):
@@ -72,12 +74,17 @@ def score(run: Path, root: Path) -> dict:
     }
     for part in [p for p in ("test", "test_later") if (df["partition"] == p).any()]:
         d = df[df["partition"] == part]
-        for b in AGAINST[split]:
+        ev = cfg["evaluation"]
+        bar = list(ev.get("bar", AGAINST)[split])
+        also = [b for b in ev.get("report", []) if f"{b}_{split}" in d.columns]
+        for name in [*bar, *also]:
+            b = f"{name}_{split}"
             ok = (d[b].fillna(-1) >= 0).to_numpy()  # -1: no baseline for this strip
             e = d[ok]
             row = {
                 "partition": part,
                 "against": b,
+                "role": "bar" if name in bar else "reported",
                 "n": int(ok.sum()),
                 "coverage": float(ok.mean()),
                 "n_groups": int(e[gcol].nunique()),
@@ -99,7 +106,7 @@ def score(run: Path, root: Path) -> dict:
                     "gain": gain,
                     "ci": [lo, hi],
                 }
-            row["met"] = all(row[m]["ci"][0] > 0 for m in METRICS)
+            row["met"] = all(row[m]["ci"][0] > 0 for m in METRICS) if name in bar else None
             out["comparisons"].append(row)
     return out
 
@@ -121,7 +128,8 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"{run.name} {c['partition']} vs {c['against']} ({c['n']:,} strips, "
                 f"{c['coverage']:.0%} covered, {c['n_groups']} {res['group_col']}): "
-                f"{'; '.join(parts)} -> {'MET' if c['met'] else 'not met'}"
+                f"{'; '.join(parts)} -> "
+                f"{'reported' if c['met'] is None else 'MET' if c['met'] else 'not met'}"
             )
     return 0
 

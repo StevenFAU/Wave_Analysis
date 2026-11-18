@@ -14,7 +14,13 @@ camera and the wave sensor are on the same buoy (distance 0). For each strip:
   nominal centre lies within 30 min of the image, with their spread and
   count, and the ``nearest`` and ``interpolate`` labels beside it; context
   from the nearest record (swell and wind-sea heights and periods, mean
-  period and direction, steepness).
+  period and direction, steepness);
+* the same window mean of NDBC's split of each record into wind waves
+  (``wind_wave_label_m``, from WWH) and swell (``swell_label_m``, from SwH);
+* the buoy's own wind from its standard-meteorological records (``.txt``,
+  8-min averages): the mean speed and gust, and the vector-mean direction, of
+  the records within 30 min of the image (``wind_speed_mps``,
+  ``wind_gust_mps``, ``wind_dir_deg``, ``n_wind_records``).
 
 The ``.spec`` records come from the realtime snapshots saved twice a month
 (``data/raw/ndbc/<station>/spec/``); they are NDBC's realtime values, not the
@@ -37,7 +43,12 @@ import pandas as pd
 
 from wave_analysis.config import data_dir, portable_path
 from wave_analysis.datasets import build_provenance, write_provenance
-from wave_analysis.datasets.buoycam import spec_records, station_positions, strip_stats
+from wave_analysis.datasets.buoycam import (
+    spec_records,
+    station_positions,
+    stdmet_records,
+    strip_stats,
+)
 from wave_analysis.ingest.durable import atomic_open
 from wave_analysis.processing.solar import illumination_category, solar_position
 from wave_analysis.processing.synchronize import label_from_candidates, pair_window
@@ -154,10 +165,10 @@ def main(argv: list[str] | None = None) -> int:
     cand = pd.concat(cands, ignore_index=True)
     img = img.set_index("sample_id")
 
-    def label(rule: str) -> pd.DataFrame:
+    def label(rule: str, value: str = "Hs_m") -> pd.DataFrame:
         return label_from_candidates(
             cand,
-            "Hs_m",
+            value,
             rule=rule,  # type: ignore[arg-type]
             target="sample_id",
             max_offset=LABEL_WINDOW,
@@ -172,6 +183,9 @@ def main(argv: list[str] | None = None) -> int:
     img["Hs_nearest_m"] = near["label"]
     img["nearest_offset_s"] = near["max_abs_offset_s"]
     img["Hs_interp_m"] = label("interpolate")["label"]
+    # NDBC's split of each record into wind waves and swell, by the same rule as Hs
+    img["wind_wave_label_m"] = label("window_mean", "wind_wave_height_m")["label"]
+    img["swell_label_m"] = label("window_mean", "swell_height_m")["label"]
     within = cand[cand["offset_s"].abs() <= pd.Timedelta(LABEL_WINDOW).total_seconds()]
     first = within.sort_values(["sample_id", "rank"]).groupby("sample_id").head(1)
     first = first.set_index("sample_id")
@@ -179,6 +193,48 @@ def main(argv: list[str] | None = None) -> int:
         img[c] = first[c].reindex(img.index)
     img["nearest_record_offset_s"] = first["offset_s"].reindex(img.index)
     img = img.reset_index()
+
+    # --- The buoy's own wind (standard-meteorological records) -------------------
+    wrecs, wind_files = [], []
+    for st in sorted(img["station_id"].unique()):
+        paths = sorted((args.ndbc / st / "stdmet").glob(f"{st}.txt.*Z.gz"))
+        wind_files += paths
+        wrecs.append(stdmet_records(paths, st))
+    wrec = pd.concat([w for w in wrecs if len(w)], ignore_index=True)
+    wcands = []
+    for st, g in img.groupby("station_id"):
+        w = wrec[wrec["station_id"] == st].reset_index(drop=True)
+        if w.empty:
+            continue
+        pw = pair_window(g, w, window=LABEL_WINDOW)
+        wcands.append(
+            pd.concat(
+                [
+                    g.loc[pw["target_index"], ["sample_id"]].reset_index(drop=True),
+                    pw.drop(columns=["target_index", "reference_index"]),
+                    w.loc[
+                        pw["reference_index"], ["wind_speed_mps", "wind_gust_mps", "wind_dir_deg"]
+                    ].reset_index(drop=True),
+                ],
+                axis=1,
+            )
+        )
+    wcand = pd.concat(wcands, ignore_index=True)
+    img = img.set_index("sample_id")
+    for col, circ in (("wind_speed_mps", False), ("wind_gust_mps", False), ("wind_dir_deg", True)):
+        lab = label_from_candidates(
+            wcand,
+            col,
+            rule="window_mean",
+            target="sample_id",
+            max_offset=LABEL_WINDOW,
+            circular=circ,
+        ).reindex(img.index)
+        img[col] = lab["label"]
+        if col == "wind_speed_mps":
+            img["n_wind_records"] = lab["n_records"].fillna(0).astype(int)
+    img = img.reset_index()
+    files_used += wind_files
 
     # --- Exclusions (a row keeps the first reason that applies) ------------------
     img["exclusion"] = np.select(
@@ -221,6 +277,9 @@ def main(argv: list[str] | None = None) -> int:
         "nearest_offset_min": quantiles(p["nearest_offset_s"] / 60),
         "label_minus_nearest_m": quantiles(p["Hs_label_m"] - p["Hs_nearest_m"]),
         "records_revised_between_snapshots": int(rec["snapshots_disagree"].sum()),
+        "with_wind_wave_label": float(p["wind_wave_label_m"].notna().mean()),
+        "with_buoy_wind": float(p["wind_speed_mps"].notna().mean()),
+        "wind_speed_mps": quantiles(p["wind_speed_mps"]),
         "records": len(rec),
     }
     with atomic_open(out / "summary.json", "w") as fh:

@@ -17,6 +17,7 @@ from wave_analysis.datasets.buoycam import (
     spatial_groups,
     spec_records,
     station_positions,
+    stdmet_records,
     strip_stats,
     usable_views,
 )
@@ -25,6 +26,18 @@ HEADER = (
     "#YY  MM DD hh mm WVHT  SwH  SwP  WWH  WWP SwD WWD  STEEPNESS  APD MWD\n"
     "#yr  mo dy hr mn    m    m  sec    m  sec  -  degT     -      sec degT\n"
 )
+
+
+STDMET_HEADER = (
+    "#YY  MM DD hh mm WDIR WSPD GST  WVHT   DPD   APD MWD   PRES  ATMP  WTMP  DEWP  VIS PTDY  TIDE\n"
+    "#yr  mo dy hr mn degT m/s  m/s     m   sec   sec degT   hPa  degC  degC  degC  nmi  hPa    ft\n"
+)
+
+
+def _stdmet(path: Path, rows: list[str]) -> Path:
+    with gzip.open(path, "wt") as fh:
+        fh.write(STDMET_HEADER + "\n".join(rows) + "\n")
+    return path
 
 
 def _spec(path: Path, rows: list[str]) -> Path:
@@ -125,3 +138,29 @@ def test_spatial_groups_chain_and_stable_labels():
     assert spatial_groups(["X"], [0.0], [0.0], km=300) == {"X": "gX"}
     # across the date line: 179.5 E and 179.5 W are 111 km apart at the equator
     assert len(set(spatial_groups(["E", "W"], [0, 0], [179.5, -179.5], km=150).values())) == 1
+
+
+def test_stdmet_records_merge_snapshots_latest_wins(tmp_path: Path):
+    old = _stdmet(
+        tmp_path / "41043.txt.20261101T082107Z.gz",
+        [
+            "2026 11 01 07 20 140  4.0  6.0   1.3     8   5.6 133 1018.8  29.0  29.5  23.8   MM   MM    MM",
+            "2026 11 01 07 10 130  3.0  5.0    MM    MM    MM  MM 1018.9  29.0  29.5  23.8   MM   MM    MM",
+        ],
+    )
+    new = _stdmet(
+        tmp_path / "41043.txt.20261115T133312Z.gz",
+        [
+            "2026 11 01 07 30  MM   MM   MM    MM    MM    MM  MM 1018.7  29.1  29.5  23.8   MM   MM    MM",
+            "2026 11 01 07 20 150  4.5  6.5   1.3     8   5.6 133 1018.8  29.0  29.5  23.8   MM   MM    MM",
+        ],
+    )
+    rec = stdmet_records([new, old], "41043")
+    assert list(rec["time_utc"].dt.strftime("%H:%M")) == ["07:10", "07:20", "07:30"]
+    r = rec.set_index(rec["time_utc"].dt.strftime("%H:%M"))
+    assert r.loc["07:20", "wind_speed_mps"] == 4.5  # the later snapshot's value
+    assert r.loc["07:20", "wind_dir_deg"] == 150
+    assert r.loc["07:10", "wind_gust_mps"] == 5.0
+    assert np.isnan(r.loc["07:30", "wind_speed_mps"])
+    assert (rec["end_utc"] - rec["start_utc"]).eq(pd.Timedelta(minutes=8)).all()
+    assert stdmet_records([], "41043").empty

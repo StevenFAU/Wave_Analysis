@@ -37,7 +37,7 @@ from scipy.spatial.distance import squareform
 
 from wave_analysis.processing.geospatial import haversine_m
 from wave_analysis.sources.ndbc.buoycam import CAPTION_BAND_PX, N_VIEWS, caption_band_rows
-from wave_analysis.sources.ndbc.parsers import parse_spectral_summary
+from wave_analysis.sources.ndbc.parsers import parse_spectral_summary, parse_stdmet
 
 #: Nominal length of an NDBC wave record (20-min acquisition, NDBC acq.shtml).
 RECORD_S = 1200
@@ -97,6 +97,44 @@ def spec_records(paths: Iterable[Path], station_id: str) -> pd.DataFrame:
         if c not in rec:
             rec[c] = np.nan
     return rec[[*cols, "snapshots_disagree", "start_utc", "end_utc"]]
+
+
+#: Standard-meteorological (``.txt``) columns kept, with the pairing table's names.
+STDMET_COLUMNS = {"WSPD": "wind_speed_mps", "GST": "wind_gust_mps", "WDIR": "wind_dir_deg"}
+#: Buoy winds are 8-min averages (NDBC measurement descriptions); a record is
+#: treated as centred on its stamp. Within the 30-min label window, where in
+#: the hour the 8 minutes fall does not matter.
+WIND_RECORD_S = 480
+
+
+def stdmet_records(paths: Iterable[Path], station_id: str) -> pd.DataFrame:
+    """One row per standard-meteorological time stamp of a station, merged over snapshots.
+
+    As :func:`spec_records`: each realtime ``.txt`` file covers the last 45
+    days, and for a stamp in several snapshots the latest snapshot's values
+    are kept. Columns: :data:`STDMET_COLUMNS` (wind speed and gust in m/s,
+    direction the wind comes from in degrees true), with ``start_utc`` and
+    ``end_utc`` for :func:`wave_analysis.processing.synchronize.pair_window`.
+    """
+    frames = []
+    for p in sorted(paths, key=snapshot_stamp):
+        d = parse_stdmet(p, realtime=True).data
+        d = d[[c for c in STDMET_COLUMNS if c in d.columns]].rename(columns=STDMET_COLUMNS)
+        frames.append(d.assign(snapshot=snapshot_stamp(p)).reset_index())
+    cols = ["station_id", "time_utc", *STDMET_COLUMNS.values(), "start_utc", "end_utc"]
+    if not frames:
+        return pd.DataFrame(columns=cols)
+    rec = pd.concat(frames, ignore_index=True).sort_values(["time_utc", "snapshot"])
+    rec = rec.groupby("time_utc").last().reset_index()
+    rec.insert(0, "station_id", station_id)
+    half = pd.Timedelta(seconds=WIND_RECORD_S / 2)
+    rec["start_utc"] = rec["time_utc"] - half
+    rec["end_utc"] = rec["time_utc"] + half
+    for c in STDMET_COLUMNS.values():
+        if c not in rec:
+            rec[c] = np.nan
+        rec[c] = pd.to_numeric(rec[c], errors="coerce")
+    return rec[cols]
 
 
 def station_positions(listings: Iterable[Path]) -> pd.DataFrame:

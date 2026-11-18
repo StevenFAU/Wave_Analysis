@@ -8,6 +8,7 @@
 #   export GPU_HOST=<host>      # the server name in ~/.ssh/config
 #   deploy/dgx/run.sh check     # Docker, free disk, how busy each GPU is
 #   deploy/dgx/run.sh push      # code (this commit), package, ImageNet weights, uv
+#                               # (BASE_PKG=<package on the server>: reuse its images)
 #   deploy/dgx/run.sh setup     # the Python environment of uv.lock (once per lock)
 #   deploy/dgx/run.sh train station --limit 64 --epochs 1   # a smoke test (minutes)
 #   deploy/dgx/run.sh train station                         # the run; train_sea_state.py options after the split
@@ -56,7 +57,8 @@ EOF
     gpu_table
     ;;
 push)
-    if ! git diff --quiet || ! git diff --cached --quiet; then
+    # Data manifests (download logs) may change while a download runs; code may not.
+    if ! git diff --quiet -- . ":(exclude)data/manifests" || ! git diff --cached --quiet -- . ":(exclude)data/manifests"; then
         echo "commit first: the server runs a commit, not a working tree" >&2
         exit 1
     fi
@@ -82,7 +84,9 @@ push)
     # 3. the ImageNet weights the config's backbone starts from
     put "$HOME"/.cache/torch/hub/checkpoints/convnext_tiny-*.pth "$GPU_HOST:$BASE/cache/torch/hub/checkpoints/"
     say "weights there"
-    # 4. the package, as one tar, checked by its SHA-256 at both ends
+    # 4. the package, as one tar. Its content is named by the SHA-256 of its
+    #    SHA256SUMS file (every file's checksum), recorded beside the tar on the
+    #    server once that tar has been checked, so a later push skips it.
     src="data/processed/packages/$PKG"
     tarf="data/interim/k8s/$PKG.tar"
     mkdir -p "$(dirname "$tarf")"
@@ -91,14 +95,44 @@ push)
         tar -C data/processed/packages -cf "$tarf.part" "$PKG" && mv "$tarf.part" "$tarf"
         sha256sum "$tarf" | cut -d' ' -f1 >"$tarf.sha256"
     fi
-    say "package $PKG ($(du -h "$tarf" | cut -f1)) ..."
-    put "$tarf" "$GPU_HOST:$BASE/packages/$PKG.tar"
-    want="$(cat "$tarf.sha256")"
-    have="$(r sha256sum "$BASE/packages/$PKG.tar" | cut -d' ' -f1)"
-    if [[ "$have" != "$want" ]]; then
-        r rm -f "$BASE/packages/$PKG.tar"
-        echo "package damaged on the server ($have != $want): removed; run push again" >&2
-        exit 1
+    content="$(sha256sum "$src/SHA256SUMS" | cut -d' ' -f1)"
+    if [[ "$(r cat "$BASE/packages/$PKG.content" 2>/dev/null || true)" == "$content" ]]; then
+        say "package $PKG already there (content $content)"
+    elif [[ -n "${BASE_PKG:-}" ]] && r test -f "$BASE/packages/$BASE_PKG.tar" &&
+        python3 - "$src/SHA256SUMS" "data/processed/packages/$BASE_PKG/SHA256SUMS" <<'PY'
+import sys
+new = [line.split(None, 1) for line in open(sys.argv[1]) if " images/" in line]
+old = {path.strip(): sha for sha, path in (line.split(None, 1) for line in open(sys.argv[2]))}
+missing = [p for sha, p in new if old.get(p.strip()) != sha]
+sys.exit(1 if missing or not new else 0)
+PY
+    then
+        # Every image of PKG is in BASE_PKG, byte for byte: send only the other
+        # files and build the package on the server from BASE_PKG's images.
+        say "package $PKG: its images are those of $BASE_PKG; sending the other files only"
+        tar -C "$src" --exclude=./images -cf - . |
+            r "rm -rf $BASE/packages/.build-$PKG && mkdir -p $BASE/packages/.build-$PKG/$PKG && tar -x -C $BASE/packages/.build-$PKG/$PKG"
+        r bash -s <<EOF
+set -euo pipefail
+cd $BASE/packages/.build-$PKG
+tar -xf $BASE/packages/$BASE_PKG.tar $BASE_PKG/images
+cd $BASE_PKG && grep ' images/' ../$PKG/SHA256SUMS | cut -c67- | tar -cf - -T - | tar -x -C ../$PKG
+cd ../$PKG && sha256sum -c --quiet SHA256SUMS
+cd .. && tar -cf $BASE/packages/$PKG.tar.part $PKG && mv $BASE/packages/$PKG.tar.part $BASE/packages/$PKG.tar
+echo $content > $BASE/packages/$PKG.content
+cd $BASE/packages && rm -rf .build-$PKG
+EOF
+    else
+        say "package $PKG ($(du -h "$tarf" | cut -f1)) ..."
+        put "$tarf" "$GPU_HOST:$BASE/packages/$PKG.tar"
+        want="$(cat "$tarf.sha256")"
+        have="$(r sha256sum "$BASE/packages/$PKG.tar" | cut -d' ' -f1)"
+        if [[ "$have" != "$want" ]]; then
+            r rm -f "$BASE/packages/$PKG.tar"
+            echo "package damaged on the server ($have != $want): removed; run push again" >&2
+            exit 1
+        fi
+        echo "$content" | r "cat > $BASE/packages/$PKG.content"
     fi
     say "package $PKG there and checked"
     ;;

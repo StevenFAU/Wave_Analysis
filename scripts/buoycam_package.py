@@ -9,7 +9,9 @@ config's filters allow, gives each a WMO sea-state class, makes the two splits
 them for leakage. It scores the baselines (majority class; for the time split
 also each buoy's own majority class; ERA5 at each buoy, corrected with a line
 fitted on the training strips, once ``scripts/buoycam_era5.py extract`` has
-run) and writes the package:
+run, for the height the config names; the buoy's own wind through a power law
+fitted on the training strips, when the config asks for it) and writes the
+package:
 
     <package.out>/
       images/<station>/YYYY/MM/<strip>.jpg   strips without their caption band
@@ -57,7 +59,14 @@ from wave_analysis.datasets.sea_state import (
     sea_state_class,
     write_checksums,
 )
-from wave_analysis.datasets.splits import TEST, TRAIN, VAL, grouped_split, time_block_split
+from wave_analysis.datasets.splits import (
+    TEST,
+    TRAIN,
+    VAL,
+    grouped_split,
+    holdout_groups_split,
+    time_block_split,
+)
 from wave_analysis.evaluation.sea_state import GROUP_UNITS, format_line, report
 from wave_analysis.ingest.checksum import sha256_file
 from wave_analysis.ingest.durable import atomic_open
@@ -132,11 +141,28 @@ def main(argv: list[str] | None = None) -> int:
         km=float(sp_cfg["station"]["group_km"]),
     )  # fmt: skip
     m["station_group"] = m["station_id"].map(group_of)
-    splits = {
-        "station": grouped_split(
+    pinned = sp_cfg["station"].get("partitions_from")
+    if pinned:
+        # The same buoys in the same partitions as an earlier package, so that
+        # results compare and nothing tested there was trained on here.
+        prev_st = pd.read_csv(root / pinned, dtype={"station_id": str})
+        part_prev = dict(zip(prev_st["station_id"], prev_st["split_station"], strict=True))
+        new_st = sorted(set(m["station_id"]) - set(part_prev))
+        if new_st:
+            raise SystemExit(f"buoys not in {pinned}: {new_st}")
+        station_split = holdout_groups_split(
+            m, "station_id",
+            test_groups=[k for k, v in part_prev.items() if v == TEST],
+            val_groups=[k for k, v in part_prev.items() if v == VAL],
+        )  # fmt: skip
+        station_split.params["partitions_from"] = pinned
+    else:
+        station_split = grouped_split(
             m, "station_group", sp_cfg["station"]["fractions"],
             seed=int(sp_cfg["station"]["seed"]), protocol="cross_station",
-        ),
+        )  # fmt: skip
+    splits = {
+        "station": station_split,
         "time": time_block_split(
             m, "time_utc", val_start=sp_cfg["time"]["val_start"],
             test_start=sp_cfg["time"]["test_start"], embargo=sp_cfg["time"]["embargo"],
@@ -174,30 +200,64 @@ def main(argv: list[str] | None = None) -> int:
                 y, st, train, fallback=base[f"majority_{k}"].to_numpy()
             )
     # ERA5 at each buoy (scripts/buoycam_era5.py): interpolated to the strip's
-    # time, corrected with a line fitted on each split's training strips.
+    # time, corrected with a line fitted on each split's training strips. The
+    # config names the ERA5 height (default the total, era5_hs_m) and the
+    # baseline (default "era5").
     era_spec = cfg["baselines"].get("era5")
     era_path = data_dir("processed") / era_spec["path"] if era_spec else None
     corrections: dict[str, Any] = {}
-    if era_path is not None and era_path.exists():
-        era = pd.read_parquet(era_path)
+    coverage: dict[str, float] = {}
+    era = pd.read_parquet(era_path) if era_path is not None and era_path.exists() else None
+    ecol = str(era_spec.get("column", "era5_hs_m")) if era_spec else ""
+    if era is not None and ecol not in era.columns:
+        era = None  # that ERA5 parameter is not downloaded and extracted yet
+    if era is not None:
+        ename, ecol = str(era_spec.get("name", "era5")), str(era_spec.get("column", "era5_hs_m"))
+        if ecol not in era.columns:
+            raise SystemExit(
+                f"{era_path} has no {ecol} (download that ERA5 parameter, then extract)"
+            )
         x = np.full(len(m), np.nan)
         for sid, g in era.groupby("station_id"):
             rows = (m["station_id"] == sid).to_numpy()
             if rows.any():
                 x[rows] = nowcast_at(
                     m.loc[rows, "time_utc"],
-                    g.set_index("time_utc")["era5_hs_m"],
+                    g.set_index("time_utc")[ecol].dropna(),
                     max_gap=str(era_spec.get("max_gap", "3h")),
                 )
-        base["era5_hs_m"] = x
+        base[ecol] = x
+        coverage[ename] = float(np.isfinite(x).mean())
         for k in SPLITS:
             train = m[f"split_{k}"].to_numpy() == TRAIN
             a, b = linear_correction(x, hs, train)
-            base[f"era5_{k}"] = sea_state_class(a + b * x, bounds)
+            base[f"{ename}_{k}"] = sea_state_class(a + b * x, bounds)
             ok = train & np.isfinite(x)
-            corrections[f"era5_{k}"] = {"a": a, "b": b, "n_train": int(ok.sum())}
+            corrections[f"{ename}_{k}"] = {"a": a, "b": b, "n_train": int(ok.sum())}
     elif era_spec and not era_spec.get("optional"):
-        raise SystemExit(f"{era_path} is missing (run scripts/buoycam_era5.py extract)")
+        raise SystemExit(
+            f"{era_path} has no {ecol} (download it, then scripts/buoycam_era5.py extract)"
+        )
+    # The buoy's own wind: log(label) = a + b log(max(U, u_min)), a power law
+    # fitted on each split's training strips (the wind-sea height of a fetch-
+    # and duration-limited sea grows as a power of the wind speed).
+    wind_spec = cfg["baselines"].get("buoy_wind")
+    if wind_spec:
+        u = m["wind_speed_mps"].to_numpy(dtype=float)
+        lu = np.log(np.maximum(u, float(wind_spec.get("u_min_mps", 0.5))))
+        coverage["buoy_wind"] = float(np.isfinite(u).mean())
+        for k in SPLITS:
+            train = (m[f"split_{k}"].to_numpy() == TRAIN) & np.isfinite(lu) & (hs > 0)
+            a, b = linear_correction(lu, np.log(np.where(hs > 0, hs, np.nan)), train)
+            pred_m = np.exp(a + b * lu)
+            base[f"buoy_wind_{k}_m"] = pred_m
+            base[f"buoy_wind_{k}"] = sea_state_class(pred_m, bounds)
+            corrections[f"buoy_wind_{k}"] = {
+                "a": a,
+                "b": b,
+                "n_train": int(train.sum()),
+                "form": "log(label) = a + b log(max(U, u_min))",
+            }
     boot = cfg["evaluation"]["bootstrap"]
     scores: dict[str, Any] = {}
     for k in SPLITS:
@@ -259,6 +319,10 @@ def main(argv: list[str] | None = None) -> int:
         "steepness", "class", "class_name", "near_boundary", "split_station", "split_time",
         "local_path", "sha256",
     ]  # fmt: skip
+    extra = ["Hs_label_m", "wind_wave_label_m", "swell_label_m", "wind_speed_mps", "wind_gust_mps",
+             "wind_dir_deg", "n_wind_records"]  # fmt: skip
+    label_cols += [c for c in extra if c in m.columns]
+    label_cols = list(dict.fromkeys(label_cols))  # the label may be one of the context columns
     labels = m[label_cols].rename(columns={"local_path": "source_path", "sha256": "source_sha256"})
     labels["time_utc"] = pd.to_datetime(labels["time_utc"], utc=True).dt.strftime(
         "%Y-%m-%dT%H:%M:%SZ"
@@ -313,7 +377,10 @@ def main(argv: list[str] | None = None) -> int:
         ),
         "leakage_audit": audits,
         "era5_corrections": corrections,
-        "era5_coverage": float(np.isfinite(base["era5_hs_m"]).mean()) if corrections else 0.0,
+        "era5_coverage": float(np.isfinite(base["era5_hs_m"]).mean())
+        if "era5_hs_m" in base
+        else 0.0,
+        "baseline_coverage": coverage,
         "baselines": scores,
     }
     with atomic_open(out / "summary.json", "w") as fh:

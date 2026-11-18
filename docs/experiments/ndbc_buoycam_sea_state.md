@@ -288,6 +288,53 @@ models do the opposite well: they carry swell from far away. This points the
 next experiments at a division of labour (camera for the wind sea, the wave
 model for the swell) rather than at more image-only models of total height.
 
+## v1: the camera for the wind sea (bars fixed 2026-11-18, before any v1 training)
+
+The v0 runs show the camera sees the wind sea and guesses the swell. v1 asks it
+for what it sees, and then asks whether that adds to a wave model, which
+carries the swell. Decided with Steven on 2026-11-18.
+
+**Package `ndbc_buoycam_windsea_v1`** (`configs/experiments/ndbc_buoycam_windsea_v1.yaml`):
+
+- **Same strips, period, light rules and partitions as v0.** Every buoy keeps its
+  v0 partition (`split.station.partitions_from`): without a wind-wave record, two
+  training buoys (44014, 46061) drop out, and a fresh draw would have moved the
+  others. Every v1 strip has the same partition, path and image bytes as in v0.
+- **Label:** NDBC's wind-wave height (WWH, its split of each record's spectrum),
+  as the mean of the records centred within 30 min (ADR 0010, as Hs), in the WMO
+  bounds: 37,652 strips at 77 buoys, smooth 35 %, slight 35 %, moderate 23 %,
+  rough or more 7 %. Each strip also carries the total height, the swell height
+  and the buoy's own wind (8-min averages within 30 min; 99.9 % of strips).
+- **Baselines (no image):** ERA5's own wind-wave height (`shww`) at the buoy,
+  corrected with a line fitted on the training strips; and the **buoy-wind
+  control**, the buoy's measured wind speed through a power law fitted on the
+  training strips (test buoys: balanced accuracy 0.49, macro-F1 0.47).
+- **Model:** as v0, without the random rotation (it hid the buoy's tilt). Three
+  seeds (0, 1, 2), **judged by their averaged class probabilities**
+  (`scripts/ensemble_runs.py`), because one seed moved v0's test macro-F1 by 0.12.
+
+**Test 1: is the camera a better wind-sea sensor than ERA5?** On the 12 test
+buoys, on the strips ERA5 covers, the averaged camera must beat ERA5's wind-wave
+height in balanced accuracy **and** macro-F1, each gain's 95 % interval above
+zero (paired bootstrap over whole buoys; `scripts/buoycam_bar.py`). Reported
+beside it, not part of the bar: the buoy-wind control. If the camera does not
+beat the control, its value is where no anemometer exists (ships, coasts), not
+at buoys.
+
+**Test 2: does the camera add to ERA5 for the total sea state?**
+(`scripts/buoycam_fusion.py`, choices in its header.) A multinomial logistic
+combiner of the camera's wind-wave class log-probabilities and the logs of
+ERA5's total, wind-sea and swell heights, fitted on the val buoys, scored once
+on the test buoys, against the same combiner on the three ERA5 heights alone
+fitted on the same strips. The target is the v0 total sea-state class. The
+camera + ERA5 combiner must gain in balanced accuracy **and** macro-F1, each
+interval above zero (bootstrap over buoys). Reported beside it: v0's ERA5
+baseline. Caveat known in advance: the val buoys carry less swell (mean share
+0.40) than the test buoys (0.67).
+
+**Time split:** the same rules (bar: ERA5's wind-wave height and each buoy's
+majority class), run after the station split.
+
 ## Status
 
 - [x] Pairing and package (2026-11-14, `7b8a93c`): 41,091 strips at 79

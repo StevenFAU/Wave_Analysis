@@ -68,6 +68,23 @@ separately (`docs/REPRODUCIBILITY.md`).
   its calls follow wind-wave height more than swell height; over 24 held-out
   buoys, swell share predicts the under-call (Spearman −0.89).
 
+### Added (2026-11-18)
+- Buoy-camera v1, the camera for the wind sea: `ndbc_buoycam_windsea_v1` labels each strip
+  with NDBC's wind-wave height (window mean, ADR 0010) and keeps v0's strips, partitions
+  and image bytes (`split.station.partitions_from`); baselines ERA5 wind-wave height and the
+  buoy's own wind through a power law; no rotation augmentation; three seeds judged by
+  their average. Bars for Test 1 (camera vs ERA5 wind sea) and Test 2 (camera + ERA5 vs
+  ERA5 for the total sea state) fixed in the experiment doc before training.
+- `buoycam_pairs.py`: window-mean wind-wave and swell labels and the buoy's own wind
+  (`datasets.buoycam.stdmet_records`) for every strip; earlier columns unchanged.
+- `buoycam_era5.py --param shww --param shts`: ERA5's wind-sea and swell heights at every
+  buoy; `extract` reproduces the earlier table exactly when only `swh` is present.
+- `scripts/ensemble_runs.py` (average seeds), `scripts/buoycam_fusion.py` (Test 2);
+  `buoycam_bar.py` takes the bar's baselines from the config (`evaluation.bar`, `report`).
+- `deploy/dgx/run.sh push`: `BASE_PKG=<package>` builds a package on the server from an
+  earlier package's identical images and sends only the other files; a package's content
+  is named by the SHA-256 of its `SHA256SUMS`.
+
 ### Fixed (2026-11-14)
 - `sources.ndbc.buoycam.caption_band_rows`: the caption is a fixed 30-row band in
   both strip formats (measured); it was scaled to 25 rows for 2304 × 246 strips.

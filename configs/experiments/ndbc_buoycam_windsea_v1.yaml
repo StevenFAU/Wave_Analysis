@@ -1,0 +1,139 @@
+# Wind-wave height from NDBC buoy cameras (v1, fixed 2026-11-18 before any v1
+# training). The v0 runs showed the camera sees the wind sea, not the swell
+# (docs/experiments/ndbc_buoycam_sea_state.md, Q-M8), so v1 asks the camera
+# for what it can see: NDBC's own wind-wave height (WWH) on the same buoy.
+# Same strips, light rules, splits and period as v0; only the label, the
+# baselines, the rotation augmentation and the judging (three seeds averaged)
+# change. Test 1 and Test 2 and their bars: the experiment doc.
+#
+#   scripts/buoycam_pairs.py                                                       # pair every archived strip
+#   scripts/buoycam_package.py configs/experiments/ndbc_buoycam_windsea_v1.yaml    # package + baselines
+#
+name: ndbc_buoycam_windsea_v1
+description: >
+  Hourly six-view strips of the NDBC buoy cameras (archived from 2026-09-23),
+  twilight and daylight, labelled by the same buoy's wind-wave height (NDBC's
+  split of each realtime .spec record into wind waves, WWH, and swell, SwH,
+  computed on board from the hull-motion record): mean of the records centred
+  within 30 min (ADR 0010), binned with the WMO sea-state bounds. Each strip
+  also carries the total height (Hs_label_m), the swell height and the buoy's
+  own wind. The burned-in caption (station ID, time) is cut from every image.
+input:
+  samples: data/processed/pairs/ndbc_buoycam/samples.parquet
+  # The archive grows every hour; v0 ends with the wave records of the
+  # realtime snapshot of 2026-11-14 15:33 UTC.
+  start_utc: "2026-09-23T00:00:00Z"
+  end_utc: "2026-11-14T15:00:00Z"
+task:
+  id_col: sample_id
+  label: wind_wave_label_m         # strips without a WWH record within 30 min (about 9 %) are left out
+  filters:
+    # Paired, readable and labelled (the pairing's own exclusions); six views
+    # of a known format; light enough to see the sea (below).
+    - {column: exclusion, op: isna}
+    - {column: width, op: in, value: [2880, 2304]}   # 3360 and 3840 px strips hold 7 or 8 views (11 strips)
+    - {column: sun_elevation_deg, op: ge, value: -6.0}
+    - {column: usable_views, op: ge, value: 3}
+  classes:
+    # The WMO-No. 306 bounds (code table 3700), applied to the wind-wave height.
+    names: [smooth, slight, moderate, rough_or_more]
+    bounds_m: [0.5, 1.25, 2.5]
+  near_boundary_rel_tol: 0.04
+images:
+  # Twilight strips are in colour and show the sea (the cameras raise their
+  # exposure); at night the views are black (median grey 2). Low sun leaves
+  # some views dark or glared, so the rule is per view: a view is usable when
+  # its mean grey is at least 20 and its standard deviation at least 4 (on
+  # 0-255; night views: mean 2, sd 0.1). A strip is kept with 3 usable views.
+  min_sun_elevation_deg: -6.0
+  min_view_mean: 20.0
+  min_view_std: 4.0
+  min_usable_views: 3
+split:
+  station:
+    # Unseen buoys. Buoys within 300 km of each other (chained) form one group
+    # and go to the same partition, so every test buoy is at least 300 km from
+    # every training buoy (44 groups; the largest: US West Coast 21 buoys,
+    # US East Coast 13, Gulf of Alaska 9).
+    protocol: cross_station
+    group_km: 300
+    fractions: [0.7, 0.15, 0.15]
+    seed: 0
+    # v1 keeps v0's partition of every buoy: without WWH, two training buoys
+    # (44014, 46061) drop out, and a fresh draw would move the others.
+    partitions_from: data/processed/packages/ndbc_buoycam_sea_state_v0/stations.csv
+  time:
+    # The same buoys, later weeks: train before val_start, val, then test,
+    # with 72 h left out after each boundary so that one swell cannot link them.
+    protocol: cross_time
+    val_start: "2026-10-24"
+    test_start: "2026-11-03"
+    embargo: 72h
+  audit:
+    min_gap: 72h
+baselines:
+  # No image: the training strips' majority class, and for the time split
+  # each buoy's own majority class in its training weeks.
+  station_majority: [time]
+  # The physics baseline (added 2026-11-14): ERA5 significant wave height at
+  # the grid point with sea data nearest each buoy (scripts/buoycam_era5.py),
+  # interpolated to the strip's time (no value across a gap over 3 h) and
+  # corrected with a line fitted on each split's training strips.
+  era5:
+    # Test 1's comparison: ERA5's own wind-wave height (shww) at the buoy's
+    # grid point, interpolated and corrected with a line fitted on the
+    # training strips, as the v0 baseline was for the total height.
+    name: era5_windsea
+    column: era5_windsea_m
+    path: era5/buoycam/era5_at_buoys.parquet
+    max_gap: 3h
+    optional: true                  # absent until downloaded and extracted
+  # The control: the buoy's own measured wind speed alone, through a power
+  # law fitted on the training strips. If it matches the camera, the camera
+  # adds nothing where an anemometer exists.
+  buoy_wind:
+    u_min_mps: 0.5
+package:
+  out: data/processed/packages/ndbc_buoycam_windsea_v1
+  jpeg_quality: 95                  # strips keep their size; only the caption is cut
+model:
+  # As v0 (wave_analysis.models.sea_state.MultiViewNet), except: no random
+  # rotation, so the horizon keeps the buoy's real tilt; and three seeds,
+  # judged by their averaged class probabilities (scripts/ensemble_runs.py),
+  # because one seed moved v0's test macro-F1 by 0.12.
+  backbone: convnext_tiny           # torchvision, ImageNet weights
+  pretrained: true
+  input: views
+  view_size: [270, 480]             # the 2880 x 300 format's views as they are; 44008's 216 x 384 are scaled up
+  augment:
+    horizontal_flip: false          # as at Currituck: a mirrored view moves the sun and its glint
+    scale: [0.85, 1.0]
+    rotate_deg: 0.0                 # v0 used 5 deg, which hid the buoy's tilt from the model
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.1
+  class_weights: inverse_frequency  # of the training strips, mean 1 (v0: no difference without them)
+  epochs: 10                        # Currituck overfit by epoch 15 (training loss 0.04)
+  batch_size: 32                    # strips, so 192 views
+  lr: 3.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 1
+  select_on: f1_macro               # on val; the test partitions are scored once, with the chosen epoch
+  num_workers: 8
+  amp: none                         # fp32: bf16 is slow on the desktop's GPU and fp16 needs loss scaling
+evaluation:
+  # Intervals from a bootstrap over whole buoys (station split: the unit that
+  # generalizes) or whole buoy-days (time split).
+  bootstrap:
+    group_col: {station: station_id, time: station_day}
+    n_boot: 1000
+    alpha: 0.05
+    seed: 0
+  # The baselines each split's bar is held against (scripts/buoycam_bar.py),
+  # and those reported beside it.
+  bar: {station: [era5_windsea], time: [era5_windsea, station_majority]}
+  report: [buoy_wind]
+ensemble:
+  seeds: [0, 1, 2]
+  combine: mean_probability
+seed: 0
