@@ -74,6 +74,20 @@ clips, and Kim's five classes of mean wave height (0.631 H_s, edges 0.75-3.25 m)
 and the first sample weeks); it is interim until the sample download finishes, and the
 final run uses the same code and config.
 
+## Progress
+
+- **Smoke test (2026-11-18, `video-days-20261118t1655-smoke-smoke`):** 24 clips from 4
+  dates, 3 epochs; the whole path runs on the H200 (features, eight heads, scores).
+  Feature extraction for all four arms takes about 1.5 s per clip, so the full sample
+  is about 1.5 h of GPU time. Its numbers mean nothing (four dates, each a single sea).
+  Two fixes it found: smoke samples now span dates, and the containers run with
+  `TORCH_DISABLE_NATIVE_JIT=1` (PyTorch 2.14 sent the one-query attention's backward to
+  a Triton kernel that needs a C compiler).
+- **Data:** the archive serves a few clips as empty files (HTTP 200, 0 bytes); they are
+  excluded as unreadable. Jennette's clips are about 290 MB each (2592 x 1944), so the
+  sample takes about two days at the archive's pace; the first scored run follows the
+  first two sample weeks.
+
 ## Results
 
 None yet.
