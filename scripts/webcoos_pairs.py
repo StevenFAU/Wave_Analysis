@@ -88,6 +88,14 @@ PAIRINGS: dict[str, dict[str, object]] = {
         "reference_depth_m": 12.8,
         "timezone": "America/New_York",
     },
+    # Jennette's Pier, Nags Head, NC: CDIP 243 (Nags Head, 44086), 21 m (metaWaterDepth);
+    # online, so its video (2024-03 on) has a buoy throughout.
+    "jennette_south": {
+        "site_id": "webcoos_jennettes_pier",
+        "cdip": "243",
+        "reference_depth_m": 21.0,
+        "timezone": "America/New_York",
+    },
 }
 CONFIG: dict[str, object] = {
     "window": "3h",

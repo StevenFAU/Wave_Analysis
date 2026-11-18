@@ -1,0 +1,63 @@
+artifact_id: webcoos_jennette_south_cdip243
+created_at: '2026-11-18T14:25:54.154099Z'
+git:
+  commit: dab12d9c9b7e8436628468e818dd8be32c85864c
+  branch: main
+  dirty: true
+pipeline:
+  command: python scripts/webcoos_pairs.py jennette_south
+  config:
+    camera: jennette_south
+    site_id: webcoos_jennettes_pier
+    cdip: '243'
+    reference_depth_m: 21.0
+    timezone: America/New_York
+    camera_latitude: 35.9063
+    camera_longitude: -75.5942
+    window: 3h
+    nearest_max: 30min
+    interp_max_gap: 40min
+    range_window: 1h
+    label_rule: window_mean
+    label_window: 30min
+    peak_label_rule: nearest
+    peak_disagree_tp_s: 3.0
+    peak_disagree_dp_deg: 60.0
+    good_primary_flag: '1'
+    monochrome_max_saturation: 0.01
+    monochrome_max_sun_deg: -3.0
+    colour_min_sun_deg: -12.0
+  config_sha256: 8a4d6cc112efb0e57a62beadccc63be9e195e229b6163dbf3dd9efcd0674ad6c
+software:
+  python: 3.12.13
+  platform: Linux-7.0.0-43-generic-x86_64-with-glibc2.43
+  wave_analysis: 0.1.0.dev0
+  packages:
+    numpy: 2.5.3
+    pandas: 3.0.6
+    scipy: 1.18.1
+    pyarrow: 25.0.1
+    pydantic: 2.13.5
+    httpx: 0.28.1
+    torch: 2.14.0+cpu
+    xarray: 2026.7.0
+input_files:
+- path: data/interim/webcoos_audit/jennette_south/images.parquet
+  sha256: 5a7dd64dce70e3bbd2ab7f67479642da0fc22a83653cb0df138a6f0b8c8f62c1
+- path: data/processed/cdip/243/bulk_2021-12-01_end.parquet
+  sha256: e31617d512a174195530d2776b2647c2d17642fe9ecdd25f299c3a51b45e66d2
+- path: data/processed/cdip/243/bulk_realtime_start_end.parquet
+  sha256: 7c8183db5021b406f14616b350f63c93c01d63cfd0819be878ddbb291352b8c1
+- path: data/processed/cdip/243/spectral_bulk_2021-12-01_end.parquet
+  sha256: 4c021a503afb0acfe40c71c305c0af7c2bc8fbebec144530f6963560f57c8496
+- path: data/processed/cdip/243/spectral_bulk_realtime_start_end.parquet
+  sha256: 5bd6b244aec466fc8b01995a102d413714afd55fd2e3bb7ad12a62ab31229d37
+upstream_manifests: []
+output_files:
+- path: data/processed/pairs/webcoos_jennette_south_cdip243/samples.parquet
+  sha256: 1c91a988c0d8d84701c80e9786085ba6c49933d19772e97c4ead17c0d882fb58
+- path: data/processed/pairs/webcoos_jennette_south_cdip243/candidates.parquet
+  sha256: 4f124f0941be9c35e24cab8e13b3ec295b19846c2b5d4b82de1e43f730cd6a02
+- path: data/processed/pairs/webcoos_jennette_south_cdip243/summary.json
+  sha256: ddcfc1cb5883da18aa30ebcc37a23d06db69c788cc0d516acd840019e8960251
+notes: Labels by ADR 0010 (Hs window mean; Tp, Dp nearest record); see docs/datasets/webcoos.md.

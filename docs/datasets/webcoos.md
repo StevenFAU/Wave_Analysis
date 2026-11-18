@@ -589,6 +589,10 @@ with a label (ADR 0010 window mean, almost always two records; label minus
 nearest record: median 0.014 m). These are the views of Kamagata et al.
 (2026)'s held-out test, here with an instrument 28.9 km away.
 
+**Jennette's Pier paired with CDIP 243 (2026-11-18).** jennette_south: 48,254
+stills (2022-07 to 2026-11, 2592 × 1944), 48,251 decoded, 47,721 with a label
+(CDIP 243, Nags Head, 21 m deep; online, so its video has a buoy throughout).
+
 Every Yin et al. (2025) camera has a `video-archive` product next to its
 stills (`/assets/`). Video is what the stills cannot give:
 
