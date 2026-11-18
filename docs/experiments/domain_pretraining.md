@@ -107,6 +107,29 @@ loss diverges (not a number, or rising for 2,000 steps after the backbone unfree
 or the features collapse (the spread of the probe's features across views falling
 towards zero at a checkpoint).
 
+### Smoke runs and timing (2026-11-18, before the full run)
+
+Two short runs on GPU 3 of the lab server (shared: another user's job kept it busy
+throughout), 700 steps with the stages shortened (frozen to step 200, two checkpoints):
+
+| Batch 256 | Peak memory | Seconds per step | Views per second |
+|---|---|---|---|
+| activation checkpointing off (as first configured) | 84 GB | 0.84 | 305 |
+| **activation checkpointing on (FINO's own setting)** | **25 GB** | **1.44** | **178** |
+
+- Both stages, the unfreezing and its ramp, and the teacher checkpoints work; the data
+  loader keeps up (under 1 ms of waiting per step). The run starts from the public
+  weights: after 150 unfrozen steps no backbone tensor had moved more than 0.7 %.
+- **One change, by the rule above:** batch 256 without activation checkpointing needs
+  84 GB, above the 70 GB limit. Rather than fall back to batch 128, the full run turns
+  activation checkpointing back on, as FINO's reference has it (my config had turned it
+  off for speed). The batch stays 256, the recipe is FINO's in one more respect, and
+  only the speed changes.
+- **Projection:** 30,000 steps × 1.44 s ≈ **12 GPU-hours**, far under the 120-hour
+  limit, so no steps are cut. At the end of the smoke runs the DINO loss was still near
+  its starting value (11.06 against log 65,536 ≈ 11.09): the new heads had only begun
+  to learn, as expected after a few hundred steps.
+
 ## Choosing the checkpoint (validation buoys only)
 
 `scripts/dinov3_probe.py`, for the off-the-shelf weights and each teacher checkpoint:
@@ -173,7 +196,8 @@ it). The continued weights inherit it.
 
 - [x] Pre-registration (this document and the config), 2026-11-18, before any
       pretraining.
-- [ ] Smoke run and timing.
+- [x] Smoke runs and timing (2026-11-18): about 12 GPU-hours projected; activation
+      checkpointing on, batch 256.
 - [ ] Full pretraining run.
 - [ ] Checkpoint choice on the validation buoys.
 - [ ] P1 and the gentle comparison.

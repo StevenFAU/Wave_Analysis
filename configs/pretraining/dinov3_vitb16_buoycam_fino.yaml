@@ -12,9 +12,9 @@
 # 1,000-step linear LR ramp. Teacher checkpoints (eval/<step>/teacher_checkpoint.pth)
 # every 2,500 steps; scripts/dinov3_probe.py picks one on the validation buoys.
 # Batch 256 views per step x 30,000 steps = 7.68 M view-crops, about 47 passes over
-# the 165,021 views of the 55 training buoys. If batch 256 does not fit in 70 GB:
-# batch_size_per_gpu 128, optim.epochs 48, evaluation.eval_period_iterations 5000
-# (same view-crops, same 12 checkpoints).
+# the 165,021 views of the 55 training buoys. Smoke runs (2026-11-18): with activation
+# checkpointing (FINO's setting) batch 256 peaks at 25 GB, 1.44 s per step on the shared
+# GPU, so 30,000 steps take about 12 h; without it 84 GB, above the 70 GB limit.
 
 MODEL:
   META_ARCHITECTURE: GuidedSSLMetaArch
@@ -134,8 +134,8 @@ train:
   use_teacher_head: true
   learn_from_teacher_tokens: false
   centering: sinkhorn_knopp
-  checkpointing: false             # ours: activation checkpointing off, ViT-B fits without it
-  checkpointing_full: false        # ours
+  checkpointing: true              # activation checkpointing as FINO (smoke, 2026-11-18: off, batch 256 needed 84 GB)
+  checkpointing_full: true
   compile: true
   cudagraphs: false
   sharded_eval_checkpoint: false
