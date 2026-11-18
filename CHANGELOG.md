@@ -81,6 +81,10 @@ separately (`docs/REPRODUCIBILITY.md`).
   better than the buoy's own wind (+0.31). Test 2 not met: camera + ERA5 vs ERA5 alone for
   the total sea state, balanced accuracy +0.056 [+0.034, +0.095], macro-F1 −0.012
   [−0.025, +0.045] (more smooth false alarms cancel gains in the other classes).
+- Test 2b (fixed before it was run, after Test 2): camera + ERA5 without class weights, not
+  met. Both gains positive but intervals reach below zero (balanced accuracy +0.053
+  [−0.007, +0.082], macro-F1 +0.044 [−0.024, +0.060]); the gain sits in calm seas, all of
+  whose test strips are at two buoys. No further combiner is tried on this test set.
 - `wave_analysis.processing.horizon.detect_horizon` and `scripts/buoycam_horizon.py`: the
   horizon in each view as a motion sensor. Its roll and pitch follow the buoy's own
   spectral slope within each buoy (Spearman 0.56 [0.54, 0.58], positive at 75-76 of 76

@@ -389,6 +389,29 @@ whole test buoys). Test 2's result is what suggested 2b, and it is scored on the
 same test buoys, so a pass here is a follow-up finding, not a confirmation: that
 needs strips the choice has not seen (later months, or the time split).
 
+**Test 2b result: not met.** 6,019 test strips, 12 buoys:
+
+| | balanced accuracy | macro-F1 |
+|---|---|---|
+| camera + ERA5, unweighted | 0.783 | 0.813 |
+| ERA5 alone, unweighted | 0.730 | 0.769 |
+| gain (95 % interval) | +0.053 [−0.007, +0.082] | +0.044 [−0.024, +0.060] |
+
+Without weights the smooth false alarms go (smooth precision 0.42 → 0.81) and
+both gains are positive, but neither interval clears zero. The gain is now almost
+all in calm seas: ERA5 alone finds a quarter of the smooth strips (recall 0.26),
+camera + ERA5 half (0.50; smooth F1 0.41 → 0.62), while slight, moderate and rough
+stay level (within 0.01). All smooth test strips are at two buoys (44065: 69,
+42057: 25), so a gain that lives in that class moves with which buoys a bootstrap
+draws.
+
+**Reading of Tests 2 and 2b together.** Adding the camera to ERA5 raises the
+total-sea-state call by about +0.05 either way (balanced accuracy in Test 2, both
+metrics in 2b), and the gain sits in calm seas, which ERA5 misses. On these 12
+test buoys, two of which carry every calm strip, that is not yet clear of chance.
+More calm-sea buoys or months, not another combiner, would settle it; no further
+variant is tried on this test set.
+
 ## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
 
 Exploratory, nothing trained (`scripts/buoycam_horizon.py`, questions fixed in its
@@ -440,6 +463,8 @@ without it).
       2026-11-20 and rescore the saved predictions.
 - [x] v1, the camera for the wind sea (2026-11-18): Test 1 met (the camera
       beats ERA5's wind-wave height at unseen buoys), Test 2 not met (camera +
-      ERA5: balanced accuracy up, macro-F1 level).
+      ERA5: balanced accuracy up, macro-F1 level), Test 2b not met (unweighted:
+      both about +0.05, intervals reach below zero; the gain is in calm seas,
+      found at two test buoys).
 - [ ] v1 time split (three seeds), after the ERA5 download of 2026-11-20.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.
