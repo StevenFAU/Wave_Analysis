@@ -1,0 +1,42 @@
+# Shore-camera video vs single image on identical clips (WebCOOS, CDIP labels).
+# Fixed 2026-11-18 before any clip was scored: docs/experiments/webcoos_video.md.
+# Run by scripts/train_video_probe.py (deploy/dgx/run.sh with
+# TRAIN_SCRIPT=scripts/train_video_probe.py PKG=webcoos_video_v1).
+name: webcoos_video_v1
+package:
+  out: data/processed/packages/webcoos_video_v1   # scripts/webcoos_video_clips.py pack
+data:
+  min_sun_elevation_deg: 0.0      # clips with the sun above the horizon at their midpoint
+  frames: 64                      # 16 s at 4 fps, around the clip's midpoint
+  tile_px: 256                    # two squares (left and right) of the 256-px-high frame
+encoders:
+  vjepa2:                         # video encoder, frozen (Apache-2.0 / MIT)
+    hf_id: facebook/vjepa2-vitl-fpc64-256
+    layers: [11, 15, 19, 23]      # 50, 67, 83, 100 % of 24 blocks (0-based)
+    pool: [8, 4, 4]               # time x height x width tokens per tile after pooling
+    arms: [video, still, shuffled]
+  dinov3:                         # image encoder, frozen (DINOv3 licence: research use)
+    timm: vit_large_patch16_dinov3.lvd1689m
+    layers: [11, 15, 19, 23]
+    pool: [1, 4, 4]
+    arms: [image]                 # the middle frame (the same pixels as "still")
+targets: [Hs_label_m, Tp_label_s] # logs, standardised on each training fold
+heads:
+  primary: attentive              # AttentiveProbe; "mean" (MeanProbe) reported beside it
+  d: 256
+  heads: 4
+  dropout: 0.2
+  epochs: 60
+  batch_size: 32
+  lr: 3.0e-4
+  weight_decay: 0.05
+  seeds: [0, 1, 2, 3, 4]          # predictions averaged in log space
+evaluation:
+  folds: 5                        # GroupKFold over local dates (all cameras of a date together)
+  inner_val: one training date per fold picks the epoch (early stopping)
+  bootstrap: {n_boot: 2000, alpha: 0.05, seed: 0, groups: local_day}
+  bars:
+    M1: video minus still, RMSE of H_s, 95 % interval below zero
+    M2: video minus still, RMSE of T_p, 95 % interval below zero
+  reported: [video minus shuffled, video minus image (DINOv3), per camera, Kamagata metrics at Oak Island, Kim 5-class accuracy]
+  first_scored_run: at least 15 local dates framed; interim until the sample download finishes

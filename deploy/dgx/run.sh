@@ -12,11 +12,13 @@
 #   deploy/dgx/run.sh setup     # the Python environment of uv.lock (once per lock)
 #   deploy/dgx/run.sh train station --limit 64 --epochs 1   # a smoke test (minutes)
 #   deploy/dgx/run.sh train station                         # the run; train_sea_state.py options after the split
+#   deploy/dgx/run.sh sync      # a package that grows (video frames): only new files travel
 #   deploy/dgx/run.sh status | logs <run> [-f] | fetch <run> | stop <run>
 #
 # One GPU per run: GPU=<index> picks it, otherwise the least busy GPU with at
 # least MIN_FREE_GB (default 40) of free memory. TRAIN_SCRIPT picks the trainer
-# (default scripts/train_sea_state.py) and TAG adds a word to the run's name. The server is shared: this
+# (default scripts/train_sea_state.py), TAG adds a word to the run's name and KIND
+# (default buoy; video for the shore cameras) starts it. The server is shared: this
 # script only touches its own containers (label app=wave-analysis) and BASE.
 # The server runs the committed code: `push` refuses a working tree with
 # uncommitted changes, and each run records the commit it ran.
@@ -41,7 +43,7 @@ gpu_table() {  # per GPU over 10 s: index, mean busy %, free GB
         awk -F', *' '{u[$1] += $2; f[$1] = ($4 - $3) / 1024; n[$1]++}
             END {for (g in n) printf "%s %.0f %.0f\n", g, u[g] / n[g], f[g]}' | sort -n
 }
-run_name() { [[ "${1:-}" =~ ^buoy-[a-z0-9-]+$ ]] || { echo "which run? (see: run.sh status)" >&2; exit 1; }; }
+run_name() { [[ "${1:-}" =~ ^(buoy|video)-[a-z0-9-]+$ ]] || { echo "which run? (see: run.sh status)" >&2; exit 1; }; }
 
 cmd="${1:-}"
 shift || true
@@ -137,6 +139,24 @@ EOF
     fi
     say "package $PKG there and checked"
     ;;
+sync)
+    # A package that grows while its source downloads (the WebCOOS video frames):
+    # rsync its folder, so only new files travel, then tar and check it on the server
+    # and record its content, so that push finds it there.
+    src="data/processed/packages/$PKG"
+    [[ -f "$src/SHA256SUMS" ]] || { echo "no $src/SHA256SUMS: build the package first" >&2; exit 1; }
+    content="$(sha256sum "$src/SHA256SUMS" | cut -d' ' -f1)"
+    r mkdir -p "$BASE/packages/.src"
+    rsync -rt --delete --partial-dir=.rsync-partial --info=progress2 -e "ssh -T -o BatchMode=yes" \
+        "$src/" "$GPU_HOST:$BASE/packages/.src/$PKG/"
+    r bash -s <<EOF
+set -euo pipefail
+cd $BASE/packages/.src/$PKG && sha256sum -c --quiet SHA256SUMS
+cd .. && tar -cf $BASE/packages/$PKG.tar.part $PKG && mv $BASE/packages/$PKG.tar.part $BASE/packages/$PKG.tar
+echo $content > $BASE/packages/$PKG.content
+EOF
+    say "package $PKG synced and checked (content $content)"
+    ;;
 setup)
     r test -f "$BASE/repo/$COMMIT/GIT_COMMIT" || { echo "commit $COMMIT is not on the server: run.sh push" >&2; exit 1; }
     r bash -s <<EOF
@@ -164,7 +184,8 @@ train)
         say "GPU $gpu: $(awk -v g="$gpu" '$1 == g {print $2 "% busy, " $3 " GB free"}' <<<"$table") over the last 10 s"
     fi
     [[ "$gpu" =~ ^[0-9]+$ ]] || { echo "bad GPU '$gpu'" >&2; exit 1; }
-    run="buoy-$split-$(date -u +%Y%m%dt%H%M)"
+    [[ "${KIND:-buoy}" =~ ^(buoy|video)$ ]] || { echo "KIND is buoy or video" >&2; exit 1; }
+    run="${KIND:-buoy}-$split-$(date -u +%Y%m%dt%H%M)"
     [[ "$extra" == *"--class-weights none"* ]] && run="$run-unweighted"
     [[ "$extra" =~ --seed\ ([0-9]+) ]] && run="$run-seed${BASH_REMATCH[1]}"
     [[ "${TAG:-}" =~ ^[a-z0-9-]*$ ]] || { echo "TAG may hold only a-z, 0-9 and -" >&2; exit 1; }

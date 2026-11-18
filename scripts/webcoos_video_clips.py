@@ -2,8 +2,8 @@
 """WebCOOS video clips for wave models: pair each clip with its CDIP records, and cut a short frame sequence.
 
     python scripts/webcoos_video_clips.py pair     [cameras...]   # labels -> data/processed/video/clips.parquet
-    python scripts/webcoos_video_clips.py frames   [--workers 6]  # 64 frames at 2 fps per clip, 448 x 336 JPEG
-    python scripts/webcoos_video_clips.py pack                    # one tar of all frames + clips table (for dgx1)
+    python scripts/webcoos_video_clips.py frames   [--workers 6]  # 64 frames at 4 fps per clip, 256 px high JPEG
+    python scripts/webcoos_video_clips.py pack                    # data/processed/packages/<name>/ (clips + frames + SHA256SUMS)
 
 **Pair.** Every clip under ``data/raw/webcoos_video/<camera>/`` (downloaded by
 ``scripts/webcoos_video_sample.sh``) gets its start (file name), length (``ffprobe``,
@@ -14,12 +14,20 @@ CDIP records come from ``scripts/webcoos_pairs.py``'s loader (archived records w
 over realtime copies), so stills and clips follow one rule. Cameras and buoys: those of
 ``webcoos_pairs.PAIRINGS``.
 
-**Frames.** From each clip, 32 s around its midpoint at 2 frames per second (64
-frames: two to six wave periods), fitted into 448 x 336 unstretched (16:9 and 4:3 cameras; the rest black), as JPEG
-(quality 90) in ``data/processed/video/frames/<camera>/<clip>/NN.jpg``. The same
-frames feed the single-image model (the middle frame) and the video model (all
-64), so the two see identical clips. Compact enough to send to the GPU server
-(about 2 MB per clip) where the 2688 x 1520 originals (30-90 MB) are not.
+**Frames.** From each clip, 16 s around its midpoint at 4 frames per second (64
+frames, one to three wave periods: V-JEPA 2's own pretraining rate and length,
+``research_notes/Vision backbones for wave cameras/video_backbones.md`` section 3),
+scaled to 256 px high with the camera's aspect kept, as JPEG in
+``data/processed/video/frames_4fps/<camera>/<clip>/NN.jpg``. Burned-in overlays
+(Currituck's "Hampton Inn" label, ``MASKS``) are blacked out first, so no model can
+read the site from text. The same frames feed the single-image model (the middle
+frame) and the video model (all 64), so the two see identical pixels. About 1.5 MB
+per clip: small enough to send to the GPU server, where the 2592-2688 px originals
+(30-90 MB) are not.
+
+**Pack.** ``data/processed/packages/<name>/``: ``clips.csv`` (the usable clips that
+have all their frames), ``frames/`` (hard links, no second copy) and ``SHA256SUMS``.
+The package grows as clips download; ``deploy/dgx/run.sh sync`` sends only new files.
 """
 
 from __future__ import annotations
@@ -29,7 +37,6 @@ import importlib.util
 import json
 import subprocess
 import sys
-import tarfile
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -42,9 +49,12 @@ from wave_analysis.processing.solar import solar_position
 from wave_analysis.processing.synchronize import label_from_candidates, pair_window
 from wave_analysis.sources.webcoos import ONPREM_POSITIONS, still_time
 
-N_FRAMES, FPS, SPAN_S = 64, 2, 32
-SIZE = (448, 336)  # a 4:3 canvas: no camera is stretched
+N_FRAMES, FPS, SPAN_S = 64, 4, 16
+HEIGHT = 256  # px; width follows the camera's aspect (even)
 OUT = data_dir("processed") / "video"
+FRAMES = OUT / "frames_4fps"
+# Burned-in text, blacked out in the source frame (ffmpeg drawbox; iw/ih = source size).
+MASKS = {"currituck_hampton_inn": "drawbox=x=0:y=ih-170:w=560:h=170:color=black:t=fill"}
 
 
 def _pairs_module():
@@ -159,18 +169,18 @@ def pair(args: argparse.Namespace) -> int:
     return 0
 
 
-def _frames(job: tuple[str, str, float]) -> tuple[str, int]:
-    src, dest, mid_offset = job
+def _frames(job: tuple[str, str, float, str]) -> tuple[str, int]:
+    src, dest, mid_offset, camera = job
     d = Path(dest)
     if d.is_dir() and len(list(d.glob("*.jpg"))) == N_FRAMES:
         return dest, N_FRAMES
     tmp = d.with_name(d.name + ".part")
     tmp.mkdir(parents=True, exist_ok=True)
     start = max(0.0, mid_offset - SPAN_S / 2)
+    vf = ",".join(f for f in (MASKS.get(camera, ""), f"fps={FPS}", f"scale=-2:{HEIGHT}") if f)
     subprocess.run(
         ["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.2f}", "-i", src, "-t", str(SPAN_S),
-         "-vf", f"fps={FPS},scale={SIZE[0]}:{SIZE[1]}:force_original_aspect_ratio=decrease,pad={SIZE[0]}:{SIZE[1]}:(ow-iw)/2:(oh-ih)/2", "-frames:v", str(N_FRAMES), "-q:v", "3",
-         str(tmp / "%02d.jpg")],
+         "-vf", vf, "-frames:v", str(N_FRAMES), "-q:v", "3", str(tmp / "%02d.jpg")],
         capture_output=True, timeout=300,
     )  # fmt: skip
     n = len(list(tmp.glob("*.jpg")))
@@ -187,7 +197,7 @@ def frames(args: argparse.Namespace) -> int:
     t = pd.read_parquet(OUT / "clips.parquet")
     t = t[t["exclusion"] == ""]
     root = repo_root()
-    jobs = [(str(root / p if not Path(p).is_absolute() else p), str(OUT / "frames" / cam / cid), dur / 2)
+    jobs = [(str(root / p if not Path(p).is_absolute() else p), str(FRAMES / cam / cid), dur / 2, cam)
             for p, cam, cid, dur in zip(t["path"], t["camera"], t["clip_id"], t["duration_s"], strict=True)]  # fmt: skip
     done, short = 0, []
     with Pool(args.workers) as pool:
@@ -206,18 +216,33 @@ def frames(args: argparse.Namespace) -> int:
 def pack(args: argparse.Namespace) -> int:
     t = pd.read_parquet(OUT / "clips.parquet")
     t = t[t["exclusion"] == ""].copy()
-    have = [(OUT / "frames" / c / i).is_dir() and len(list((OUT / "frames" / c / i).glob("*.jpg"))) == N_FRAMES
+    have = [len(list((FRAMES / c / i).glob("*.jpg"))) == N_FRAMES
             for c, i in zip(t["camera"], t["clip_id"], strict=True)]  # fmt: skip
-    t = t[np.array(have)]
-    pkg = data_dir("interim") / "k8s" / f"{args.name}.tar"
-    pkg.parent.mkdir(parents=True, exist_ok=True)
-    t.drop(columns=["path"]).to_csv(OUT / f"{args.name}_clips.csv", index=False)
-    with tarfile.open(str(pkg) + ".part", "w") as tf:
-        tf.add(OUT / f"{args.name}_clips.csv", arcname=f"{args.name}/clips.csv")
-        for c, i in zip(t["camera"], t["clip_id"], strict=True):
-            tf.add(OUT / "frames" / c / i, arcname=f"{args.name}/frames/{c}/{i}")
-    Path(str(pkg) + ".part").rename(pkg)
-    print(f"{pkg}: {len(t):,} clips, {pkg.stat().st_size / 1e9:.2f} GB")
+    t = t[np.array(have, dtype=bool)].drop(columns=["path"]).sort_values("clip_id")
+    pkg = data_dir("processed") / "packages" / args.name
+    (pkg / "frames").mkdir(parents=True, exist_ok=True)
+    keep = set()
+    for c, i in zip(t["camera"], t["clip_id"], strict=True):
+        d = pkg / "frames" / c / i
+        d.mkdir(parents=True, exist_ok=True)
+        for f in sorted((FRAMES / c / i).glob("*.jpg")):
+            keep.add(d / f.name)
+            if not (d / f.name).exists():
+                (d / f.name).hardlink_to(f)
+    for f in (pkg / "frames").rglob("*.jpg"):  # clips dropped since the last pack
+        if f not in keep:
+            f.unlink()
+    with atomic_open(pkg / "clips.csv", "w") as fh:
+        t.to_csv(fh, index=False)
+    sums = subprocess.run(
+        "find clips.csv frames -type f -print0 | sort -z | xargs -0 sha256sum",
+        shell=True, cwd=pkg, capture_output=True, text=True, check=True,
+    ).stdout  # fmt: skip
+    with atomic_open(pkg / "SHA256SUMS", "w") as fh:
+        fh.write(sums)
+    size = sum(f.stat().st_size for f in keep) / 1e9
+    print(f"{pkg}: {len(t):,} clips ({t['camera'].value_counts().to_dict()}), "
+          f"{t['local_day'].nunique()} days, {size:.2f} GB")  # fmt: skip
     return 0
 
 
@@ -232,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--workers", type=int, default=6)
     f.set_defaults(func=frames)
     k = sub.add_parser("pack")
-    k.add_argument("--name", default="webcoos_video_frames_v0")
+    k.add_argument("--name", default="webcoos_video_v1")
     k.set_defaults(func=pack)
     args = ap.parse_args(argv)
     return int(args.func(args))
