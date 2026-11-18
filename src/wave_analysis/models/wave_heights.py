@@ -168,12 +168,8 @@ class MultiViewRegressor(nn.Module):
             else None
         )
 
-    def forward(self, x: tuple[torch.Tensor, ...]) -> torch.Tensor:
-        """Standardised log heights ``(B, n_outputs)``.
-
-        With a distribution head ``(B, 3 n_outputs)``: point, mean, raw variance (see
-        :func:`split_outputs`).
-        """
+    def tokens(self, x: tuple[torch.Tensor, ...]) -> tuple[torch.Tensor, torch.Tensor]:
+        """Per-view tokens after the mixer ``(B, n_views, d_model)`` and the masked mean ``(B, d_model)``."""
         views, mask = x[0], x[1]
         b, v = views.shape[:2]
         flat = views.flatten(0, 1).contiguous(memory_format=torch.channels_last)
@@ -187,6 +183,15 @@ class MultiViewRegressor(nn.Module):
             h = self.mixer(h, src_key_padding_mask=~mask)
         m = mask.to(h.dtype).unsqueeze(-1)
         pooled = (h * m).sum(dim=1) / m.sum(dim=1).clamp_min(1.0)
+        return h, pooled
+
+    def forward(self, x: tuple[torch.Tensor, ...]) -> torch.Tensor:
+        """Standardised log heights ``(B, n_outputs)``.
+
+        With a distribution head ``(B, 3 n_outputs)``: point, mean, raw variance (see
+        :func:`split_outputs`).
+        """
+        _, pooled = self.tokens(x)
         out: torch.Tensor = self.head(pooled)
         if self.dist_head is not None:
             out = torch.cat([out, self.dist_head(pooled)], dim=-1)

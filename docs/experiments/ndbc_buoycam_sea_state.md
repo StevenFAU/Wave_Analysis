@@ -801,6 +801,75 @@ snapshot saved after the weeks it labels. It is large enough to score when ERA5 
 at least 7 days after the package (about 6,000 strips at 70 or more buoys), which is
 expected around 2026-11-26.
 
+## Stage 3: periods, wind-sea spectrum and direction (fixed 2026-11-18, before any stage-3 run)
+
+Rank 5 of the architecture review: the model outputs heights only, but wave period and
+direction are project targets too.
+
+**What the caption carries.** Direction needs each view's compass heading, which the
+review expected in the burned-in caption. It is not there. The caption holds one
+number, "90°", under the first view, then the station and time. In 640 raw strips (8
+at random from each of 80 stations, September to November), that field is
+pixel-identical at 79 stations and reads "290°" at all strips of 44008 (the 2304-px
+format): it is a fixed label, not a heading. **No strip says which way its views
+face.** The one compass the images do contain is the sun, whose azimuth is known from
+the time and the buoy's position. So direction is predicted relative to the sun:
+cosine and sine of (wave direction minus sun azimuth), with the sun's azimuth added
+back afterwards. Only the direction head knows the views' order (a learned embedding
+per view position); the heights still pool the views as a set.
+
+**Labels** (`scripts/buoycam_spectral_labels.py`, package `ndbc_buoycam_spectral_v3cv` =
+v2cv plus these columns). Every value comes from the strip's own buoy: its `.spec`
+summaries and its realtime spectral records (density with NDBC's separation frequency,
+and the directional alpha1 and r1). The spectral files stamp each record 10 min after
+its `.spec` stamp, so each joins the nearest `.spec` record (at most 15 min apart).
+Then the heights' window applies: the mean over the records within 30 min of the strip.
+The spectra reproduce NDBC's WVHT to within 2-2.5 % at every buoy (4 sqrt(m0) / WVHT
+0.976-0.988), which confirms the join.
+
+| Output | Definition | Strips | ERA5 counterpart |
+|---|---|---|---|
+| T_p | 1 / frequency of the highest density | 99.9 % | `pp1d` |
+| Tm-1,0 | m-1 / m0, the energy period | 99.9 % | `mwp` (same definition) |
+| APD | NDBC's average period, from m0 and m2 | 100 % | `mp2` |
+| WWP, SwP | NDBC's wind-wave and swell peak periods | 92 %, 91 % | `mpww`, `mpts` |
+| wind-sea Tm-1,0 | m-1 / m0 at or above NDBC's separation frequency | 94 % | `mpww` (same definition) |
+| mean direction | energy-weighted over the spectrum (Kuik et al. 1988) | 97 % | `mwd` (same definition) |
+| wind-sea shape | each of the 46 bins' share of the wind-sea energy | 94 % | none (no-camera guess: the mean training shape) |
+
+ERA5's periods and directions were downloaded for September to November and read at
+the grid point the heights use (`scripts/buoycam_era5.py`; through 2026-11-13). Periods
+are corrected by a line fitted on each fold's training strips, as the heights;
+directions are used as they are.
+
+**Model** (`wave_analysis.models.wave_spectral.MultiViewSpectral`,
+`scripts/train_wave_spectral.py`, config `ndbc_buoycam_spectral_v3cv.yaml`): stage 1's
+model, with the periods as more log-scale targets of its point and distribution heads,
+a shape head (softmax over the 46 bins, cross-entropy), and the sun-referenced direction
+head (loss 1 - cos of the angle error). It uses stage 1's winning arm (backbone and
+recipe) on the same folds, with three seeds per fold. The epoch is chosen on validation
+H_s, as in stage 1. Scored by `scripts/buoycam_spectral_oof.py`.
+
+**Bar S3**, one line per output, each against ERA5 at the same unseen buoys out of fold
+(paired bootstrap over whole buoys; it passes when the 95 % interval of camera minus
+ERA5 is below zero):
+
+- **P1** peak period against `pp1d`, RMSE in seconds;
+- **P2** energy period Tm-1,0 against `mwp`, RMSE in seconds;
+- **P3** mean direction against `mwd`, mean absolute angle in degrees.
+
+**H_s is checked for harm:** the stage-3 model's out-of-fold H_s RMSE minus stage 1's
+winning arm's, on the same strips. Harm means that interval lies above zero.
+
+Reported beside the bar: APD against `mp2`; the wind-wave and swell periods; the wind
+sea's Tm-1,0 against `mpww`, both from its own output and from the predicted shape; the
+direction with the sun above and below 10°; the shape's divergence from the buoy's
+against the mean training shape; and the heights.
+
+**Expected in advance:** ERA5 should win P1-P3, because swell sets the total period and
+direction at these buoys and the camera has no compass but the sun. The camera's best
+chance is the wind sea: its own period and the shape, which are reported beside the bar.
+
 ## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
 
 Exploratory, nothing trained (`scripts/buoycam_horizon.py`, questions fixed in its
@@ -874,4 +943,6 @@ without it).
 - [ ] Stage 2, partition-aware fusion (2026-11-18): NDBC's partition adds as energies on
       every record; bar S2 fixed before any fusion. Confirmation on new weeks from about
       2026-11-26.
+- [ ] Stage 3, periods, spectrum and direction (2026-11-18): the caption carries no
+      heading (a fixed "90°"); labels from each buoy's spectra; bar S3 fixed before any run.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.
