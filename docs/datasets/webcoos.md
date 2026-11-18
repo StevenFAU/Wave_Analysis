@@ -582,6 +582,13 @@ more than two years: the views Kamagata et al. (2026) tested on, with an
 instrument. A sample request (four cameras, one clip per 30-min CDIP record in
 daylight, six sample weeks, ~200 GB) is drafted for WebCOOS.
 
+**Oak Island paired with CDIP 200 (2026-11-18).** `webcoos_extract.py` and
+`webcoos_pairs.py` for both views: oakisland_east 35,586 stills (35,585
+decoded), 29,518 with a label; oakisland_west 37,571 (37,566 decoded), 31,465
+with a label (ADR 0010 window mean, almost always two records; label minus
+nearest record: median 0.014 m). These are the views of Kamagata et al.
+(2026)'s held-out test, here with an instrument 28.9 km away.
+
 Every Yin et al. (2025) camera has a `video-archive` product next to its
 stills (`/assets/`). Video is what the stills cannot give:
 

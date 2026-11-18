@@ -1,0 +1,59 @@
+artifact_id: webcoos_oakisland_west_cdip200
+created_at: '2026-11-18T14:03:59.571645Z'
+git:
+  commit: ae2ea3ef022f927df0e652699f02001d55ab49ba
+  branch: main
+  dirty: true
+pipeline:
+  command: python scripts/webcoos_pairs.py oakisland_west
+  config:
+    camera: oakisland_west
+    site_id: webcoos_oak_island
+    cdip: '200'
+    reference_depth_m: 12.8
+    timezone: America/New_York
+    camera_latitude: 33.9126
+    camera_longitude: -78.2243
+    window: 3h
+    nearest_max: 30min
+    interp_max_gap: 40min
+    range_window: 1h
+    label_rule: window_mean
+    label_window: 30min
+    peak_label_rule: nearest
+    peak_disagree_tp_s: 3.0
+    peak_disagree_dp_deg: 60.0
+    good_primary_flag: '1'
+    monochrome_max_saturation: 0.01
+    monochrome_max_sun_deg: -3.0
+    colour_min_sun_deg: -12.0
+  config_sha256: 1d646ece5784dd42fe418946884b24c315249db842c9c6ae8fb4bf47bfdbe51d
+software:
+  python: 3.12.13
+  platform: Linux-7.0.0-43-generic-x86_64-with-glibc2.43
+  wave_analysis: 0.1.0.dev0
+  packages:
+    numpy: 2.5.3
+    pandas: 3.0.6
+    scipy: 1.18.1
+    pyarrow: 25.0.1
+    pydantic: 2.13.5
+    httpx: 0.28.1
+    torch: 2.14.0+cpu
+    xarray: 2026.7.0
+input_files:
+- path: data/interim/webcoos_audit/oakisland_west/images.parquet
+  sha256: ad6a398cfa14757fb747bf015130131fea92ea23bed4cd1d04bdfd187bcd56b4
+- path: data/processed/cdip/200/bulk_2021-12-01_end.parquet
+  sha256: 693d26e1df2dfe40519ebdcc57820648128384c59209b5b11f1921bfdf8b3fea
+- path: data/processed/cdip/200/spectral_bulk_2021-12-01_end.parquet
+  sha256: 488f3b9bbff111ca90c054b143ddbc43f41eff932f17873d9b18f1cccf3140a6
+upstream_manifests: []
+output_files:
+- path: data/processed/pairs/webcoos_oakisland_west_cdip200/samples.parquet
+  sha256: a2e175285827f6f4e2a69a8ffa13f7771d8fbbc6d5765d89b7debcd662ee7042
+- path: data/processed/pairs/webcoos_oakisland_west_cdip200/candidates.parquet
+  sha256: 480cfcb1bbe00a2d5418cf169a26e8ed251a93aad59f95305f791f58b6c22f8d
+- path: data/processed/pairs/webcoos_oakisland_west_cdip200/summary.json
+  sha256: 77b432478c7d9a3e9a1032df6fa207a578033c6d61a061c83d06b5c55cb8eab2
+notes: Labels by ADR 0010 (Hs window mean; Tp, Dp nearest record); see docs/datasets/webcoos.md.
