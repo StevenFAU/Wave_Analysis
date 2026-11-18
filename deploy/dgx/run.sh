@@ -197,6 +197,9 @@ train)
     r "docker ps -a --format '{{.Names}}' | grep -qx wave-$run" && { echo "run $run is already running; wait a minute" >&2; exit 1; }
     # Detached, so it runs on after this connection closes. /scratch (memory)
     # takes the unpacked package; the log goes to $BASE/logs/<run>.log.
+    # TORCH_DISABLE_NATIVE_JIT: PyTorch 2.14 sends some products (a one-query
+    # attention's backward) to Triton kernels that need a C compiler, which the slim
+    # image lacks; off, they use the ordinary CUDA kernels.
     r bash -s <<EOF
 set -e
 docker image inspect $IMAGE >/dev/null 2>&1 || docker pull -q $IMAGE >/dev/null
@@ -206,7 +209,7 @@ docker run -d --rm --name wave-$run --label app=wave-analysis --label run=$run \
     --user \$(id -u):\$(id -g) -e HOME=/scratch -v $BASE:/data \
     -e RUN=$run -e SPLIT=$split -e COMMIT=$COMMIT -e ENV_DIR=/data/envs/$LOCK -e PKG=$PKG \
     -e CONFIG=$CONFIG -e "EXTRA_ARGS=$extra" -e NUM_WORKERS=22 -e TORCH_HOME=/data/cache/torch -e HF_HOME=/data/cache/hf \
-    -e PYTHONUNBUFFERED=1 -e TRAIN_SCRIPT=${TRAIN_SCRIPT:-scripts/train_sea_state.py} \
+    -e PYTHONUNBUFFERED=1 -e TORCH_DISABLE_NATIVE_JIT=1 -e TRAIN_SCRIPT=${TRAIN_SCRIPT:-scripts/train_sea_state.py} \
     $IMAGE bash -c 'bash /data/repo/$COMMIT/deploy/container/train.sh >/data/logs/$run.log 2>&1; s=\$?;
         echo "finished with exit code \$s at \$(date -u +%FT%TZ)" >>/data/logs/$run.log; exit \$s' >/dev/null
 EOF

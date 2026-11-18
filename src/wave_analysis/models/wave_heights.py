@@ -217,15 +217,27 @@ def fit_heights(
     log: Callable[[str], object] = print,
     names: Sequence[str] = ("hs", "wind_wave", "swell"),
     lp_epochs: int = 0,
+    backbone_lr_scale: float = 1.0,
 ) -> HeightsFit:
     """Train for ``settings.epochs``; keep the epoch with the lowest validation RMSE of the first height.
 
     ``lp_epochs`` > 0: the backbone (``model.encoder``) stays frozen for the first
     ``lp_epochs`` epochs and only the rest learns (linear probing, then fine-tuning:
     Kumar et al. 2022's LP-FT, which keeps the pretrained features better under shift).
+    ``backbone_lr_scale``: the backbone learns at ``settings.lr`` times this (e.g. 0.1, so
+    fine-tuning moves pretrained weights gently); the rest at ``settings.lr``.
     """
     model.to(device).to(memory_format=torch.channels_last)
-    opt = torch.optim.AdamW(model.parameters(), lr=settings.lr, weight_decay=settings.weight_decay)
+    enc = getattr(model, "encoder", None)
+    enc_ids = {id(q) for q in enc.parameters()} if enc is not None else set()
+    groups = [
+        {
+            "params": [q for q in model.parameters() if id(q) in enc_ids],
+            "lr": settings.lr * backbone_lr_scale,
+        },
+        {"params": [q for q in model.parameters() if id(q) not in enc_ids], "lr": settings.lr},
+    ]
+    opt = torch.optim.AdamW([g for g in groups if g["params"]], weight_decay=settings.weight_decay)
     steps = settings.epochs * max(1, len(train_loader))
     warm = settings.warmup_epochs * max(1, len(train_loader))
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: lr_lambda(s, warmup=warm, total=steps))

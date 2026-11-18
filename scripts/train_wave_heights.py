@@ -87,6 +87,11 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         help="override model.lp_epochs (backbone frozen for the first N epochs)",
     )
+    ap.add_argument(
+        "--backbone-lr-scale",
+        type=float,
+        help="override model.backbone_lr_scale (the backbone's learning rate as a share of lr)",
+    )
     ap.add_argument("--epochs", type=int)
     ap.add_argument("--batch-size", type=int)
     ap.add_argument("--num-workers", type=int)
@@ -179,10 +184,14 @@ def main(argv: list[str] | None = None) -> int:
         pretrained=settings.pretrained,
     )  # fmt: skip
     val_true = np.exp(y_of(parts[VAL]))
+    lr_scale = args.backbone_lr_scale
+    if lr_scale is None:
+        lr_scale = float(mcfg.get("backbone_lr_scale", 1.0))
     result = fit_heights(
         model, loader(parts[TRAIN], True), loader(parts[VAL], False), val_true,
         settings=settings, mean=mean, std=std, device=device, log=log, names=tnames,
         lp_epochs=int(args.lp_epochs if args.lp_epochs is not None else mcfg.get("lp_epochs", 0)),
+        backbone_lr_scale=lr_scale,
     )  # fmt: skip
     log(f"chosen epoch {result.best_epoch} (val RMSE {tnames[0]} {result.best_rmse_m:.3f} m)")
     model.load_state_dict(result.state_dict)
@@ -225,7 +234,8 @@ def main(argv: list[str] | None = None) -> int:
     run_info = {
         "config": cfg["name"], "split": args.split, "task": "heights", "aux": args.aux, "targets": targets,
         "target_names": tnames, "settings": settings.__dict__, "input_size_hw": size,
-        "best_epoch": result.best_epoch, "device": str(device),
+        "best_epoch": result.best_epoch, "device": str(device), "backbone_lr_scale": lr_scale,
+        "lp_epochs": int(args.lp_epochs if args.lp_epochs is not None else mcfg.get("lp_epochs", 0)),
         "gpu": torch.cuda.get_device_name(device) if device.type == "cuda" else None,
         "torch": torch.__version__, "limit_per_partition": args.limit, "seed": seed,
     }  # fmt: skip

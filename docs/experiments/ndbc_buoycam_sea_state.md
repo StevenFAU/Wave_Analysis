@@ -540,6 +540,34 @@ bootstrap over the 12 test buoys). Every published measure is reported for both
 ViT-B/14, DINOv3 ViT-B/16) and LP-FT are follow-ups, judged on the validation buoys
 first.
 
+**Result (2026-11-18): not met; DINOv3 is worse with this recipe.** Three seeds
+(`530b279`; two of them shared one GPU, which changes only the time), averaged and
+scored with `compare_papers.py` against arm A:
+
+| | ImageNet (arm A) | DINOv3 | DINOv3 minus ImageNet |
+|---|---|---|---|
+| H_s RMSE | 0.450 m | 0.489 m | +0.039 [+0.008, +0.073] |
+| Wind-wave RMSE | 0.219 m | 0.244 m | +0.025 [+0.011, +0.039] |
+| H_s R², Pearson | 0.81, 0.915 | 0.78, 0.904 | |
+
+The DINOv3 seeds were also worse on the validation buoys (best epochs 0.48-0.52 m), so
+this is not a val/test swap. The review's caveat applies: the recipe (every weight
+learning at 3e-4 from the first step) was tuned for ImageNet weights and is the kind
+that can wash out pretrained features; "DINOv3 does not help" is not yet shown, only
+"not with this recipe". Bar B2 tests the gentle recipe.
+
+### Bar B2: a recipe for pretrained weights (fixed 2026-11-18, after B1, before any B2 run)
+
+**Gentle recipe:** the backbone frozen for the first 2 epochs (LP-FT, `--lp-epochs 2`),
+then learning at a tenth of the head's rate (`--backbone-lr-scale 0.1`: 3e-5 against
+3e-4); all else as arm A (images only, 10 epochs, the epoch chosen on validation RMSE of
+H_s). Two arms of three seeds: **ImageNet-gentle** and **DINOv3-gentle**.
+
+**Bar B2:** DINOv3-gentle must lower the test RMSE of H_s **and** of the wind-wave
+height against arm A (the best model so far), each interval below zero (paired
+bootstrap over the 12 test buoys). Reported beside it: ImageNet-gentle minus arm A (the
+recipe alone) and DINOv3-gentle minus ImageNet-gentle (the weights at one recipe).
+
 ## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
 
 Exploratory, nothing trained (`scripts/buoycam_horizon.py`, questions fixed in its
@@ -600,5 +628,7 @@ without it).
       for the wind sea (0.215 against ERA5's 0.341 m), not for the total.
 - [x] Test 3 (2026-11-18): not met; the camera cuts ERA5 + wind's wind-wave error
       by 30 % and adds nothing to the total height.
-- [ ] Bar B1 (DINOv3 ConvNeXt-Tiny), three seeds running.
+- [x] Bar B1 (2026-11-18): not met, DINOv3 ConvNeXt-Tiny worse than ImageNet
+      with arm A's recipe (H_s +0.039 m, wind-wave +0.025 m).
+- [ ] Bar B2 (gentle recipe, ImageNet and DINOv3, three seeds each): running.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.
