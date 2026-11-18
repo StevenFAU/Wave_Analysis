@@ -69,6 +69,18 @@ separately (`docs/REPRODUCIBILITY.md`).
   buoys, swell share predicts the under-call (Spearman −0.89).
 
 ### Added (2026-11-18, results and shore video)
+- Backbone bars B1-B3 (three seeds each, 12 unseen buoys, each fixed before its runs):
+  B1 not met (DINOv3 ConvNeXt-Tiny with arm A's full fine-tuning: worse, +0.039 m); B2
+  not met by a hair (DINOv3 with the gentle recipe, `--lp-epochs 2 --backbone-lr-scale
+  0.1`: 0.440 against 0.450 m, interval reaching zero; now the best model); B3 not met
+  (DINOv3 ViT-B/16 gentle level with arm A, frozen far worse). Backbones differ by about
+  0.01 m once each has a recipe that suits it. `--backbone-lr-scale` in
+  `train_wave_heights.py`.
+- Protocol check R (`scripts/buoycam_random_split.py`, package `ndbc_buoycam_heights_v2r`):
+  Choi's and Kim's random split on our strips gives H_s 0.433 m and Kim's five classes
+  68.8 %, the same as at unseen buoys; the gap to Kim's 78 % is not the split.
+- `deploy/dgx/run.sh`: `TORCH_DISABLE_NATIVE_JIT=1` in the containers; `push` skips
+  packing when the server already has the package.
 - v2 results (three seeds per arm, 12 unseen buoys): the camera alone gives H_s RMSE
   0.450 m, R² 0.81, Pearson 0.915 (Kamagata 2026: 0.586 m, 0.107, 0.436) and 99.1 % on
   Choi 2020's calm/rough task (84 %), but 69 % on Kim 2023's five classes (78 %). V2-1

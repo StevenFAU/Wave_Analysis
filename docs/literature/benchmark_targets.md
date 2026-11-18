@@ -40,6 +40,8 @@ three-seed averages at 12 buoys the model never saw, intervals over whole buoys.
 | Choi 2020 | 84.05 % calm vs rough, same buoys and days | 99.1 % [97.9, 99.7], unseen buoys | ahead, on a harder split |
 | Kim 2023 | 78.3 % snapshot, 93.2 % video, random frames | 69.4 % [61.8, 77.9] (buoy cameras, unseen buoys) | **behind** on snapshots; their split shares hours between train and test; the shore video test answers the video half |
 | Yang 2026 | attitude cuts RMSE 0.098 → 0.073 m (simulation) | horizon attitude makes H_s worse (+0.038 m [+0.018, +0.057]) | their gain does not carry to real buoys |
+| (best model since B2) | — | DINOv3 ConvNeXt-Tiny, gentle recipe: H_s 0.440 m [0.38, 0.50], R² 0.82, Pearson 0.921; Kim 70.2 % [62.7, 78.7] | backbones differ by about 0.01 m once each has a recipe that suits it (B1-B3) |
+| Kim 2023, their protocol on our data | 78.3 % (random frames) | random split of our strips: 68.8 % [65.7, 71.8], H_s 0.433 m | the split is not the gap; their single site and session labels are |
 | ERA5 at the buoy | — | wind-wave height: camera 0.215 m against ERA5 0.341 m; total H_s: ERA5 0.267 m against camera 0.434 m; both together cut ERA5 + wind's wind-wave error 30 % | the camera is the wind-sea instrument; swell needs the wave model |
 
 ## Other sensors (context: what an image of the sea surface can reach)

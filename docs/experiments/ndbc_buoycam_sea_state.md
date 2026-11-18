@@ -612,6 +612,26 @@ validation RMSE of H_s (its seeds' average) is B3's candidate.
 height against arm A, each interval below zero (paired bootstrap over the 12 test
 buoys). The other arm and every paper's measure are reported beside it.
 
+**Result (2026-11-18): not met.** Runs at `bb1a568`. Validation picked the gentle arm (H_s 0.475 m against
+the frozen arm's 0.550 m). On the test buoys, three seeds averaged:
+
+| | Arm A | ViT-B/16 gentle (candidate) | ViT-B/16 frozen |
+|---|---|---|---|
+| H_s RMSE | 0.450 m | 0.455 m (R² 0.81, Pearson 0.910) | 0.560 m (R² 0.71) |
+| Wind-wave RMSE | 0.219 m | 0.212 m | 0.257 m |
+| Kim's five classes | 69.4 % | 69.6 % | 64.4 % |
+| Minus arm A, H_s | | +0.005 [−0.009, +0.020] | +0.111 [+0.086, +0.139] |
+| Minus arm A, wind-wave | | −0.007 [−0.016, +0.001] | +0.039 [+0.023, +0.055] |
+
+Frozen features, even DINOv3's, are well short: the camera has to be trained to see
+waves. Fine-tuned gently, the 86 M-parameter ViT lands level with the 28 M ConvNeXt.
+
+**What B1-B3 show together.** Once each backbone gets a recipe that suits it, the
+choice of backbone moves H_s by about 0.01 m (0.440-0.455 m), inside the intervals; the
+recipe moves it by up to 0.11 m. The best model so far is DINOv3 ConvNeXt-Tiny with the
+gentle recipe (0.440 m). Larger gains have to come from elsewhere: the swell the camera
+cannot see (ERA5 in Test 3), more buoys and calm seas, or motion (the video test).
+
 ### Protocol check R: the published split on our data (fixed 2026-11-18, before any run on it)
 
 Not a bar and not our result. Choi 2020 split examples at random with the same buoys
@@ -624,6 +644,25 @@ once more on a **random split of the same 41,091 strips** (80/10/10, seed 0; pac
 neighbouring hours of one buoy and day sit in training and test, as in those papers.
 Every paper's measure is reported for it beside the unseen-buoy result. The headline
 stays the unseen-buoy number; the difference is what the random protocol adds.
+
+**Result (2026-11-18).** Three seeds (runs `buoy-random-20261118t1704`/`t1715`, commit `1163db2`),
+4,109 random test strips at all 79 buoys:
+
+| | Unseen buoys (arm A) | Random split |
+|---|---|---|
+| H_s RMSE | 0.450 m | 0.433 m [0.378, 0.497] |
+| H_s R², Pearson | 0.81, 0.915 | 0.87, 0.933 |
+| Bias | −0.16 m | −0.06 m |
+| Calm vs rough (Choi) | 99.1 % | 99.2 % |
+| Kim's five classes | 69.4 % | 68.8 % [65.7, 71.8] |
+| Swell R² | 0.54 | 0.71 |
+
+The random split adds little: the error falls by 0.02 m and the bias shrinks (the
+training set now holds every buoy's swell climate), but Kim's five-class accuracy does
+not move. **The gap to Kim's 78 % is not the split.** It is most likely the task: one
+camera at one site, 30 one-hour sessions and their mean height, against 79 buoys
+across oceans. (The R² is higher partly because the random test set spans all buoys,
+so it holds more variance.)
 
 ## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
 
@@ -689,6 +728,8 @@ without it).
       with arm A's recipe (H_s +0.039 m, wind-wave +0.025 m).
 - [x] Bar B2 (2026-11-18): not met (DINOv3-gentle −0.010 m [−0.024, +0.001] against
       arm A); DINOv3-gentle is the best model so far (H_s 0.440 m, R² 0.82).
-- [ ] Bar B3 (DINOv3 ViT-B/16, frozen and gentle) and protocol check R (random split):
-      running.
+- [x] Bar B3 (2026-11-18): not met; gentle ViT-B/16 level with arm A (+0.005 m), frozen
+      far worse (+0.111 m). Backbones differ by about 0.01 m once each has its recipe.
+- [x] Protocol check R (2026-11-18): the random split lowers H_s error by 0.02 m and
+      leaves Kim's five-class accuracy at 69 %: the gap to Kim is not the split.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.
