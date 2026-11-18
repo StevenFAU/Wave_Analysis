@@ -228,7 +228,7 @@ def out_of_fold(
 ) -> np.ndarray:
     """Out-of-fold predictions (natural units) of every target, seeds averaged in log space."""
     hp = cfg["heads"]
-    x = torch.from_numpy(np.ascontiguousarray(feats)).to(dev)
+    x = torch.from_numpy(np.array(feats)).to(dev)  # a copy: the cache is read-only
     ylog = np.log(clips[[TARGETS[t][0] for t in TARGETS]].to_numpy(dtype=float))
     fold = clips["fold"].to_numpy()
     days = clips["local_day"].to_numpy()
@@ -364,8 +364,11 @@ def main(argv: list[str] | None = None) -> int:
     clips = pd.read_csv(args.package / "clips.csv")
     clips = clips[(clips["sun_elevation_deg"] >= float(cfg["data"]["min_sun_elevation_deg"]))
                   & clips["Hs_label_m"].gt(0) & clips["Tp_label_s"].gt(0)].sort_values("clip_id").reset_index(drop=True)  # fmt: skip
-    if args.limit:
-        clips = clips.iloc[: args.limit].reset_index(drop=True)
+    if args.limit:  # a smoke test: clips from as many dates as possible, so folds exist
+        clips = (clips.assign(_k=clips.groupby("local_day").cumcount()).sort_values(["_k", "clip_id"])
+                 .head(args.limit).drop(columns="_k").sort_values("clip_id").reset_index(drop=True))  # fmt: skip
+    if clips["local_day"].nunique() < 2:
+        raise SystemExit("clips from fewer than two dates: no fold can be held out")
     clips["fold"] = folds_by_date(clips["local_day"].to_numpy(), int(cfg["evaluation"]["folds"]))
     log(
         f"{len(clips):,} clips, {clips['local_day'].nunique()} dates, {clips['camera'].value_counts().to_dict()}"
