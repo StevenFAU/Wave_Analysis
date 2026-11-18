@@ -123,7 +123,8 @@ those days. 7.7 % of the strips lie within 4 % of a class boundary.
 - **The test buoys are mostly open ocean**, so "smooth" has only 94 test
   strips (train 2,410, val 901). Its row of the confusion matrix will be
   noisy; counts are given beside every rate. Cross-validation over the
-  groups would use every buoy as a test buoy once; not built yet.
+  groups uses every buoy as a test buoy once: built 2026-11-18 ("Grouped
+  cross-validation", below).
 - **Time split.** The same 79 buoys, train before 2026-10-24, val, test from
   2026-11-03; the first 72 h after each boundary are left out (4,211 strips).
   The leakage audit finds no train and test strip of the same buoy closer
@@ -664,6 +665,85 @@ camera at one site, 30 one-hour sessions and their mean height, against 79 buoys
 across oceans. (The R² is higher partly because the random test set spans all buoys,
 so it holds more variance.)
 
+## Grouped cross-validation: every buoy a test buoy once (fixed 2026-11-18, before any run on the folds)
+
+Rank 1 of the [architecture review](../../reports/Wave%20camera%20architectures%20beyond%20backbones.md).
+Every bar so far was decided by 12 test buoys, and the 12 validation buoys that chose
+each epoch carry far less swell (share 0.40) than the test buoys (0.67). B1-B3 ended
+with differences of about 0.01 m whose intervals straddle zero. Here each buoy is
+predicted once by a model that saw neither it nor any buoy within 300 km, so each
+comparison rests on all 79 buoys. **The sealed 12-buoy numbers stay the headline;
+the folds are the protocol for choosing and comparing.**
+
+**Package `ndbc_buoycam_heights_v2cv`** (`scripts/buoycam_cv_folds.py`, config
+`ndbc_buoycam_heights_v2cv.yaml`): v2's strips, labels and image bytes (hard links), plus
+`cv_fold`, `split_fold0` .. `split_fold4` in `labels.csv` and `folds.csv`. The station
+split's 43 groups (buoys under 300 km apart, chained) go to five folds balanced by
+strips: largest group first, each to the fold with the fewest strips. The US West Coast
+group (18 buoys with kept strips, 9,440 strips) is fold 0 on its own. Each fold picks its
+epoch on validation groups drawn from its own four training folds: random draws of
+groups up to 15 % of all strips (at least 8 buoys), and of 5,000 draws the one whose
+swell share is closest to that of its training strips (training labels only).
+
+| Fold | Test buoys (groups) | Test strips | Test swell share | Val buoys (strips) | Val swell share | Train strips (swell share) |
+|---|---|---|---|---|---|---|
+| 0 | 18 (1: US West Coast) | 9,440 | 0.79 | 14 (6,567) | 0.57 | 25,084 (0.57) |
+| 1 | 17 (9) | 7,823 | 0.60 | 12 (6,431) | 0.63 | 26,837 (0.63) |
+| 2 | 15 (10) | 8,039 | 0.50 | 13 (6,346) | 0.65 | 26,706 (0.65) |
+| 3 | 15 (12) | 8,063 | 0.53 | 11 (6,199) | 0.65 | 26,829 (0.65) |
+| 4 | 14 (11) | 7,726 | 0.62 | 13 (6,547) | 0.63 | 26,818 (0.63) |
+
+Fold 0 is the hardest: its model never sees the swell-dominated West Coast (share 0.79)
+and trains at 0.57.
+
+**Model:** v2's `MultiViewRegressor` and recipe, plus a **distribution head** beside the
+point head: a mean and a variance of each log height, trained with **beta-NLL, beta = 0.5**
+([Seitzer et al., ICLR 2022](https://arxiv.org/abs/2203.09168)): the Gaussian likelihood
+of each strip weighted by its predicted variance to the power beta, so hard strips are
+not neglected. It is added to the point head's Huber loss with equal weight; the epoch
+is still chosen on the point head's validation RMSE of H_s. No evidential regression.
+Three seeds (0, 1, 2) per fold form the ensemble: the point is the mean of their log
+heights (as v2); the distribution is one log-normal with the seeds' first two moments
+(mean of their means; mean of their variances plus the variance of their means).
+
+**Scores, out of fold** (`scripts/buoycam_oof.py`; 95 % intervals from a bootstrap over
+whole buoys):
+
+- RMSE, bias, R², Pearson and MAE of each height, and every paper's measure
+  (`compare_papers.py`'s rules) on the out-of-fold heights.
+- **CRPS** of the ensemble's distribution: the average error of the whole predicted
+  distribution, in metres. For a single-number forecast it equals the absolute error,
+  so it sits directly beside the MAE; lower is better.
+- **Seed spread:** each seed's own out-of-fold RMSE (its five fold models).
+- **90 % intervals, buoy-level split conformal:** the score of a strip is
+  |log y - mu| / sigma; fold k's threshold is calibrated on the out-of-fold scores of the
+  other four folds' buoys (held out of the models that scored them), every buoy weighted
+  equally ([Lee, Barber & Willett 2023](https://arxiv.org/abs/2306.06342)). That gives
+  90 % on average over new buoys if buoys are exchangeable, and no guarantee at any one
+  buoy. **Coverage** (the share of true values inside the interval; 0.90 is right) is
+  reported over all strips, as a mean over buoys, per buoy and per WMO sea-state class
+  of the true height, with the interval's mean width. Beside it: the head's own
+  mu ± 1.645 sigma (uncalibrated), the same rule calibrated on each fold's validation
+  buoys only, and an unnormalised score (|log y - log point|), which shows what the
+  predicted spread adds.
+- The camera against ERA5 out of fold (ERA5 corrected by a line on each fold's
+  training strips).
+
+**Bar B2-CV.** Two arms, five folds x three seeds each, both with the distribution
+head: **arm A** (ImageNet ConvNeXt-Tiny, full fine-tuning: the config as written) and
+**DINOv3-gentle** (`--backbone timm:convnext_tiny.dinov3_lvd1689m --lp-epochs 2
+--backbone-lr-scale 0.1`). DINOv3-gentle must lower the out-of-fold RMSE of H_s **and**
+of the wind-wave height against arm A, each 95 % interval of the difference below zero
+(paired bootstrap over all 79 buoys, 1,000 draws). Reported beside it, not part of the
+bar: the same bootstrap over the 43 station groups (buoys of one group share weather,
+so that interval is the more cautious one), the CRPS difference, the seed spread, and
+the out-of-fold RMSE at the 12 sealed test buoys.
+
+**Decided in advance.** If the two arms differ by less than the seed spread (the range of
+either arm's three single-seed RMSEs), backbones are settled for the strips and the
+work moves to fusion (stage 2) and new outputs (stage 3). The arm with the lower
+out-of-fold H_s RMSE is the camera model for stages 2 and 3.
+
 ## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
 
 Exploratory, nothing trained (`scripts/buoycam_horizon.py`, questions fixed in its
@@ -732,4 +812,6 @@ without it).
       far worse (+0.111 m). Backbones differ by about 0.01 m once each has its recipe.
 - [x] Protocol check R (2026-11-18): the random split lowers H_s error by 0.02 m and
       leaves Kim's five-class accuracy at 69 %: the gap to Kim is not the split.
+- [ ] Grouped cross-validation (2026-11-18): package `ndbc_buoycam_heights_v2cv`, five
+      folds over the 43 groups; bar B2-CV fixed before any run.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.
