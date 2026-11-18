@@ -131,7 +131,9 @@ train)
     [[ "$gpu" =~ ^[0-9]+$ ]] || { echo "bad GPU '$gpu'" >&2; exit 1; }
     run="buoy-$split-$(date -u +%Y%m%dt%H%M)"
     [[ "$extra" == *"--class-weights none"* ]] && run="$run-unweighted"
+    [[ "$extra" =~ --seed\ ([0-9]+) ]] && run="$run-seed${BASH_REMATCH[1]}"
     [[ "$extra" == *"--limit"* ]] && run="$run-smoke"
+    r "docker ps -a --format '{{.Names}}' | grep -qx wave-$run" && { echo "run $run is already running; wait a minute" >&2; exit 1; }
     # Detached, so it runs on after this connection closes. /scratch (memory)
     # takes the unpacked package; the log goes to $BASE/logs/<run>.log.
     r bash -s <<EOF

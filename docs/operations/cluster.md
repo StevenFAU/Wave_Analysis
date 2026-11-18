@@ -242,7 +242,10 @@ How it is put together:
   handed to the shared login: it finishes in the background.
 - **GPU choice:** `GPU=<n>` picks one; otherwise the least busy GPU with at
   least `MIN_FREE_GB` (40) GB free over a 10 s sample. On 2026-11-17 all eight
-  were 70–99 % busy with 16–117 GB free each.
+  were 70–99 % busy with 16–117 GB free each. Starting several runs at once,
+  give each its own `GPU=<n>`: a run just started does not show in the sample
+  yet. A main run (station split, 10 epochs) used about 40 GB of GPU memory,
+  8 CPU cores and 40 GB of memory, and took 55 minutes on a shared GPU.
 
 ## Kubernetes (FAU's DGX cluster, through Rancher) — not used
 
