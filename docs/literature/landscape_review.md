@@ -413,3 +413,48 @@ UW SWIFT public data listing (processed products, no images).
 during daylight hours". On 2026-09-26 we observed hourly images posted at night
 (for example 41010 at 01:10 UTC, fully dark). The archive keeps them; `illumination`
 annotation handles them.
+
+---
+
+## 9. Update, 2026-11-18: new work, and what our own results add
+
+**Found since 2026-09-26** (all **S**, screened only, unless stated):
+
+- Pobar, Paulin, Ivašić-Kos & Vorkapić (2026), *IEEE Open J. Intell. Transp.
+  Syst.* 7:136–154, doi:10.1109/ojits.2025.3650057. Bridge camera on a liner,
+  Beaufort 1–8, real images mixed with synthetic ones, voting over consecutive
+  frames: 96 % within one class, mean F1 62 %. Labels are observer-based.
+- *Ocean Eng.* (2026), S0029801826003513: shipborne images fused with ship
+  attitude in a spatiotemporal network for H_s. The platform-motion lesson of
+  Yang et al. (2026) on real data.
+- *Chinese J. Ship Res.* (2026): visible and long-wave infrared monocular
+  cameras with an IMU (ResNet-18) for wave direction; infrared keeps sea texture
+  at night; small field dataset.
+- Salin & Vitalsky (2023), arXiv:2303.09967: a brightness-to-height relation
+  from one camera, corrected for surface elevation; proposes a camera on a
+  wave-rider buoy.
+- Kamagata et al. (2026), arXiv:2607.11998, abstract figures: held-out H_s
+  Pearson 0.451, RMSE 0.562 m (V1 earlier: R² 0.107).
+- Radar: SWH-WindNet (*Ocean Eng.* 2026, adds wind to a 3-D CNN), a spectral
+  point transformer (arXiv:2601.04581), and a TU Delft thesis finding that
+  radar H_s models need adapting per vessel.
+- Still **no public benchmark pairing imagery with instrument wave spectra
+  across several sites** (searches of 2026-11-18).
+
+**What our three experiments add.** All three test one approach: a single
+still → H_s (or its class), learned end to end, compared with a hindcast.
+
+| Experiment | Result |
+|---|---|
+| Waimea (shore, 2009–2013, CDIP 106 at 6 km) | Image statistics add 0.012 m RMSE over ERA5 + WIS on held-out days (interval reaching zero), nothing on a held-out year |
+| Currituck (shore, 2022–2026, CDIP 433 at 22 km) | Camera alone below WIS; with the hindcast, +0.04 to +0.06 macro-F1 (intervals above zero) |
+| NDBC buoy cameras (79 buoys, same hull) | Camera alone below ERA5 at unseen buoys; the seed moves test macro-F1 by 0.12 |
+
+This agrees with §1: monocular snapshots carry sea-surface *texture* (whitecaps,
+roughness), not metric height, and wave models already know offshore height
+well. Of the recommendations in §7, items 5 (horizon tilt; whitecaps with the
+buoy's wind), 6 (frozen pretrained backbones), 7 (stereo) and 8 (own site) are
+untried, and so is the camera + model test on the buoy cameras. **Note:** the
+buoy-camera CNN's training augmentation rotates each view by up to ±5°
+(`model.augment.rotate_deg`), which removes the horizon tilt that item 5 would
+use.

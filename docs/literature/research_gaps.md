@@ -75,6 +75,8 @@ so that commits and results can reference them.
 - **Q-M5** Does per-view horizon tilt (six-view plane fit, one sample per hour)
   carry sea-state information, since NDBC directional buoys themselves infer
   waves from hull pitch and roll? (Horizon tracking: Schwendeman & Thomson 2015.)
+  Untested so far; the buoy-camera CNN's ±5° rotation augmentation removes
+  this signal, so a model meant to use it must train without it.
 - **Q-M6** Does predicting the residual (buoy − WIS/WW3/ERA5 nowcast) from
   imagery beat direct regression, and does any camera model beat the nowcast
   at all? *First result (Waimea baselines, 2026-10-08): residual ridge on image
@@ -89,6 +91,16 @@ so that commits and results can reference them.
   not the model, limits accuracy. *First result (Waimea, 2026-10-08): under
   0.01 m RMSE for every baseline that does not use the buoy; the two labels
   differ by 0.05-0.07 m RMSE.*
+
+- **Q-M8** Does the camera see the wind sea but not the swell? Monocular
+  snapshots show whitecaps and short-wave roughness (wind-driven); long swell
+  is nearly invisible in them. If so, camera error should grow with the swell
+  share of H_s and fall with wind speed, and the camera's natural role is the
+  wind-sea part beside a wave model that carries the swell. Answerable from
+  the saved buoy-camera predictions and NDBC's own split of each record into
+  swell and wind-wave height (`swell_height_m`, `wind_wave_height_m` in the
+  package), without training. *(2026-11-18; the buoy-camera model calls the
+  sea one class too calm, which this would explain.)*
 
 ### Generalisation
 - **Q-G1** Can a model trained on one coast transfer to South Florida?
