@@ -57,6 +57,10 @@ separately (`docs/REPRODUCIBILITY.md`).
   on the test buoys (balanced accuracy 0.70 against 0.74, gain −0.03 [−0.15, +0.01];
   macro-F1 0.65 against 0.77, −0.12 [−0.39, −0.03]); it mostly calls the sea one
   class too calm. `docs/experiments/ndbc_buoycam_sea_state.md`.
+- Three more buoy-camera runs in parallel (2026-11-18): a second seed scores macro-F1
+  0.12 lower on the test buoys (−0.142 to −0.079) and leans further calm; without
+  class weights, no difference; the time split beats each buoy's majority class
+  (+0.32 balanced accuracy) but not ERA5 on the 41 % of test strips it covers.
 
 ### Fixed (2026-11-14)
 - `sources.ndbc.buoycam.caption_band_rows`: the caption is a fixed 30-row band in

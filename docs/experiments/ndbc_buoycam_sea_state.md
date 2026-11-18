@@ -212,10 +212,44 @@ balanced accuracy is level within the interval. The camera mostly calls the
 sea one class too calm: 29 % of moderate strips are called slight and 23 % of
 rough ones moderate (ERA5: 92–93 % recall on both). It finds smooth seas more
 often than ERA5 (recall 0.56 against 0.26, 85 strips), at the price of calling
-107 slight strips smooth. The weakest test buoy is 41043 (49 % correct). Not
-yet known: whether the class weights cause the downward lean (the unweighted
-run answers that, as a reported comparison, not a second try at the bar), and
-how much a second seed moves these numbers.
+107 slight strips smooth. The weakest test buoy is 41043 (49 % correct).
+
+### Repeat, unweighted run and time split (2026-11-18)
+
+Three runs side by side on three shared H200s, commit `1be691a`, 40–55 min
+each. Test strips ERA5 covers; gains with 95 % intervals from the paired
+bootstrap of the config (whole buoys, or buoy-days for the time split):
+
+| run | balanced accuracy | macro-F1 | against | bar |
+|---|---|---|---|---|
+| station, weighted, seed 0 (the judged run) | 0.701 | 0.648 | ERA5 0.735 / 0.771 | not met |
+| station, weighted, seed 1 | 0.674 | 0.534 | ERA5 0.735 / 0.771 | — |
+| station, unweighted, seed 0 | 0.694 | 0.667 | ERA5 0.735 / 0.771 | — |
+| time split, weighted (41 % of test strips have ERA5 so far) | 0.691 | 0.696 | ERA5 0.784 / 0.798: −0.09 [−0.15, −0.04] / −0.10 [−0.15, −0.04] | not met |
+| time split, weighted, all test strips | 0.714 | 0.715 | own-buoy majority 0.390 / 0.354: +0.32 [+0.29, +0.36] / +0.36 [+0.32, +0.40] | met |
+
+- **Seed matters more than anything tried.** The same configuration with
+  seed 1 scores macro-F1 0.116 lower on the test buoys ([−0.142, −0.079]),
+  though it scored higher on the validation buoys (0.753 against 0.743). It
+  leans much further toward calm seas: 41 % of test strips called too calm
+  (seed 0: 23 %), 413 strips called smooth of which 80 are. How far the model
+  drifts on unseen buoys is not settled by training; and 12 validation buoys
+  do not pick the epoch that transfers best.
+- **The class weights are not the cause of the lean.** Unweighted minus
+  weighted (seed 0): balanced accuracy −0.003 [−0.022, +0.017], macro-F1
+  +0.022 [−0.009, +0.050]; too-calm share 19 % against 23 %.
+- **Time split:** at buoys it has seen, in later weeks, the camera is far
+  better than each buoy's usual sea state, but below ERA5 on the 41 % of test
+  strips ERA5 covers so far. Item 2 of the bar needs both, so it is not met
+  either way; the full ERA5 comparison follows the download after
+  2026-11-20 (rescore `predictions.csv`, no retraining).
+
+**In short:** from these six views alone, the camera tells sea states apart
+well above chance at buoys it has never seen (balanced accuracy about 0.70
+against 0.25), but less well than ERA5, and its calibration across buoys
+varies from run to run. At Currituck the camera added skill *to* a hindcast
+rather than replacing it; the same test here (camera with ERA5 against ERA5
+alone) would need its own bar, fixed before it is run.
 
 ## Status
 
@@ -230,8 +264,8 @@ how much a second seed moves these numbers.
       [cluster guide](../operations/cluster.md#gpu-server-over-ssh-faus-h200-server-the-labs-way)):
       bar not met (above). The desktop GPU stays unused until its cooling is
       fixed.
-- [ ] Running (started 2026-11-18 00:06 UTC, one GPU each): the unweighted
-      station run, the time split, and the station run with seed 1.
+- [x] The unweighted station run, the time split and the station run with
+      seed 1 (2026-11-18, three GPUs at once): above.
 - [ ] Time split against ERA5 on all test days: download ERA5 again after
       2026-11-20 and rescore the saved predictions.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.
