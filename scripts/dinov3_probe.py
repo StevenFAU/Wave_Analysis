@@ -134,6 +134,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--steps", help="comma-separated steps to probe (default: all)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--save-timm", action="store_true")
+    ap.add_argument(
+        "--save-features", action="store_true", help="each source's strip features (.npy)"
+    )
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--num-workers", type=int, default=8)
     ap.add_argument("--limit", type=int, help="strips per partition (smoke test)")
@@ -189,6 +192,10 @@ def main(argv: list[str] | None = None) -> int:
         net = backbone(state, device)
         feats = {p: strip_features(net, loader(t), device) for p, t in parts.items()}
         del net
+        if args.save_features:
+            for p, f in feats.items():
+                np.save(out / f"features_{name}_{p}.npy", f.astype(np.float32))
+                parts[p][["sample_id"]].to_csv(out / f"features_{p}_strips.csv", index=False)
         row: dict[str, float | str] = {
             "weights": name, "step": 0 if name == "public" else int(name),
             "feature_spread": float(feats[VAL].std(axis=0).mean()),
