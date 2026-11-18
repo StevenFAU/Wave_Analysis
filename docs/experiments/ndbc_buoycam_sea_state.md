@@ -568,6 +568,36 @@ height against arm A (the best model so far), each interval below zero (paired
 bootstrap over the 12 test buoys). Reported beside it: ImageNet-gentle minus arm A (the
 recipe alone) and DINOv3-gentle minus ImageNet-gentle (the weights at one recipe).
 
+**Result (2026-11-18): not met, by a hair; DINOv3-gentle is the best model so far.**
+Three seeds per arm (`0c09717`), averaged, 12 unseen test buoys:
+
+| | Arm A (ImageNet, full fine-tuning) | ImageNet-gentle | DINOv3-gentle |
+|---|---|---|---|
+| H_s RMSE | 0.450 m | 0.524 m | **0.440 m** [0.381, 0.501] |
+| H_s R², Pearson | 0.81, 0.915 | 0.75, 0.900 | **0.82, 0.921** |
+| Wind-wave RMSE | 0.219 m | 0.225 m | **0.214 m** |
+| Swell RMSE (R²) | 0.597 m (0.54) | 0.726 m (0.32) | **0.572 m (0.58)** |
+| Calm vs rough (Choi) | 99.1 % | 98.2 % | 99.2 % |
+| Kim's five classes | 69.4 % | 66.4 % | 70.2 % [62.7, 78.7] |
+| WMO classes, balanced accuracy | 0.62 | 0.60 | 0.72 |
+| Validation H_s RMSE | 0.470 m | 0.439 m | 0.440 m |
+
+- **Bar B2:** DINOv3-gentle minus arm A, H_s −0.010 m [−0.024, +0.001], wind-wave
+  −0.004 m [−0.010, +0.001]. Both intervals reach zero: not met.
+- **The recipe alone** (ImageNet-gentle minus arm A): H_s +0.075 m [+0.052, +0.095].
+  ImageNet features have to be retrained to see waves.
+- **The weights at one recipe** (DINOv3-gentle minus ImageNet-gentle): H_s −0.085 m
+  [−0.107, −0.061], wind-wave −0.011 m [−0.016, −0.005].
+- **Reading.** Weights and recipe interact. DINOv3's features serve almost as they are
+  and full fine-tuning (B1) damages them; ImageNet's need full fine-tuning. Each with
+  its own recipe, the two are level within about 0.01 m: on these strips the backbone
+  is worth about as much as the review found in published wave studies (0.1-2 points).
+  DINOv3-gentle is the best point estimate on every measure, and on Kim's classes the
+  upper end of its interval now passes Kim's 78.3 %. The validation buoys do not rank
+  the arms as the test buoys do (ImageNet-gentle is best on validation and worst on
+  test), the low-swell validation set seen since v0; choices made on them carry that
+  risk.
+
 ### Bar B3: the backbone the review recommends (fixed 2026-11-18, before B2 was scored)
 
 B1 and B2 swap the weights of one small CNN. The review's first choice for the strips
@@ -657,5 +687,8 @@ without it).
       by 30 % and adds nothing to the total height.
 - [x] Bar B1 (2026-11-18): not met, DINOv3 ConvNeXt-Tiny worse than ImageNet
       with arm A's recipe (H_s +0.039 m, wind-wave +0.025 m).
-- [ ] Bar B2 (gentle recipe, ImageNet and DINOv3, three seeds each): running.
+- [x] Bar B2 (2026-11-18): not met (DINOv3-gentle −0.010 m [−0.024, +0.001] against
+      arm A); DINOv3-gentle is the best model so far (H_s 0.440 m, R² 0.82).
+- [ ] Bar B3 (DINOv3 ViT-B/16, frozen and gentle) and protocol check R (random split):
+      running.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.
