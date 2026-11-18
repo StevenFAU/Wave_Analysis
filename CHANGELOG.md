@@ -85,6 +85,8 @@ separately (`docs/REPRODUCIBILITY.md`).
 - WebCOOS video: `webcoos historical --product video` (the archive's mp4 tree) and
   `scripts/webcoos_video_sample.sh` (a test set of rough and typical days, then six sample
   weeks, one clip per 30-min CDIP record in daylight); CDIP 243 for Jennette.
+- `scripts/buoycam_combined.py` (Test 3, fixed before v2 was scored): camera + ERA5 + the
+  buoy's wind against ERA5 + wind, ridge fitted on the val buoys.
 - `scripts/compare_papers.py`: every published measure (Kamagata 2026 RMSE/R²/Pearson,
   Choi 2020 calm/rough, Kim 2023 bins, WMO classes) and bars V2-1/V2-2 from the v2 runs.
 - `docs/literature/benchmark_targets.md`: every comparable published result (camera,

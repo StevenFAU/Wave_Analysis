@@ -455,6 +455,18 @@ our 95 % intervals over test buoys, not tested against):
   height. Expected from v0 and v1: the camera wins the first and not the
   second.
 
+### Test 3: the best estimate from everything at the buoy (fixed 2026-11-18, before v2 was scored)
+
+`scripts/buoycam_combined.py`: a ridge regression (standardised features, alpha 1.0)
+of log H_s and of log wind-wave height on the camera's three v2 heights (the arm with
+the lower **validation** RMSE of H_s), ERA5's total, wind-sea and swell heights at the
+buoy, and the buoy's own wind speed and gust; fitted on the val buoys, scored once on
+the test buoys. **Bar:** camera + ERA5 + wind must beat **ERA5 + wind** (the same ridge
+without the camera) in RMSE of H_s **and** of the wind-wave height, each interval of
+the difference below zero (paired bootstrap over test buoys). It asks whether the
+camera adds anything that an anemometer and a wave model at the same buoy do not.
+Reported beside it: ERA5 alone, camera + wind, the camera alone.
+
 ## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
 
 Exploratory, nothing trained (`scripts/buoycam_horizon.py`, questions fixed in its
