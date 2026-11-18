@@ -568,6 +568,19 @@ height against arm A (the best model so far), each interval below zero (paired
 bootstrap over the 12 test buoys). Reported beside it: ImageNet-gentle minus arm A (the
 recipe alone) and DINOv3-gentle minus ImageNet-gentle (the weights at one recipe).
 
+### Protocol check R: the published split on our data (fixed 2026-11-18, before any run on it)
+
+Not a bar and not our result. Choi 2020 split examples at random with the same buoys
+and days on both sides; Kim 2023 split frames at random inside 30 one-hour sessions.
+Our numbers hold out whole buoys 300 km away. To show how much the split itself is
+worth, v2 arm A's recipe (images only, ImageNet ConvNeXt-Tiny, three seeds) is trained
+once more on a **random split of the same 41,091 strips** (80/10/10, seed 0; package
+`ndbc_buoycam_heights_v2r` = v2 plus a `split_random` column, built by
+`scripts/buoycam_random_split.py`; config `ndbc_buoycam_heights_v2r.yaml`), so
+neighbouring hours of one buoy and day sit in training and test, as in those papers.
+Every paper's measure is reported for it beside the unseen-buoy result. The headline
+stays the unseen-buoy number; the difference is what the random protocol adds.
+
 ## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
 
 Exploratory, nothing trained (`scripts/buoycam_horizon.py`, questions fixed in its
