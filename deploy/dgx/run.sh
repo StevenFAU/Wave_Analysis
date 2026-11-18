@@ -152,7 +152,7 @@ train)
     shift
     extra="$*"
     [[ "$split" =~ ^[a-z]+$ ]] || { echo "bad split '$split'" >&2; exit 1; }
-    [[ "$extra" =~ ^[A-Za-z0-9\ ._=/-]*$ ]] || { echo "options may hold only letters, digits, spaces and ._=/-" >&2; exit 1; }
+    [[ "$extra" =~ ^[A-Za-z0-9\ ._=/:-]*$ ]] || { echo "options may hold only letters, digits, spaces and ._=/:-" >&2; exit 1; }
     r test -f "$BASE/repo/$COMMIT/GIT_COMMIT" || { echo "commit $COMMIT is not on the server: run.sh push" >&2; exit 1; }
     r test -f "$BASE/envs/$LOCK/pyvenv.cfg" || { echo "no environment for this uv.lock: run.sh setup" >&2; exit 1; }
     if [[ -n "${GPU:-}" ]]; then
