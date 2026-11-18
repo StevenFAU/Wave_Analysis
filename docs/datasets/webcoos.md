@@ -570,6 +570,18 @@ similar energy here.
 
 ## Video archive (pilot, not yet collected)
 
+**Inventory, 2026-11-18** (API listing, no bulk download; one recent clip
+probed): each Yin et al. camera has a `<camera>-video-archive-s3` service of
+public MP4 clips, one every ~10 min in daylight (64-277 a day per camera),
+back to at least 2024-03 (oakisland_west, currituck_hampton_inn,
+jennette_south; oakisland_east had none on 2024-03-01). Oak Island clips are
+~92 MB; a currituck_hampton_inn clip of 2026-11-14 15:55Z was H.264,
+2688 × 1520, 20 fps, 260 s, 0.94 Mbit/s, 31 MB (`ffprobe`). The API gives no
+duration. Oak Island video overlaps CDIP 200's record (to 2026-07-20) for
+more than two years: the views Kamagata et al. (2026) tested on, with an
+instrument. A sample request (four cameras, one clip per 30-min CDIP record in
+daylight, six sample weeks, ~200 GB) is drafted for WebCOOS.
+
 Every Yin et al. (2025) camera has a `video-archive` product next to its
 stills (`/assets/`). Video is what the stills cannot give:
 

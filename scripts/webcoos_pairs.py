@@ -73,6 +73,21 @@ PAIRINGS: dict[str, dict[str, object]] = {
         "reference_depth_m": 18.0,
         "timezone": "America/New_York",
     },
+    # Oak Island, NC: the two views Kamagata et al. (2026) tested on (via Yin
+    # et al. 2025). CDIP 200 (Wilmington Harbor, 41108) is 28.9 km away in
+    # 12.8-13.4 m of water (metaWaterDepth); its historic record ends 2026-07-20.
+    "oakisland_east": {
+        "site_id": "webcoos_oak_island",
+        "cdip": "200",
+        "reference_depth_m": 12.8,
+        "timezone": "America/New_York",
+    },
+    "oakisland_west": {
+        "site_id": "webcoos_oak_island",
+        "cdip": "200",
+        "reference_depth_m": 12.8,
+        "timezone": "America/New_York",
+    },
 }
 CONFIG: dict[str, object] = {
     "window": "3h",

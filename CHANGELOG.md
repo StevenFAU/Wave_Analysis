@@ -77,6 +77,14 @@ separately (`docs/REPRODUCIBILITY.md`).
   (does the motion help?) and V2-2 (camera vs ERA5 in metres) and the published reference
   points (Kamagata 2026, Choi 2020, Kim 2023, Yang 2026) fixed before training.
 - `deploy/dgx/run.sh train`: `TRAIN_SCRIPT` picks the trainer, `TAG` names the run.
+- `scripts/compare_papers.py`: every published measure (Kamagata 2026 RMSE/R²/Pearson,
+  Choi 2020 calm/rough, Kim 2023 bins, WMO classes) and bars V2-1/V2-2 from the v2 runs.
+- `docs/literature/benchmark_targets.md`: every comparable published result (camera,
+  radar, SAR) with its labels and split, the test of ours that matches it, and the models
+  the sources suggest.
+- Oak Island (Kamagata 2026's test views): CDIP 200 downloaded and standardized (76,963
+  records, 2013 to 2026-07-20), both cameras in `webcoos_pairs.py`; the WebCOOS video
+  archive inventoried (clips back to 2024-03, 20 fps at Currituck).
 
 ### Added (2026-11-18)
 - Buoy-camera v1, the camera for the wind sea: `ndbc_buoycam_windsea_v1` labels each strip
