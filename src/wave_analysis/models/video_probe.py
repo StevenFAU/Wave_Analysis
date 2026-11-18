@@ -8,6 +8,7 @@ and an MLP on mean tokens). Choices and reasons: ``docs/experiments/webcoos_vide
 
 from __future__ import annotations
 
+import copy
 import hashlib
 
 import numpy as np
@@ -181,3 +182,109 @@ class RecordPooler(nn.Module):
         z = self.block(z, src_key_padding_mask=pad)
         o, _ = self.cross(self.query.expand(b, -1, -1), z, z, key_padding_mask=pad)
         return self.head(self.norm(o[:, 0]))
+
+
+class StackedProbes:
+    """``n`` independent copies of a probe trained in lock step as one stacked model.
+
+    Equivalent to training each copy alone with ``torch.optim.AdamW`` and
+    ``OneCycleLR`` (same initialisation, batches, learning rates, momenta, decoupled weight
+    decay and dropout rate), but every step runs the copies that have a batch through one
+    vmapped forward and backward (``torch.func``), so a shared GPU sees one set of kernels
+    instead of ``n``. A copy without a batch at a step is left untouched (no moment,
+    step-count or schedule update). Each copy's learning rate and beta1 come from its own
+    real ``OneCycleLR`` (on a dummy optimiser), so the schedule is PyTorch's exactly.
+    """
+
+    def __init__(self, models: list[nn.Module], lr: float, weight_decay: float, total_steps: list[int],
+                 pct_start: float = 0.1, betas: tuple[float, float] = (0.9, 0.999), eps: float = 1e-8) -> None:  # fmt: skip
+        self.n = len(models)
+        self.base = copy.deepcopy(models[0]).to("meta")
+        p, b = torch.func.stack_module_state(models)
+        self.params = {k: v.detach().clone().requires_grad_(True) for k, v in p.items()}
+        self.buffers = {k: v.detach().clone() for k, v in b.items()}
+        self.m = {k: torch.zeros_like(v) for k, v in self.params.items()}
+        self.v = {k: torch.zeros_like(v) for k, v in self.params.items()}
+        self.t = np.zeros(self.n, dtype=np.int64)
+        self.wd, self.b2, self.eps = float(weight_decay), float(betas[1]), float(eps)
+        self._sched = []
+        for tot in total_steps:
+            dummy = torch.optim.AdamW([torch.zeros(1, requires_grad=True)], lr=lr, betas=betas,
+                                      weight_decay=weight_decay)  # fmt: skip
+            self._sched.append((dummy, torch.optim.lr_scheduler.OneCycleLR(
+                dummy, max_lr=lr, total_steps=int(tot), pct_start=pct_start)))  # fmt: skip
+
+    def _f(self, p: dict, b: dict, *x: torch.Tensor) -> torch.Tensor:
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        fast = torch.backends.mha.get_fastpath_enabled()
+        torch.backends.mha.set_fastpath_enabled(False)  # the fused eval path has no vmap rule
+        try:
+            with sdpa_kernel(SDPBackend.MATH):  # composite: vmap batches it rather than looping
+                return torch.func.functional_call(self.base, (p, b), x)
+        finally:
+            torch.backends.mha.set_fastpath_enabled(fast)
+
+    def _sub(self, idx: torch.Tensor) -> tuple[dict, dict]:
+        return {k: v[idx] for k, v in self.params.items()}, {
+            k: v[idx] for k, v in self.buffers.items()
+        }
+
+    def step(self, idx: list[int], x: torch.Tensor, y: torch.Tensor, *extra: torch.Tensor) -> None:
+        """One AdamW step of copies ``idx`` on batches ``x`` [len(idx), B, ...], targets ``y``.
+
+        ``y`` is [len(idx), B, n_out]; the loss is the Huber loss averaged over each batch,
+        as ``smooth_l1_loss``.
+        """
+        dev = next(iter(self.params.values())).device
+        ii = torch.as_tensor(idx, device=dev)
+        self.base.train()
+        p, b = self._sub(ii)
+        pred = torch.vmap(self._f, in_dims=(0, 0, 0, *([0] * len(extra))), randomness="different")(
+            p, b, x, *extra
+        )
+        loss = nn.functional.smooth_l1_loss(pred, y, reduction="none").flatten(1).mean(1).sum()
+        grads = torch.autograd.grad(loss, list(self.params.values()))
+        lr = torch.tensor(
+            [self._sched[i][0].param_groups[0]["lr"] for i in idx], device=dev, dtype=torch.float32
+        )
+        b1 = torch.tensor(
+            [self._sched[i][0].param_groups[0]["betas"][0] for i in idx],
+            device=dev,
+            dtype=torch.float32,
+        )
+        t = torch.as_tensor(self.t[idx] + 1, device=dev, dtype=torch.float32)
+        bc1, bc2 = 1 - b1**t, 1 - self.b2**t
+        with torch.no_grad():
+            for (k, prm), g in zip(self.params.items(), grads, strict=True):
+                shape = (-1,) + (1,) * (prm.dim() - 1)
+                lr_, b1_, bc1_, bc2_ = (z.view(shape) for z in (lr, b1, bc1, bc2))
+                g = g[ii]
+                m = self.m[k][ii].lerp_(g, 1 - b1_)
+                v = self.v[k][ii].mul_(self.b2).addcmul_(g, g, value=1 - self.b2)
+                q = prm[ii].mul_(1 - lr_ * self.wd)
+                q -= (lr_ / bc1_) * m / (v.sqrt() / bc2_.sqrt() + self.eps)
+                prm[ii], self.m[k][ii], self.v[k][ii] = q, m, v
+        self.t[idx] += 1
+        for i in idx:
+            self._sched[i][0].step()  # the dummy (no gradients: a no-op), so the schedule may step
+            self._sched[i][1].step()
+
+    @torch.no_grad()
+    def predict(self, idx: list[int], x: torch.Tensor, *extra: torch.Tensor) -> torch.Tensor:
+        """Outputs of copies ``idx`` (eval mode) on the same inputs ``x`` [B, ...]: [len(idx), B, n_out]."""
+        dev = next(iter(self.params.values())).device
+        self.base.eval()
+        p, b = self._sub(torch.as_tensor(idx, device=dev))
+        nones = (None,) * (1 + len(extra))
+        return torch.vmap(self._f, in_dims=(0, 0, *nones))(p, b, x, *extra)
+
+    def state(self, i: int) -> dict[str, torch.Tensor]:
+        """Copy ``i``'s parameters (a copy)."""
+        return {k: v[i].detach().clone() for k, v in self.params.items()}
+
+    def load(self, i: int, state: dict[str, torch.Tensor]) -> None:
+        """Set copy ``i``'s parameters."""
+        with torch.no_grad():
+            for k, v in self.params.items():
+                v[i] = state[k]

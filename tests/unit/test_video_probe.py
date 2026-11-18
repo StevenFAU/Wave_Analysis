@@ -11,6 +11,7 @@ from wave_analysis.models.video_probe import (  # noqa: E402
     AttentiveProbe,
     MeanProbe,
     RecordPooler,
+    StackedProbes,
     arm_order,
     centred_windows,
     energy_mean,
@@ -97,3 +98,45 @@ def test_record_pooler_ignores_padding() -> None:
     x2[0, 5:] = 99.0  # padded windows must not matter
     assert a.shape == (1, 2)
     assert torch.allclose(a, head(x2, mask), atol=1e-5)
+
+
+def test_stacked_probes_match_separate_training() -> None:
+    """Three probes trained in lock step equal three trained alone (AdamW + OneCycleLR)."""
+    import copy
+
+    def make(seed: int) -> AttentiveProbe:
+        torch.manual_seed(seed)
+        return AttentiveProbe(4, 16, 2 * 8, 2, d=16, heads=2, dropout=0.0)
+
+    gen = torch.Generator().manual_seed(1)
+    x = torch.randn(40, 2, 4, 8, 16, generator=gen)
+    y = torch.randn(40, 2, generator=gen)
+    # copy 0 steps every time, copy 1 skips steps 1 and 3, copy 2 sees a different batch size
+    plan = [([0, 1, 2], 6), ([0, 2], 6), ([0, 1, 2], 6), ([0], 6), ([1, 2], 6), ([0, 1, 2], 6)]
+    totals = [sum(1 for ids, _ in plan if c in ids) for c in range(3)]
+    alone = [make(s) for s in (0, 1, 2)]
+    stacked = StackedProbes([copy.deepcopy(m) for m in alone], lr=3e-3, weight_decay=0.05, total_steps=totals)
+    opts = [torch.optim.AdamW(m.parameters(), lr=3e-3, weight_decay=0.05) for m in alone]
+    scheds = [torch.optim.lr_scheduler.OneCycleLR(o, max_lr=3e-3, total_steps=t, pct_start=0.1)
+              for o, t in zip(opts, totals, strict=True)]  # fmt: skip
+    for k, (ids, bs) in enumerate(plan):
+        rows = [torch.arange(c * 5 + k, c * 5 + k + bs) % 40 for c in ids]
+        for c, r in zip(ids, rows, strict=True):
+            alone[c].train()
+            loss = torch.nn.functional.smooth_l1_loss(alone[c](x[r]), y[r])
+            opts[c].zero_grad()
+            loss.backward()
+            opts[c].step()
+            scheds[c].step()
+        stacked.step(ids, torch.stack([x[r] for r in rows]), torch.stack([y[r] for r in rows]))
+    for c in range(3):
+        mine = stacked.state(c)
+        for k, v in alone[c].state_dict().items():
+            a, b = mine[k], v
+            if k.endswith("in_proj_bias"):  # the key bias has no gradient (softmax ignores a shift):
+                a, b = torch.cat([a[:16], a[32:]]), torch.cat([b[:16], b[32:]])  # Adam steps on rounding
+            assert torch.allclose(a, b, atol=1e-6), (c, k)
+        alone[c].eval()
+    out = stacked.predict([0, 1, 2], x[:5])
+    for c in range(3):
+        assert torch.allclose(out[c], alone[c](x[:5]), atol=1e-5)

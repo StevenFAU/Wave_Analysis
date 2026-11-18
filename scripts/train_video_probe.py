@@ -66,6 +66,7 @@ from wave_analysis.models.video_probe import (
     AttentiveProbe,
     MeanProbe,
     RecordPooler,
+    StackedProbes,
     arm_order,
     centred_windows,
     energy_mean,
@@ -519,13 +520,6 @@ class WindowRows(torch.utils.data.Dataset):
         return torch.from_numpy(out), torch.as_tensor(ids)
 
 
-def _batches(
-    rows: WindowRows, ids_list: list[np.ndarray], workers: int
-) -> torch.utils.data.DataLoader:
-    return torch.utils.data.DataLoader(rows, batch_size=None, sampler=ids_list, num_workers=workers,
-                                       pin_memory=True, persistent_workers=False)  # fmt: skip
-
-
 def _val_split(
     fold_days: np.ndarray, trall: np.ndarray, f: int, seed: int
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -538,11 +532,32 @@ def _val_split(
     return perm[: max(1, len(perm) // 7)], perm[max(1, len(perm) // 7) :]
 
 
+class _Epoch(torch.utils.data.Sampler):
+    """A sampler whose batches are set before each pass, so one loader's workers persist."""
+
+    def __init__(self) -> None:
+        self.batches: list[np.ndarray] = []
+
+    def __iter__(self):  # type: ignore[no-untyped-def]
+        return iter(self.batches)
+
+    def __len__(self) -> int:
+        return len(self.batches)
+
+
+def _loader(rows: WindowRows, sampler: _Epoch, workers: int) -> torch.utils.data.DataLoader:
+    return torch.utils.data.DataLoader(rows, batch_size=None, sampler=sampler, num_workers=workers,
+                                       pin_memory=True, persistent_workers=workers > 0)  # fmt: skip
+
+
 def window_probes_oof(rows: WindowRows, clip_of: np.ndarray, clips: pd.DataFrame, cfg: dict,
                       dev: torch.device, workers: int, name: str) -> np.ndarray:  # fmt: skip
     """Out-of-fold predictions (natural units) for every window, seeds averaged in log space.
 
-    The 25 (fold, seed) attentive probes train side by side on one stream of read batches.
+    The 25 (fold, seed) attentive probes train in lock step (``StackedProbes``) on one
+    stream of read batches: each takes its own training windows from every batch, in its
+    own order, and steps whenever it holds a full mini-batch; the epoch's remainder is its
+    last, partial mini-batch. Matmuls in TF32.
     """
     hp = cfg["heads"]
     bs, epochs = int(hp["batch_size"]), int(hp["epochs"])
@@ -551,101 +566,135 @@ def window_probes_oof(rows: WindowRows, clip_of: np.ndarray, clips: pd.DataFrame
     n_w = len(clip_of)
     p, n_layers, t, dim = rows.shape
     ywin = torch.as_tensor(ylog[clip_of], dtype=torch.float32, device=dev)
-    heads = []
+    models, info = [], []
     for f in sorted(set(fold)):
         trall = np.flatnonzero(fold != f)
         mu, sd = ylog[trall].mean(0), ylog[trall].std(0) + 1e-6
         for seed in hp["seeds"]:
             va_c, tr_c = _val_split(days, trall, f, int(seed))
-            tr = np.isin(clip_of, tr_c)
             torch.manual_seed(int(seed))
-            m = AttentiveProbe(n_layers, dim, p * t, ylog.shape[1], d=int(hp["d"]), heads=int(hp["heads"]),
-                               dropout=float(hp["dropout"])).to(dev)  # fmt: skip
-            opt = torch.optim.AdamW(
-                m.parameters(), lr=float(hp["lr"]), weight_decay=float(hp["weight_decay"])
-            )
-            steps = epochs * max(1, int(np.ceil(tr.sum() / bs)))
-            sched = torch.optim.lr_scheduler.OneCycleLR(
-                opt, max_lr=float(hp["lr"]), total_steps=steps, pct_start=0.1
-            )
-            heads.append({"f": f, "seed": int(seed), "m": m, "opt": opt, "sched": sched,
-                          "mu": torch.as_tensor(mu, dtype=torch.float32, device=dev),
-                          "sd": torch.as_tensor(sd, dtype=torch.float32, device=dev),
-                          "tr": torch.as_tensor(tr, device=dev), "va": torch.as_tensor(np.isin(clip_of, va_c), device=dev),
-                          "rng": np.random.default_rng(int(seed)), "px": None, "py": None,
-                          "best": np.inf, "state": copy.deepcopy(m.state_dict())})  # fmt: skip
-
-    def step(h: dict, x: torch.Tensor, y: torch.Tensor) -> None:
-        h["m"].train()
-        loss = nn.functional.smooth_l1_loss(h["m"](x), y)
-        h["opt"].zero_grad(set_to_none=True)
-        loss.backward()
-        h["opt"].step()
-        h["sched"].step()
-
-    train_ids = np.flatnonzero(torch.stack([h["tr"] for h in heads]).any(0).cpu().numpy())
-    val_ids = np.flatnonzero(torch.stack([h["va"] for h in heads]).any(0).cpu().numpy())
-    val_batches = [val_ids[s : s + READ_BATCH] for s in range(0, len(val_ids), READ_BATCH)]
+            models.append(AttentiveProbe(n_layers, dim, p * t, ylog.shape[1], d=int(hp["d"]), heads=int(hp["heads"]),
+                                         dropout=float(hp["dropout"])).to(dev))  # fmt: skip
+            tr = np.isin(clip_of, tr_c)
+            info.append({"f": f, "seed": int(seed), "mu": mu, "sd": sd, "tr": tr, "va": np.isin(clip_of, va_c),
+                         "rng": np.random.default_rng(int(seed)), "best": np.inf,
+                         "steps": epochs * max(1, int(np.ceil(tr.sum() / bs)))})  # fmt: skip
+    n_h = len(info)
+    probes = StackedProbes(models, lr=float(hp["lr"]), weight_decay=float(hp["weight_decay"]),
+                           total_steps=[h["steps"] for h in info])  # fmt: skip
+    del models
+    best = [probes.state(k) for k in range(n_h)]
+    mu_t = torch.as_tensor(np.stack([h["mu"] for h in info]), dtype=torch.float32, device=dev)[
+        :, None
+    ]  # [H, 1, n]
+    sd_t = torch.as_tensor(np.stack([h["sd"] for h in info]), dtype=torch.float32, device=dev)[
+        :, None
+    ]
+    tr_m = np.stack([h["tr"] for h in info])  # [H, windows]
+    va_m = np.stack([h["va"] for h in info])
+    train_ids, val_ids = np.flatnonzero(tr_m.any(0)), np.flatnonzero(va_m.any(0))
+    smp_tr, smp_va = _Epoch(), _Epoch()
+    smp_va.batches = [val_ids[s : s + READ_BATCH] for s in range(0, len(val_ids), READ_BATCH)]
+    ld_tr, ld_va = _loader(rows, smp_tr, min(workers, 16)), _loader(rows, smp_va, min(workers, 8))
     log(
-        f"{name}: {len(heads)} probes on {n_w:,} windows of {len(clips):,} clips; {len(train_ids):,} train in some fold"
+        f"{name}: {n_h} probes on {n_w:,} windows of {len(clips):,} clips; {len(train_ids):,} train in some fold"
     )
-    t0 = time.time()
+    tf32 = torch.backends.cuda.matmul.allow_tf32
+    torch.backends.cuda.matmul.allow_tf32 = True
+    t0, n_steps = time.time(), 0
     for ep in range(epochs):
         perm = np.random.default_rng(10_000 + ep).permutation(train_ids)
-        batches = [np.sort(perm[s : s + READ_BATCH]) for s in range(0, len(perm), READ_BATCH)]
-        for xb, ids in _batches(rows, batches, workers):
-            xb, ids = xb.to(dev, non_blocking=True), ids.to(dev, non_blocking=True)
-            for h in heads:
-                sel = torch.nonzero(h["tr"][ids]).squeeze(1)
-                if not len(sel):
-                    continue
-                sel = sel[torch.as_tensor(h["rng"].permutation(len(sel)), device=dev)]
-                x, y = xb[sel], (ywin[ids[sel]] - h["mu"]) / h["sd"]
-                if h["px"] is not None:
-                    x, y = torch.cat([h["px"], x]), torch.cat([h["py"], y])
-                while len(x) >= bs:
-                    step(h, x[:bs], y[:bs])
-                    x, y = x[bs:], y[bs:]
-                h["px"], h["py"] = (x, y) if len(x) else (None, None)
-        for h in heads:  # the epoch's last, partial mini-batch
-            if h["px"] is not None:
-                step(h, h["px"], h["py"])
-                h["px"] = h["py"] = None
-        sse = [0.0] * len(heads)
-        cnt = [0] * len(heads)
-        with torch.no_grad():
-            for xb, ids in _batches(rows, val_batches, workers):
-                xb, ids = xb.to(dev, non_blocking=True), ids.to(dev, non_blocking=True)
-                for k, h in enumerate(heads):
-                    sel = torch.nonzero(h["va"][ids]).squeeze(1)
-                    if len(sel):
-                        h["m"].eval()
-                        y = (ywin[ids[sel]] - h["mu"]) / h["sd"]
-                        sse[k] += float(((h["m"](xb[sel]) - y) ** 2).sum())
-                        cnt[k] += y.numel()
-        for k, h in enumerate(heads):
-            v = sse[k] / max(1, cnt[k])
-            if v < h["best"]:
-                h["best"], h["state"] = v, copy.deepcopy(h["m"].state_dict())
+        smp_tr.batches = [
+            np.sort(perm[s : s + READ_BATCH]) for s in range(0, len(perm), READ_BATCH)
+        ]
+        used = np.zeros(n_h, dtype=np.int64)  # per probe: training windows stepped on
+        carry_x: list[torch.Tensor | None] = [None] * n_h  # rows of a mini-batch not yet full
+        carry_y: list[torch.Tensor | None] = [None] * n_h
+        for xb, ids in ld_tr:
+            ids_np = ids.numpy()
+            xb, yb = xb.to(dev, non_blocking=True), ywin[ids.to(dev, non_blocking=True)]
+            seq, n_c = [], np.zeros(n_h, dtype=np.int64)
+            for k, h in enumerate(info):
+                sel = np.flatnonzero(h["tr"][ids_np])
+                seq.append(torch.as_tensor(sel[h["rng"].permutation(len(sel))], device=dev))
+                n_c[k] = 0 if carry_x[k] is None else len(carry_x[k])
+            n_full = (n_c + np.array([len(s) for s in seq])) // bs
+            for j in range(int(n_full.max())):
+                ready = np.flatnonzero(n_full > j)
+                xs, ys = [], []
+                for k in ready:
+                    a, b = j * bs - n_c[k], (j + 1) * bs - n_c[k]  # positions in this batch's rows
+                    if a < 0:
+                        xs.append(torch.cat([carry_x[k], xb[seq[k][:b]]]))
+                        ys.append(torch.cat([carry_y[k], yb[seq[k][:b]]]))
+                    else:
+                        xs.append(xb[seq[k][a:b]])
+                        ys.append(yb[seq[k][a:b]])
+                ri = torch.as_tensor(ready, device=dev)
+                probes.step(
+                    ready.tolist(), torch.stack(xs), (torch.stack(ys) - mu_t[ri]) / sd_t[ri]
+                )
+                used[ready] += bs
+                n_steps += 1
+            for k in range(n_h):
+                start = n_full[k] * bs - n_c[k]
+                if start < 0:  # no full mini-batch: the carry grows
+                    carry_x[k] = (
+                        xb[seq[k]] if carry_x[k] is None else torch.cat([carry_x[k], xb[seq[k]]])
+                    )
+                    carry_y[k] = (
+                        yb[seq[k]] if carry_y[k] is None else torch.cat([carry_y[k], yb[seq[k]]])
+                    )
+                else:
+                    rest = seq[k][start:]
+                    carry_x[k], carry_y[k] = (xb[rest], yb[rest]) if len(rest) else (None, None)
+        for k in range(n_h):  # the epoch's last, partial mini-batch of each probe
+            if carry_x[k] is not None and len(carry_x[k]):
+                probes.step([k], carry_x[k][None], ((carry_y[k] - mu_t[k]) / sd_t[k])[None])
+                used[k] += len(carry_x[k])
+        if not (used == tr_m.sum(1)).all():  # every probe saw each of its training windows once
+            raise RuntimeError(f"{name}: windows used {used} != training windows {tr_m.sum(1)}")
+        sse = torch.zeros(n_h, device=dev)
+        cnt = np.zeros(n_h)
+        for xb, ids in ld_va:
+            ids_np = ids.numpy()
+            mk = va_m[:, ids_np]  # [H, R]
+            if not mk.any():
+                continue
+            out = probes.predict(list(range(n_h)), xb.to(dev, non_blocking=True))  # [H, R, n]
+            y = (ywin[ids.to(dev)][None] - mu_t) / sd_t
+            m_t = torch.as_tensor(mk, device=dev, dtype=torch.float32)[..., None]
+            sse += (((out - y) ** 2) * m_t).sum(dim=(1, 2))
+            cnt += mk.sum(1) * ylog.shape[1]
+        v = sse.cpu().numpy() / np.maximum(cnt, 1)
+        for k, h in enumerate(info):
+            if v[k] < h["best"]:
+                h["best"], best[k] = v[k], probes.state(k)
         if ep % 10 == 0 or ep == epochs - 1:
-            log(f"  {name} epoch {ep + 1}/{epochs}: validation MSE {np.mean(sse) / max(1, np.mean(cnt)):.3f} "
-                f"(mean of probes), {time.time() - t0:.0f} s")  # fmt: skip
+            log(f"  {name} epoch {ep + 1}/{epochs}: validation MSE {v.mean():.3f} (mean of probes), "
+                f"{n_steps:,} lock steps, {time.time() - t0:.0f} s")  # fmt: skip
+    if not (probes.t == np.array([h["steps"] for h in info])).all():
+        raise RuntimeError(f"{name}: steps {probes.t} differ from the schedules' totals")
+    for k in range(n_h):
+        probes.load(k, best[k])
     pred = np.zeros((n_w, ylog.shape[1]))
-    for h in heads:
-        h["m"].load_state_dict(h["state"])
-        h["m"].eval()
-    all_batches = [np.arange(s, min(n_w, s + READ_BATCH)) for s in range(0, n_w, READ_BATCH)]
-    wfold = torch.as_tensor(fold[clip_of], device=dev)
+    smp_all = _Epoch()
+    smp_all.batches = [np.arange(s, min(n_w, s + READ_BATCH)) for s in range(0, n_w, READ_BATCH)]
+    hf = np.array([h["f"] for h in info])
     with torch.no_grad():
-        for xb, ids in _batches(rows, all_batches, workers):
-            xb, ids = xb.to(dev, non_blocking=True), ids.to(dev, non_blocking=True)
-            for f in sorted(set(fold)):
-                sel = torch.nonzero(wfold[ids] == f).squeeze(1)
-                if not len(sel):
-                    continue
-                hs = [h for h in heads if h["f"] == f]
-                acc = sum(h["m"](xb[sel]) * h["sd"] + h["mu"] for h in hs) / len(hs)
-                pred[ids[sel].cpu().numpy()] = acc.cpu().numpy()
+        for xb, ids in _loader(rows, smp_all, min(workers, 8)):
+            ids_np = ids.numpy()
+            out = (
+                probes.predict(list(range(n_h)), xb.to(dev, non_blocking=True)) * sd_t + mu_t
+            )  # [H, R, n]
+            wgt = (hf[:, None] == fold[clip_of[ids_np]][None]).astype(
+                np.float32
+            )  # each window: its fold's probes
+            wgt /= wgt.sum(0, keepdims=True)
+            pred[ids_np] = (
+                torch.einsum("hr,hrn->rn", torch.as_tensor(wgt, device=dev), out).cpu().numpy()
+            )
+    torch.backends.cuda.matmul.allow_tf32 = tf32
     return np.exp(pred)
 
 
