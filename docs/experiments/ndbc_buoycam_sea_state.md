@@ -568,6 +568,20 @@ height against arm A (the best model so far), each interval below zero (paired
 bootstrap over the 12 test buoys). Reported beside it: ImageNet-gentle minus arm A (the
 recipe alone) and DINOv3-gentle minus ImageNet-gentle (the weights at one recipe).
 
+### Bar B3: the backbone the review recommends (fixed 2026-11-18, before B2 was scored)
+
+B1 and B2 swap the weights of one small CNN. The review's first choice for the strips
+is a self-supervised ViT: **DINOv3 ViT-B/16** (`timm:vit_base_patch16_dinov3.lvd1689m`,
+86 M parameters, web images; DINOv3 licence), each view at its native 270 x 480 (17 x 30
+patches, padded to 272), the patch tokens averaged, the same view transformer and
+heads. Two arms of three seeds: **frozen** (`--lp-epochs 10`: the backbone never trains,
+a probe of its features) and **gentle** (B2's recipe). The arm with the lower
+validation RMSE of H_s (its seeds' average) is B3's candidate.
+
+**Bar B3:** the candidate must lower the test RMSE of H_s **and** of the wind-wave
+height against arm A, each interval below zero (paired bootstrap over the 12 test
+buoys). The other arm and every paper's measure are reported beside it.
+
 ### Protocol check R: the published split on our data (fixed 2026-11-18, before any run on it)
 
 Not a bar and not our result. Choi 2020 split examples at random with the same buoys
