@@ -75,8 +75,13 @@ so that commits and results can reference them.
 - **Q-M5** Does per-view horizon tilt (six-view plane fit, one sample per hour)
   carry sea-state information, since NDBC directional buoys themselves infer
   waves from hull pitch and roll? (Horizon tracking: Schwendeman & Thomson 2015.)
-  Untested so far; the buoy-camera CNN's ±5° rotation augmentation removes
-  this signal, so a model meant to use it must train without it.
+  *Answered for the buoy cameras (2026-11-18, `scripts/buoycam_horizon.py`):
+  yes. Within each buoy, the horizon's de-mounted roll and pitch follow the
+  mean-square slope of the buoy's own spectrum (Spearman 0.56 [0.54, 0.58],
+  positive at 75 and 76 of 76 buoys), and the wind-wave height (0.56), not the
+  swell (0.05). The six views are most likely taken one after another
+  (adjacent-view roll correlation 0.03), so a strip holds several motion
+  samples. [Experiment](../experiments/ndbc_buoycam_sea_state.md).*
 - **Q-M6** Does predicting the residual (buoy − WIS/WW3/ERA5 nowcast) from
   imagery beat direct regression, and does any camera model beat the nowcast
   at all? *First result (Waimea baselines, 2026-10-08): residual ridge on image

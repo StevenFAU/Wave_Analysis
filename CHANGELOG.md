@@ -75,6 +75,16 @@ separately (`docs/REPRODUCIBILITY.md`).
   buoy's own wind through a power law; no rotation augmentation; three seeds judged by
   their average. Bars for Test 1 (camera vs ERA5 wind sea) and Test 2 (camera + ERA5 vs
   ERA5 for the total sea state) fixed in the experiment doc before training.
+- **v1 results:** Test 1 met: at the 12 unseen test buoys the camera (three seeds averaged)
+  reads the wind-sea class better than ERA5's wind-wave height (balanced accuracy 0.795 vs
+  0.694, gain +0.10 [+0.05, +0.16]; macro-F1 0.807 vs 0.709, +0.10 [+0.06, +0.15]) and far
+  better than the buoy's own wind (+0.31). Test 2 not met: camera + ERA5 vs ERA5 alone for
+  the total sea state, balanced accuracy +0.056 [+0.034, +0.095], macro-F1 −0.012
+  [−0.025, +0.045] (more smooth false alarms cancel gains in the other classes).
+- `wave_analysis.processing.horizon.detect_horizon` and `scripts/buoycam_horizon.py`: the
+  horizon in each view as a motion sensor. Its roll and pitch follow the buoy's own
+  spectral slope within each buoy (Spearman 0.56 [0.54, 0.58], positive at 75-76 of 76
+  buoys) and the wind waves, not the swell; the six views are separate moments.
 - `buoycam_pairs.py`: window-mean wind-wave and swell labels and the buoy's own wind
   (`datasets.buoycam.stdmet_records`) for every strip; earlier columns unchanged.
 - `buoycam_era5.py --param shww --param shts`: ERA5's wind-sea and swell heights at every

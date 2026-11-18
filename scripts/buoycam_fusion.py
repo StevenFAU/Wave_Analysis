@@ -139,18 +139,29 @@ def main(argv: list[str] | None = None) -> int:
         ),
     }
     g = t["station_id"].to_numpy()
+    # A baseline is scored only on the strips it covers (-1: none, e.g. the v0
+    # package's ERA5 ended earlier than the ERA5 table used here); the camera +
+    # ERA5 combiner is scored beside it on the same strips.
+    covered = {n: p >= 0 for n, p in preds.items()}
     reps = {
-        n: report(t["class"], p, groups=g, names=names, near_boundary=t["near_boundary"], **kw)
-        for n, p in preds.items()
-    }
+        n: report(t["class"][c], p[c], groups=g[c], names=names,
+                  near_boundary=t["near_boundary"][c], **kw)
+        for (n, p), c in zip(preds.items(), covered.values(), strict=True)
+    }  # fmt: skip
     gains: dict[str, Any] = {}
     fused = preds["camera + ERA5"]
     for other in list(preds)[1:]:
+        c = covered[other]
         for m in GAINS:
             v, lo, hi = paired_block_bootstrap_ci(
-                t["class"].to_numpy(), fused, preds[other], _metric(m, k), groups=g, **kw
+                t["class"].to_numpy()[c],
+                fused[c],
+                preds[other][c],
+                _metric(m, k),
+                groups=g[c],
+                **kw,
             )
-            gains[f"{m} vs {other}"] = {"value": v, "lo": lo, "hi": hi}
+            gains[f"{m} vs {other}"] = {"value": v, "lo": lo, "hi": hi, "n": int(c.sum())}
     bar_keys = [f"{m} vs ERA5 alone, refitted on val (the bar)" for m in GAINS]
     met = all(gains[key]["lo"] > 0 for key in bar_keys)
     results = {
@@ -183,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
     ]
     lines += [format_line(n, r, groups="buoys") for n, r in reps.items()]
     lines += [""] + [
-        f"gain in {key}: {v['value']:+.3f} [{v['lo']:+.3f}, {v['hi']:+.3f}]"
+        f"gain in {key} (n={v['n']:,}): {v['value']:+.3f} [{v['lo']:+.3f}, {v['hi']:+.3f}]"
         for key, v in gains.items()
     ]
     lines += ["```", f"\n**Bar {'met' if met else 'not met'}.**\n"]

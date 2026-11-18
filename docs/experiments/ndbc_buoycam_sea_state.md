@@ -335,6 +335,82 @@ baseline. Caveat known in advance: the val buoys carry less swell (mean share
 **Time split:** the same rules (bar: ERA5's wind-wave height and each buoy's
 majority class), run after the station split.
 
+### v1 results (2026-11-18)
+
+Three seeds on three shared H200s, commit `47af9eb`, about 55 min each (epochs
+7, 10 and 9 chosen; validation macro-F1 0.81 each); the seeds agree with their
+average on 95 % of strips. ERA5 wind-sea and swell heights through 2026-11-13
+(98 % of strips).
+
+**Test 1: met.** On the 12 test buoys (6,024 strips ERA5 covers):
+
+| | balanced accuracy | macro-F1 |
+|---|---|---|
+| camera, three seeds averaged | 0.795 | 0.807 |
+| ERA5 wind-wave height (line on training strips) | 0.694 | 0.709 |
+| gain (95 % interval over buoys) | **+0.101 [+0.053, +0.159]** | **+0.098 [+0.060, +0.151]** |
+| buoy-wind control (all 6,157 strips) | 0.486 | 0.468 |
+
+Each seed alone also meets the bar (gains +0.08 to +0.12). The camera beats the
+buoy's own anemometer by +0.31 balanced accuracy [+0.27, +0.34] and +0.34
+macro-F1. **At buoys it has never seen, the camera reads the wind-sea state
+better than ERA5 does at the same place and hour, and far better than the wind
+measured on the same hull.** Its calls follow the wind-wave height (standardised
+slope 0.94) and not the swell (0.02), as the true class does (0.93, 0.01). A
+smaller lean to calm with more swell remains (+0.10 within classes), which ERA5's
+wind-sea height shows as much (+0.14), so it is more likely in NDBC's split of
+the spectrum than in the camera.
+
+**Test 2: not met.** Camera + ERA5 against ERA5 alone, total sea state, both
+combiners fitted on the val buoys, scored on 6,019 test strips:
+
+| | balanced accuracy | macro-F1 |
+|---|---|---|
+| camera + ERA5 | 0.854 | 0.796 |
+| ERA5 alone, refitted on val | 0.798 | 0.808 |
+| gain (95 % interval) | +0.056 [+0.034, +0.095] | −0.012 [−0.025, +0.045] |
+
+Adding the camera raises the F1 of slight (0.80 → 0.82), moderate (0.88 → 0.90)
+and rough (0.89 → 0.91) seas and the recall of smooth ones (0.64 → 0.82), but
+calls 101 slight strips smooth, so smooth-sea F1 falls (0.67 → 0.55); with 88
+smooth test strips weighing a quarter of macro-F1, the two cancel. Balanced
+accuracy, which counts recall only, rises clearly. This is the pattern of the
+Currituck fusion (balanced accuracy up, macro-F1 level). Whether a combiner
+without class weights would keep the gains without the smooth false alarms is
+a new question for a new pre-set test, not a rescue of this one.
+
+## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
+
+Exploratory, nothing trained (`scripts/buoycam_horizon.py`, questions fixed in its
+header before looking; research question Q-M5). In every usable view of the v0
+package a straight horizon is fitted (`wave_analysis.processing.horizon`: the
+steepest bright-to-dark step in each column, RANSAC line); each camera's mounting is
+removed by subtracting its median angle and height over its strips; a strip's motion
+is the root mean square of what remains over at least three clear views (median roll
+2.3°). The buoy's slope is its own: the mean-square slope of its measured spectrum
+(sum of S(f) k², deep water), averaged over the records within 30 min.
+
+- **Coverage:** 209,615 of 236,973 usable views (88 %) give a clear horizon;
+  38,860 strips have three or more.
+- **A. Motion follows slope.** Within each buoy, strips whose horizons roll more come
+  from steeper seas: Spearman 0.56 [0.54, 0.58] over 76 buoys, positive at 75; for
+  the horizon's height (pitch), 0.56 [0.54, 0.58], positive at all 76. One hourly
+  photograph strip, by geometry alone, measures what the buoy's motion sensor
+  measures.
+- **B. It too follows the wind sea.** The motion correlates with the wind-wave height
+  (roll 0.56, pitch 0.56) and hardly with the swell height (0.05 each). Wave slope
+  grows with the square of the wavenumber, so long swell tilts the hull little; the
+  tilt does not fill the camera's swell gap.
+- **C. Six moments, not one.** The de-mounted roll of adjacent views hardly agrees
+  (correlation 0.03 to 0.04; opposite views −0.06 to −0.08), as it would if a rigid
+  ring of cameras fired at one instant. The views are most likely taken one after
+  another, so a strip holds up to six separate samples of the motion.
+
+This answers the platform-motion question for the buoy cameras: the camera can serve
+as its own attitude sensor, which matters on platforms with a camera and no motion
+sensor. It also means v0's ±5° rotation augmentation erased a real signal (v1 trains
+without it).
+
 ## Status
 
 - [x] Pairing and package (2026-11-14, `7b8a93c`): 41,091 strips at 79
@@ -352,4 +428,8 @@ majority class), run after the station split.
       seed 1 (2026-11-18, three GPUs at once): above.
 - [ ] Time split against ERA5 on all test days: download ERA5 again after
       2026-11-20 and rescore the saved predictions.
+- [x] v1, the camera for the wind sea (2026-11-18): Test 1 met (the camera
+      beats ERA5's wind-wave height at unseen buoys), Test 2 not met (camera +
+      ERA5: balanced accuracy up, macro-F1 level).
+- [ ] v1 time split (three seeds), after the ERA5 download of 2026-11-20.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.

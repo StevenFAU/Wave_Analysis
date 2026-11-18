@@ -109,15 +109,15 @@ def check(run: Path, root: Path) -> dict:
             "wind_wave_height_m",
         ],
     )
-    base = pd.read_csv(pkg / "baselines.csv", usecols=["sample_id", f"era5_{split}"])
+    # the ERA5 baseline the config's bar names for this split (v0: "era5", v1: "era5_windsea")
+    ecol = f"{cfg['evaluation'].get('bar', {}).get(split, ['era5'])[0]}_{split}"
+    base = pd.read_csv(pkg / "baselines.csv", usecols=["sample_id", ecol])
     d = (
         pred.drop(columns=["station_id"], errors="ignore")
         .merge(lab, on="sample_id")
         .merge(base, on="sample_id")
     )
-    d = d.rename(
-        columns={"swell_height_m": "swh", "wind_wave_height_m": "wwh", f"era5_{split}": "era5"}
-    )
+    d = d.rename(columns={"swell_height_m": "swh", "wind_wave_height_m": "wwh", ecol: "era5"})
     d["expected"] = sum(k * d[f"p_{n}"] for k, n in enumerate(names))
     d = d[d["swh"].notna() & d["wwh"].notna()].copy()
     d["share"] = d["swh"] ** 2 / (d["swh"] ** 2 + d["wwh"] ** 2)
