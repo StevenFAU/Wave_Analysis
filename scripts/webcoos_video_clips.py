@@ -54,7 +54,8 @@ running downloads), the server fetches each through a short-lived signed link (k
 off command lines), checks its SHA-256 and lists it in ``VERIFIED``, and the staged
 copies are deleted. R2 credentials never leave the desktop. Server folder:
 ``<BASE>/video_windows/<name>/<camera>/<clip>.zip`` (``/data/video_windows/...`` in the
-containers).
+containers). ``ship --package`` sends the package the same way, as one tar, and leaves it
+where ``deploy/dgx/run.sh sync`` would (so ``run.sh push`` finds it there).
 """
 
 from __future__ import annotations
@@ -427,12 +428,55 @@ def _ssh(host: str, cmd: str, stdin: str | None = None) -> str:
                           capture_output=True, text=True, check=True).stdout  # fmt: skip
 
 
+def _ship_package(host: str, base: str, args: argparse.Namespace) -> int:
+    """The package as one tar through R2, left on the server as ``deploy/dgx/run.sh sync`` leaves it
+    (``<BASE>/packages/<name>.tar`` and ``<name>.content``, the SHA-256 of its SHA256SUMS)."""
+    src = data_dir("processed") / "packages" / args.name
+    content = _sha256(src / "SHA256SUMS")
+    if (
+        _ssh(host, f"cat {base}/packages/{args.name}.content 2>/dev/null || true").strip()
+        == content
+    ):
+        print(f"package {args.name} already on the server (content {content[:12]})")
+        return 0
+    with tempfile.TemporaryDirectory(dir=data_dir("interim")) as tmp:
+        tarf = Path(tmp) / f"{args.name}.tar"
+        subprocess.run(["tar", "-C", str(src.parent), "-cf", str(tarf), args.name], check=True)
+        sha = _sha256(tarf)
+        obj = f"{R2_STAGING}/{args.name}.package.tar"
+        t0 = time.time()
+        subprocess.run(
+            ["rclone", "copyto", "--bwlimit", args.bwlimit, "--s3-no-check-bucket", str(tarf), obj],
+            check=True,
+        )
+        link = subprocess.run(["rclone", "link", "--expire", "12h", obj], capture_output=True, text=True,
+                              check=True).stdout.strip()  # fmt: skip
+        part = f"{base}/packages/{args.name}.tar.part"
+        _ssh(
+            host,
+            f"umask 077 && cat > {base}/packages/.link-{args.name}",
+            stdin=f'url = "{link}"\noutput = "{part}"\n',
+        )
+        out = _ssh(host, f"""set -e; cd {base}/packages
+curl -sS --fail --retry 3 -K .link-{args.name}; rm -f .link-{args.name}
+echo "{sha}  {args.name}.tar.part" | sha256sum -c --quiet
+chmod 644 {args.name}.tar.part; mv {args.name}.tar.part {args.name}.tar; echo {content} > {args.name}.content; echo ok""")  # fmt: skip
+        subprocess.run(["rclone", "deletefile", obj], check=True)
+        if out.strip().splitlines()[-1:] != ["ok"]:
+            raise SystemExit(f"package transfer failed on the server: {out[-300:]}")
+        print(f"package {args.name} ({tarf.stat().st_size / 1e9:.2f} GB) on the server and checked "
+              f"(content {content[:12]}), {time.time() - t0:.0f} s")  # fmt: skip
+    return 0
+
+
 def ship(args: argparse.Namespace) -> int:
     """Send the package's windows to the GPU server through R2, in checked batches."""
     host = args.host or os.environ.get("GPU_HOST")
     if not host:
         raise SystemExit("set GPU_HOST (or --host) to the server name in ~/.ssh/config")
     base = args.base or _ssh(host, "echo /raid/scratch/$(id -un)/wave-analysis").strip()
+    if args.package:
+        return _ship_package(host, base, args)
     dest = f"{base}/video_windows/{args.name}"
     win = pd.read_csv(data_dir("processed") / "packages" / args.name / "windows.csv")
     _ssh(host, f"mkdir -p {dest} && touch {dest}/VERIFIED")
@@ -506,6 +550,8 @@ def main(argv: list[str] | None = None) -> int:
         help="the project's folder on the server (default: /raid/scratch/<user>/wave-analysis)",
     )
     s.add_argument("--batch", type=int, default=40, help="clips per batch")
+    s.add_argument("--package", action="store_true",
+                   help="send the package itself (one tar), as run.sh sync would, instead of the windows")  # fmt: skip
     s.add_argument(
         "--bwlimit",
         default="3M",
