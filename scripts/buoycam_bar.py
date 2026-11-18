@@ -23,9 +23,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from wave_analysis.config import load_yaml
 from wave_analysis.evaluation.classification import classification_report
 from wave_analysis.evaluation.uncertainty import paired_block_bootstrap_ci
-from wave_analysis.config import load_yaml
 
 METRICS = ("balanced_accuracy", "f1_macro")
 #: Baselines the bar holds each split against (columns of the package's baselines.csv).
