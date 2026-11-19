@@ -76,6 +76,7 @@ from wave_analysis.models.video_probe import (
     pool_tokens,
     square_tiles,
 )
+from wave_analysis.processing.pixel_spectrum import BREAKING_FEATURES, FEATURES_V2
 from wave_analysis.processing.pixel_spectrum import FEATURES as SPECTRUM_FEATURES
 
 TARGETS = {"hs": ("Hs_label_m", "m"), "tp": ("Tp_label_s", "s")}
@@ -792,6 +793,178 @@ def ridge_oof(
     return pred
 
 
+# --- Physics features v2: bars M6-M7 -------------------------------------------------
+# docs/experiments/webcoos_video.md, "Physics features v2". Label-free spectrum (recipe 2)
+# and breaking features per clip (the package's physics_v2.csv), fixed on the development
+# dates; the bars are scored on the confirmation dates only (all final dates outside
+# configs/experiments/webcoos_video_dev_dates.txt).
+
+PHYSICS_FILE = "physics_v2.csv"
+V2_SPECTRUM = [f"v2_{k}" for k in FEATURES_V2]
+V2_BREAKING = [f"v2_{k}" for k in BREAKING_FEATURES]
+PHYS_TARGETS = {"hs": ("Hs_label_m", "m"), "tp": ("Tp_label_s", "s"), "te": ("Te_label_s", "s")}
+PHYS_ARMS = {  # target: arms
+    "tp": ["spectrum", "spectrum_v2", "pixel_raw", "pixel_raw_v2", "clip", "clip_ridge", "clip_spectrum_v2",
+           "spectrum_cam", "spectrum_v2_cam"],
+    "te": ["spectrum", "spectrum_v2", "pixel_raw", "pixel_raw_v2", "clip_ridge", "clip_spectrum_v2"],
+    "hs": ["clip", "clip_refit", "clip_breaking", "clip_refit_cam", "clip_breaking_cam"],
+}  # fmt: skip
+PHYS_DIFFS = [  # (first, second, target): RMSE of first minus second
+    ("spectrum_v2", "spectrum", "tp"), ("clip_breaking", "clip_refit", "hs"),  # M6, M7
+    ("pixel_raw_v2", "pixel_raw", "tp"), ("clip_spectrum_v2", "clip_ridge", "tp"),
+    ("spectrum_v2_cam", "spectrum_cam", "tp"), ("clip_breaking_cam", "clip_refit_cam", "hs"),
+    ("clip_refit", "clip", "hs"), ("spectrum_v2", "spectrum", "te"), ("pixel_raw_v2", "pixel_raw", "te"),
+    ("clip_spectrum_v2", "clip_ridge", "te"),
+]  # fmt: skip
+PHYS_BARS = {
+    "M6 (T_p)": ("spectrum_v2", "spectrum", "tp"),
+    "M7 (H_s)": ("clip_breaking", "clip_refit", "hs"),
+}
+
+
+def _ridge_finite(x: np.ndarray, y: np.ndarray, fold: np.ndarray) -> np.ndarray:
+    """``ridge_oof`` on the clips with a finite target (the others get NaN)."""
+    ok = np.isfinite(y)
+    out = np.full(len(y), np.nan)
+    out[ok] = ridge_oof(x[ok], y[ok], fold[ok])
+    return out
+
+
+def physics_v2_arms(d: pd.DataFrame) -> pd.DataFrame:
+    """Add the M6-M7 arms (``pred_<hs|tp|te>_<arm>``) to the whole-clip predictions ``d``.
+
+    Ridge heads (``ridge_oof``: standardised inputs, alpha 1, the run's folds of dates) on
+    log targets. T_p and T_e: ``spectrum`` (recipe v1's ten features), ``spectrum_v2``
+    (v1's ten and the four recipe v2 adds), ``clip_ridge`` (log ``clip`` T_p alone),
+    ``clip_spectrum_v2`` (log ``clip`` T_p and the fourteen); untrained ``pixel_raw``
+    (v1's T_pix) and ``pixel_raw_v2`` (v2's T_pix, the peak of the cleaned spectrum). H_s: ``clip_refit`` (log ``clip`` H_s alone) and ``clip_breaking``
+    (log ``clip`` H_s and the breaking features). ``_cam``: the same with a camera
+    intercept (one indicator per camera).
+    """
+    d = d.copy()
+    fold = d["fold"].to_numpy()
+    cam = pd.get_dummies(d["camera"]).to_numpy(dtype=float)
+    spec1 = d[list(SPECTRUM_FEATURES)].to_numpy(float)
+    spec2 = np.hstack([spec1, d[V2_SPECTRUM].to_numpy(float)])
+    brk = d[V2_BREAKING].to_numpy(float)
+    ltp = np.log(d["pred_tp_clip"].to_numpy(float))[:, None]
+    lhs = np.log(d["pred_hs_clip"].to_numpy(float))[:, None]
+    for t in ("tp", "te"):
+        lab = PHYS_TARGETS[t][0]
+        if lab not in d:
+            continue
+        y = np.log(d[lab].to_numpy(float))
+        for arm, x in (("spectrum", spec1), ("spectrum_v2", spec2), ("clip_ridge", ltp),
+                       ("clip_spectrum_v2", np.hstack([ltp, spec2])), ("spectrum_cam", np.hstack([spec1, cam])),
+                       ("spectrum_v2_cam", np.hstack([spec2, cam]))):  # fmt: skip
+            if arm in PHYS_ARMS[t]:
+                d[f"pred_{t}_{arm}"] = np.exp(_ridge_finite(x, y, fold))
+        d[f"pred_{t}_pixel_raw"] = d["T_pix_s"].to_numpy(float)
+        d[f"pred_{t}_pixel_raw_v2"] = d["v2_T_pix_s"].to_numpy(float)
+    y = np.log(d["Hs_label_m"].to_numpy(float))
+    for arm, x in (("clip_refit", lhs), ("clip_breaking", np.hstack([lhs, brk])),
+                   ("clip_refit_cam", np.hstack([lhs, cam])), ("clip_breaking_cam", np.hstack([lhs, brk, cam]))):  # fmt: skip
+        d[f"pred_hs_{arm}"] = np.exp(_ridge_finite(x, y, fold))
+    return d
+
+
+def _phys_scores_on(d: pd.DataFrame, cfg: dict) -> dict:
+    b = cfg["evaluation"]["bootstrap"]
+    kw = {"n_boot": int(b["n_boot"]), "alpha": float(b["alpha"]), "seed": int(b["seed"])}
+    res: dict[str, Any] = {"n_clips": len(d), "n_dates": int(d["local_day"].nunique()),
+                           "by_camera_n": d["camera"].value_counts().to_dict(), "arms": {}, "differences": {}}  # fmt: skip
+    for t, arms in PHYS_ARMS.items():
+        lab, unit = PHYS_TARGETS[t]
+        if lab not in d:
+            continue
+        for a in arms:
+            if f"pred_{t}_{a}" not in d:
+                continue
+            ok = np.isfinite(d[lab].to_numpy(float)) & np.isfinite(
+                d[f"pred_{t}_{a}"].to_numpy(float)
+            )
+            g = d[ok]
+            y, p = g[lab].to_numpy(float), g[f"pred_{t}_{a}"].to_numpy(float)
+            r = {"n": int(ok.sum()), f"rmse_{unit}": rmse(y, p), "r2": r2(y, p), "pearson": pearson(y, p),
+                 f"bias_{unit}": float(np.mean(p - y)),
+                 "by_camera_rmse": {c: rmse(gg[lab], gg[f"pred_{t}_{a}"]) for c, gg in g.groupby("camera")}}  # fmt: skip
+            oak = g[g["camera"].str.startswith("oakisland")]
+            if len(oak) > 2:
+                r["oak_island_rmse"] = rmse(oak[lab], oak[f"pred_{t}_{a}"])
+            res["arms"].setdefault(t, {})[a] = r
+    for a, o, t in PHYS_DIFFS:
+        lab = PHYS_TARGETS[t][0]
+        if lab not in d or f"pred_{t}_{a}" not in d or f"pred_{t}_{o}" not in d:
+            continue
+        ok = np.isfinite(d[[lab, f"pred_{t}_{a}", f"pred_{t}_{o}"]].to_numpy(float)).all(axis=1)
+        g = d[ok]
+        if g["local_day"].nunique() < 2:
+            continue
+        v, lo, hi = paired_block_bootstrap_ci(g[lab].to_numpy(), g[f"pred_{t}_{a}"], g[f"pred_{t}_{o}"], rmse,
+                                              groups=g["local_day"].to_numpy(), **kw)  # fmt: skip
+        res["differences"][f"{a} minus {o}: {t}"] = [float(v), float(lo), float(hi)]
+    return res
+
+
+def dev_dates(cfg: dict) -> tuple[set[str], str]:
+    """The development dates of the physics-v2 bars, checked against their committed SHA-256."""
+    pc = cfg["evaluation"]["physics_v2"]
+    path = Path(__file__).resolve().parents[1] / pc["dev_dates"]
+    raw = path.read_bytes()
+    sha = hashlib.sha256(raw).hexdigest()
+    if sha != pc["dev_dates_sha256"]:
+        raise SystemExit(f"{path} has SHA-256 {sha}, not the committed {pc['dev_dates_sha256']}")
+    return set(raw.decode().split()), sha
+
+
+def physics_scores(d: pd.DataFrame, cfg: dict) -> dict:
+    """M6-M7 on the confirmation dates (bars, if there are enough) and on the development dates (labelled so)."""
+    dev, sha = dev_dates(cfg)
+    need = int(cfg["evaluation"]["physics_v2"]["min_confirmation_dates"])
+    conf, devd = d[~d["local_day"].isin(dev)], d[d["local_day"].isin(dev)]
+    res: dict[str, Any] = {"dev_dates_sha256": sha, "min_confirmation_dates": need,
+                           "development": _phys_scores_on(devd, cfg) if len(set(devd["local_day"])) > 1 else None,
+                           "confirmation": _phys_scores_on(conf, cfg) if len(set(conf["local_day"])) > 1 else None}  # fmt: skip
+    n_conf = int(conf["local_day"].nunique())
+    if res["confirmation"] and n_conf >= need:
+        res["bars"] = {k: bool(res["confirmation"]["differences"][f"{a} minus {o}: {t}"][2] < 0)
+                       for k, (a, o, t) in PHYS_BARS.items()}  # fmt: skip
+    else:
+        res["bars"] = dict.fromkeys(
+            PHYS_BARS, f"not scored: {n_conf} confirmation dates, {need} needed"
+        )
+    return res
+
+
+def physics_report(res: dict) -> str:
+    lines = []
+    for key, title in (
+        ("confirmation", "confirmation dates (the bars)"),
+        ("development", "development dates (used to fix v2; not a test)"),
+    ):
+        r = res.get(key)
+        if not r:
+            continue
+        lines += [f"\n## Physics v2, {title}: {r['n_clips']:,} clips, {r['n_dates']} dates\n",
+                  "| target | arm | RMSE | R² | Pearson | bias | Oak Island RMSE |", "|---|---|---|---|---|---|---|"]  # fmt: skip
+        for t, arms in r["arms"].items():
+            unit = PHYS_TARGETS[t][1]
+            for a, v in arms.items():
+                lines.append(f"| {t} | {a} | {v[f'rmse_{unit}']:.3f} | {v['r2']:.3f} | {v['pearson']:.3f} | "
+                             f"{v[f'bias_{unit}']:+.3f} | {v.get('oak_island_rmse', float('nan')):.3f} |")  # fmt: skip
+        lines += [
+            "",
+            "Differences in RMSE (first minus second; 95 % interval, bootstrap over dates):",
+            "",
+        ]
+        lines += [
+            f"- {k}: {v[0]:+.3f} [{v[1]:+.3f}, {v[2]:+.3f}]" for k, v in r["differences"].items()
+        ]
+    lines += ["", "Bars M6-M7 (confirmation dates only): "
+              + ", ".join(f"{k} {'met' if v is True else 'not met' if v is False else v}" for k, v in res["bars"].items())]  # fmt: skip
+    return "\n".join(lines) + "\n"
+
+
 def whole_clip(
     args: argparse.Namespace, cfg: dict, clips: pd.DataFrame, dev: torch.device
 ) -> pd.DataFrame:
@@ -863,6 +1036,8 @@ def whole_clip(
         d[f"pred_tp_{arm}"] = np.exp(ridge_oof(xx, ytp, fold))
         d[f"pred_hs_{arm}"] = np.nan
     d["pred_tp_pixel_raw"], d["pred_hs_pixel_raw"] = clips["T_pix_s"].to_numpy(dtype=float), np.nan
+    if V2_SPECTRUM[0] in clips.columns and "physics_v2" in cfg["evaluation"]:
+        d = physics_v2_arms(d)
     return d
 
 
@@ -1021,6 +1196,13 @@ def main(argv: list[str] | None = None) -> int:
         ]
         clips = clips[np.array(there, dtype=bool) & clips["K"].ge(1)].reset_index(drop=True)
         log(f"whole clips: {len(clips):,} of {n0:,} clips have windows in {args.windows}")
+        if (args.package / PHYSICS_FILE).exists() and "physics_v2" in cfg["evaluation"]:
+            phys = pd.read_csv(args.package / PHYSICS_FILE)
+            keep = ["clip_id", *V2_SPECTRUM, *V2_BREAKING, "v2_T_pix_s"]
+            clips = clips.merge(phys[keep], on="clip_id", how="left")  # the same clips
+            log(
+                f"physics v2: {int(clips[V2_SPECTRUM[0]].notna().sum()):,} of {len(clips):,} clips have features"
+            )
         args.window_cache = args.window_cache or args.out / "features" / "windows"
     if args.limit:  # a smoke test: clips from as many dates as possible, so folds exist
         clips = (clips.assign(_k=clips.groupby("local_day").cumcount()).sort_values(["_k", "clip_id"])
@@ -1062,6 +1244,8 @@ def main(argv: list[str] | None = None) -> int:
         w = whole_clip(args, cfg, clips, dev)
         w.to_csv(args.out / "predictions_whole_clip.csv", index=False)
         res["whole_clip"] = whole_clip_scores(w, cfg)
+        if V2_SPECTRUM[0] in w:
+            res["physics_v2"] = physics_scores(w, cfg)
     res["run"] = {"config": str(args.config), "package": str(args.package), "limit": args.limit,
                   "features_from": str(args.features_from) if args.features_from else None,
                   "windows": str(args.windows) if args.windows else None,
@@ -1071,6 +1255,8 @@ def main(argv: list[str] | None = None) -> int:
     text = report(res, cfg["heads"]["primary"]) if "arms" in res else ""
     if "whole_clip" in res:
         text += whole_clip_report(res["whole_clip"])
+    if "physics_v2" in res:
+        text += physics_report(res["physics_v2"])
     (args.out / "report.md").write_text(text, encoding="utf-8")
     print(text)
     return 0

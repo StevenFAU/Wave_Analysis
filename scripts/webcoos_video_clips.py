@@ -4,6 +4,7 @@
     python scripts/webcoos_video_clips.py pair     [cameras...]   # labels -> data/processed/video/clips.parquet
     python scripts/webcoos_video_clips.py frames   [--workers 6]  # 64 frames at 4 fps per clip, 256 px high JPEG
     python scripts/webcoos_video_clips.py windows  [--workers 4]  # every 16-s window of each clip + its pixel spectrum
+    python scripts/webcoos_video_clips.py physics  [--workers 4]  # spectrum recipe v2 + breaking features per clip (M6-M7)
     python scripts/webcoos_video_clips.py pack                    # data/processed/packages/<name>/ (clips + frames + SHA256SUMS)
     GPU_HOST=<ssh-alias> python scripts/webcoos_video_clips.py ship  # the windows to the GPU server, through Cloudflare R2
 
@@ -80,7 +81,12 @@ import pandas as pd
 from wave_analysis.config import data_dir, portable_path, repo_root
 from wave_analysis.ingest.durable import atomic_open
 from wave_analysis.processing.pixel_spectrum import RECIPE as SPECTRUM_RECIPE
-from wave_analysis.processing.pixel_spectrum import block_means, pixel_spectrum
+from wave_analysis.processing.pixel_spectrum import (
+    RECIPE_V2,
+    block_means,
+    physics_v2,
+    pixel_spectrum,
+)
 from wave_analysis.processing.solar import solar_position
 from wave_analysis.processing.synchronize import label_from_candidates, pair_window
 from wave_analysis.sources.webcoos import ONPREM_POSITIONS, still_time
@@ -93,6 +99,25 @@ WINDOWS = OUT / "windows_4fps"  # whole clips, K windows of 64 frames (bars M3-M
 R2_STAGING = "r2:wave-analysis-raw/staging/webcoos_video_windows"
 # Burned-in text, blacked out in the source frame (ffmpeg drawbox; iw/ih = source size).
 MASKS = {"currituck_hampton_inn": "drawbox=x=0:y=ih-170:w=560:h=170:color=black:t=fill"}
+
+
+def cdip_energy_period(station: str) -> pd.Series:
+    """The energy period Tm-1,0 = m_-1 / m_0 of every CDIP record's full spectrum, by record start (UTC).
+
+    From the standardized spectra beside the bulk records (``data/processed/cdip/<station>/
+    spectrum_*.parquet``); an archived record wins over its realtime copy, as in the bulk loader.
+    """
+    d = data_dir("processed") / "cdip" / station
+    cols = ["time_utc", "frequency_hz", "bandwidth_hz", "spectral_density_m2_hz"]
+    parts = [pd.read_parquet(f, columns=cols).assign(realtime="_realtime_" in f.name)
+             for f in sorted(d.glob("spectrum_*.parquet"))]  # fmt: skip
+    if not parts:
+        return pd.Series(dtype=float, name="Te_s")
+    sp = pd.concat(parts, ignore_index=True)
+    sp = sp[sp["realtime"] == sp.groupby("time_utc")["realtime"].transform("min")]
+    e = sp["spectral_density_m2_hz"] * sp["bandwidth_hz"]
+    g = sp.assign(e=e, em1=e / sp["frequency_hz"]).groupby("time_utc")
+    return (g["em1"].sum() / g["e"].sum()).rename("Te_s")
 
 
 def _pairs_module():
@@ -157,13 +182,13 @@ def pair(args: argparse.Namespace) -> int:
         rec = rec.assign(
             time_utc=rec["start_utc"] + pd.to_timedelta(rec["averaging_period_s"] / 2, unit="s")
         )
-        rec = rec.reset_index(drop=True)
+        rec = rec.join(cdip_energy_period(station), on="start_utc").reset_index(drop=True)
         c = c.reset_index(drop=True)
         tgt = c.rename(columns={"mid_utc": "time_utc"})[["time_utc"]]
         pw = pair_window(tgt, rec, window="60min")
         cand = pd.concat(
             [pd.Series(pw["target_index"].to_numpy(), name="clip"), pw.drop(columns=["target_index", "reference_index"]),
-             rec.loc[pw["reference_index"], ["Hs_m", "Tp_s", "Tm02_s", "Dp_deg"]].reset_index(drop=True)],
+             rec.loc[pw["reference_index"], ["Hs_m", "Tp_s", "Tm02_s", "Te_s", "Dp_deg"]].reset_index(drop=True)],
             axis=1,
         )  # fmt: skip
         win = label_from_candidates(
@@ -171,7 +196,11 @@ def pair(args: argparse.Namespace) -> int:
         ).reindex(c.index)
         c["Hs_label_m"] = win["label"]
         c["n_label_records"] = win["n_records"].fillna(0).astype(int)
-        for col, out in (("Tp_s", "Tp_label_s"), ("Tm02_s", "Tm02_label_s")):
+        for col, out in (
+            ("Tp_s", "Tp_label_s"),
+            ("Tm02_s", "Tm02_label_s"),
+            ("Te_s", "Te_label_s"),
+        ):
             c[out] = label_from_candidates(
                 cand, col, rule="nearest", target="clip", max_offset="30min"
             ).reindex(c.index)["label"]
@@ -195,7 +224,7 @@ def pair(args: argparse.Namespace) -> int:
     t["path"] = [portable_path(p) for p in t["path"]]
     cols = ["clip_id", "camera", "path", "start_utc", "mid_utc", "duration_s", "fps", "width", "height",
             "sun_elevation_deg", "local_day", "camera_day", "cdip_station", "Hs_label_m", "n_label_records",
-            "Tp_label_s", "Tm02_label_s", "Dp_label_deg", "exclusion"]  # fmt: skip
+            "Tp_label_s", "Tm02_label_s", "Te_label_s", "Dp_label_deg", "exclusion"]  # fmt: skip
     t[cols].to_parquet(OUT / "clips.parquet", index=False)
     ok = t[t["exclusion"] == ""]
     summary = {"clips": len(t), "usable": len(ok), "by_camera": ok["camera"].value_counts().to_dict(),
@@ -357,6 +386,65 @@ def windows(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def _physics(job: tuple[str, str, str]) -> dict:
+    """Spectrum recipe v2 and the breaking features of one clip's windows zip, in a JSON beside it."""
+    zp, cam, cid = job
+    dst = Path(zp).with_suffix(".physics_v2.json")
+    try:
+        from PIL import Image
+
+        with zipfile.ZipFile(zp) as z:
+            names = sorted(n for n in z.namelist() if n.endswith(".jpg"))
+            grey = np.stack([np.asarray(Image.open(z.open(m)).convert("L")) for m in names])
+        r = physics_v2(block_means(grey))
+        row = {"clip_id": cid, "camera": cam, "physics_recipe": RECIPE_V2, "frames": len(names),
+               **{k: r.get(k) for k in ("n_blocks", "n_live", "n_water", "threshold", "f", "S", "S_weighted", "S_on", "coherence")},
+               "features": r["features"]}  # fmt: skip
+    except Exception as e:
+        return {"clip_id": cid, "error": repr(e)}
+    with atomic_open(dst, "w") as fh:
+        json.dump(row, fh)
+    return {"clip_id": cid}
+
+
+def physics(args: argparse.Namespace) -> int:
+    t = pd.read_parquet(OUT / "clips.parquet")
+    t = t[t["exclusion"] == ""]
+    jobs = [(str(WINDOWS / c / f"{i}.zip"), c, i) for c, i in zip(t["camera"], t["clip_id"], strict=True)
+            if (WINDOWS / c / f"{i}.json").exists() and (WINDOWS / c / f"{i}.zip").exists()]  # fmt: skip
+    todo = [j for j in jobs if not Path(j[0]).with_suffix(".physics_v2.json").exists()]
+    print(f"{len(jobs):,} clips with windows, {len(todo):,} without physics v2 yet", flush=True)
+    failed, t0 = [], time.time()
+    with Pool(args.workers) as pool:
+        for k, row in enumerate(pool.imap_unordered(_physics, todo, chunksize=1), 1):
+            if "error" in row:
+                failed.append((row["clip_id"], row["error"][:120]))
+            if k % 50 == 0 or k == len(todo):
+                print(
+                    f"  {k:,}/{len(todo):,} clips, {(time.time() - t0) / k:.1f} s each", flush=True
+                )
+    print(f"physics v2 of {len(todo) - len(failed):,} clips; failed {len(failed)} {failed[:3]}")
+    return 1 if failed else 0
+
+
+def _physics_table(t: pd.DataFrame) -> pd.DataFrame:
+    """physics_v2.csv: the clip's v2 features (prefix ``v2_``) for the clips in ``t`` that have them."""
+    rows = []
+    for cam, cid in zip(t["camera"], t["clip_id"], strict=True):
+        j = WINDOWS / cam / f"{cid}.physics_v2.json"
+        if j.exists():
+            r = json.loads(j.read_text())
+            if r.get("physics_recipe") == RECIPE_V2:
+                rows.append(
+                    {
+                        "clip_id": cid,
+                        "v2_n_water": r["n_water"],
+                        **{f"v2_{k}": v for k, v in r["features"].items()},
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
 def _windows_tables(t: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """windows.csv, pixel_spectrum.csv and the averaged spectra of the clips in ``t`` that have windows."""
     rows, spec, curves = [], [], {}
@@ -407,6 +495,11 @@ def pack(args: argparse.Namespace) -> int:
                             **{f"f_{i}": curves[c][0] for i, c in enumerate(ids)},
                             **{f"S_{i}": curves[c][1] for i, c in enumerate(ids)})  # fmt: skip
         listed += ["windows.csv", "pixel_spectrum.csv", "pixel_spectrum_S.npz"]
+    phys = _physics_table(t)
+    if len(phys):
+        with atomic_open(pkg / "physics_v2.csv", "w") as fh:
+            phys.sort_values("clip_id").to_csv(fh, index=False)
+        listed.append("physics_v2.csv")
     sums = subprocess.run(
         f"find {' '.join(listed)} -type f -print0 | sort -z | xargs -0 sha256sum",
         shell=True, cwd=pkg, capture_output=True, text=True, check=True,
@@ -539,6 +632,9 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--workers", type=int, default=4)
     w.add_argument("--limit", type=int, help="first N usable clips only (a test)")
     w.set_defaults(func=windows)
+    h = sub.add_parser("physics")
+    h.add_argument("--workers", type=int, default=4)
+    h.set_defaults(func=physics)
     k = sub.add_parser("pack")
     k.add_argument("--name", default="webcoos_video_v1")
     k.set_defaults(func=pack)

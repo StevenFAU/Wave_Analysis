@@ -2,7 +2,8 @@
 
 Status: **design fixed 2026-11-18, before any clip was scored**; whole-clip implementation
 and pixel-spectrum recipe fixed 2026-11-18, before any clip was scored; **first scored
-(interim) run 2026-11-19: M3 and M4 met, M1, M2 and M5 not met** (Results). Config
+(interim) run 2026-11-19: M3 and M4 met, M1, M2 and M5 not met** (Results); physics
+features v2 and bars M6-M7 fixed 2026-11-19 on the development dates. Config
 `configs/experiments/webcoos_video_v1.yaml`; code `scripts/webcoos_video_clips.py`
 (clips, frames, windows, package, shipping) and `scripts/train_video_probe.py` (features,
 heads, scores).
@@ -255,6 +256,154 @@ and any score of a new feature on it stay unopened until that feature's recipe a
 are committed. M1-M5 and spectrum recipe v1 are unchanged and are scored on all final
 dates as planned.
 
+## Physics features v2 (bars M6-M7, fixed 2026-11-19 on the development dates)
+
+**Why.** The interim run (Results) showed that the frozen encoder ignores motion (`video`,
+`still` and `shuffled` tie) and that no probe learns T_p; the pixel spectrum is the only
+T_p signal (2.46 s alone; untrained T_pix has Pearson 0.43 but reads 0.8 s long), and
+about half of M5's gain was recalibration. So the next gain should come from better
+physics features, not a bigger encoder.
+
+**Discipline.** Everything below was fixed on the 18 development dates (previous section)
+and committed before any confirmation date had even been paired (the download had not
+reached the confirmation weeks). The bars are scored on the confirmation dates only.
+Every choice that used development labels is listed under "Development log".
+
+**Spectrum recipe v2** (`wave_analysis.processing.pixel_spectrum.physics_v2`,
+`RECIPE_V2 = 2`; v1 unchanged, `RECIPE = 1`), from the same 4-fps, 4 x 4-px block series:
+
+1. **Common mode out.** Water by v1's rule on the raw series. The common mode, each
+   frame's median brightness over the water blocks (auto-exposure, cloud shade), is
+   taken out of every water block with that block's own least-squares gain.
+2. **Spectra.** S(f), v1's band-normalised mean spectrum, of the cleaned water blocks;
+   the onset spectrum S_on(f), the same for the rectified rate max(dI/dt, 0), which turns
+   each breaker's sharp rise into an impulse without the slow foam decay.
+3. **Coherence** (cBathy-style; Holman, Plant & Holland 2013). At each band frequency, the
+   cross-spectral matrix of at most 500 water blocks (a fixed random subsample, seed 0),
+   each scaled to unit band power, from the Fourier coefficients of all Welch segments in
+   that bin and its two neighbours (24 vectors for a 10-min clip); its first
+   eigenvector's share of the energy, lambda_1 / sum(lambda). Pure noise gives about 0.10;
+   development clips about 0.5-0.6 at their wave peak and 0.2-0.3 elsewhere.
+4. **Features.** v1's ten, plus four (`FEATURES_V2`): `log_T_on` (the peak of S_on above
+   a power law, found as v1's T_pix) and `log_T_on_m01` (its m0 / m1); `peak_prominence`
+   (the natural log of how far S stands above the power law at its peak: low when a
+   clip has no clear wave peak, as on the stormy Oak Island west view); `coherence` (the
+   S-weighted mean coherence). The untrained v2 period `T_pix` is the peak of the
+   cleaned S, found as v1's.
+
+**Breaking features** (5, for H_s; rank 4 of the architecture report), on the water mask
+and relative to it (framing changes at Jennette's and Oak Island east):
+
+- `foam_frac`: the time-mean share of water blocks brighter than the clip's Otsu (1979)
+  threshold over water-block brightness;
+- `foam_separability`: that threshold's eta (between-class over total variance: about
+  0.64 for one Gaussian mode, near 1 for a separate bright mode), so the head can
+  discount a split that only cuts one mode, as on a calm sea;
+- `onset_rate_per_min`: foam arrivals per water block per minute, a block's brightness
+  rising through the threshold (above it by the frame noise after last being below it by
+  the same; frame noise = 1.4826 x the median absolute frame-to-frame change);
+- `foam_band_width`: per image column, the share of its water blocks whose time-mean
+  brightness passes the threshold (the vertical, in these oblique views roughly
+  cross-shore, extent of the bright band, as in time exposures; Lippmann & Holman 1989),
+  averaged over columns with at least 3 water blocks;
+- `foam_persistence_s`: over those bright blocks, the median lag at which a block's
+  cleaned brightness autocorrelation first falls below 1/e.
+
+**Labels.** Beside T_p, the energy period T_e = Tm-1,0 = m_-1 / m_0 of each CDIP
+record's full spectrum (`Te_label_s`, nearest record as for T_p; steadier than the
+peak). Recomputed from the stored spectra, H_m0 matches the stored value to 1e-15.
+
+**Heads** (`train_video_probe.physics_v2_arms`): ridge heads as for M5 (standardised
+inputs, alpha 1, out of fold over the run's folds of dates) on log targets.
+
+| Arm | Target | Inputs |
+|---|---|---|
+| `spectrum` / `spectrum_v2` | T_p, T_e | v1's 10 spectrum features / those and v2's 4 |
+| `clip_ridge` / `clip_spectrum_v2` | T_p, T_e | log `clip` T_p / and the 14 |
+| `pixel_raw` / `pixel_raw_v2` | T_p, T_e | untrained: v1's T_pix / v2's T_pix |
+| `clip_refit` / `clip_breaking` | H_s | log `clip` H_s / and the 5 breaking features |
+| `..._cam` | as above | the same plus one indicator per camera |
+
+**Bars** (confirmation dates only, at least 15 of them; paired bootstrap over local
+dates, 2,000 resamples; `configs/experiments/webcoos_video_v1.yaml`, `physics_v2`):
+
+- **M6 (T_p):** `spectrum_v2` minus `spectrum`, RMSE, 95 % interval below zero: do the
+  four new features add to v1's ten?
+- **M7 (H_s):** `clip_breaking` minus `clip_refit`, RMSE, 95 % interval below zero. The
+  control is the refit, not the raw `clip`, so recalibration earns nothing.
+
+Reported, not bars: `pixel_raw_v2` minus `pixel_raw`; `clip_spectrum_v2` minus
+`clip_ridge` (T_p); each camera, and M6-M7 with a camera intercept; T_p at Oak Island
+beside Kamagata's 1.42 s; the T_p comparisons again against T_e. The run refuses to score
+if the development-date file's SHA-256 has changed. M1-M5 and recipe v1 are scored on all
+final dates as planned.
+
+**Development log** (every use of development labels or of label-free looks that changed
+the recipe):
+
+1. Label-free, four development views (one per camera): with a plain median subtraction,
+   water chosen again afterwards took in sky blocks (the subtracted mode had been put into
+   them), and the coherence at 0.05 Hz rose from about 0.2 to 0.6. Hence the per-block
+   gain and v1's water mask.
+2. Label-free, synthetic and four development views: counting jumps above k MAD per
+   block (as first planned) found no onset on a breaker that rises over 1 s (no single
+   0.25-s step stands out against a breaker block's own spread); hence foam arrivals
+   through the Otsu threshold. A per-clip Otsu split always finds a "bright" class, even
+   between crests and troughs of a calm sea; hence `foam_separability`. Real surf zones
+   lie inside v1's water mask (the band of highest brightness spread), so the breaking
+   features use it.
+3. Labels (T_p, T_e, H_s of the 992 development clips, the interim folds): the recipe as
+   first built (S and S_on weighted by the coherence, 14 features replacing v1's ten)
+   lost to v1: T_p 2.52 against 2.46 s, +0.06 s [-0.05, +0.14]. Taken apart: the
+   coherence weighting lowered the peak period's Pearson with T_p from 0.40 to 0.33
+   (S) and from 0.43 to 0.33 (S_on); the common-mode removal left it unchanged (0.41 to
+   0.40) and cut the bias from +0.81 to +0.61 s; the onset peak did not reduce the bias
+   (+0.94 s), so the foam decay is not what makes T_pix long.
+4. Labels: three feature sets compared by the ridge, against v1's 2.461 s: (A) as
+   built, 2.524 s; (B) the same unweighted, 2.511 s; (C) v1's ten plus the four above,
+   2.424 s. **C was chosen**, and the coherence kept as a feature, not a weight.
+5. Labels: the untrained v2 period chosen among peak estimators: the cleaned S's peak
+   (RMSE 3.00 s, Pearson 0.40) over the onset peak (3.14 s, 0.43, bias +0.94 s).
+6. Labels: the five breaking features were not changed after looking: they carry
+   almost no H_s information beyond `clip` (|r| at most 0.15 with its residual, signs
+   differing between cameras), and no physical variant suggested itself. M7 is expected
+   to fail (below).
+
+**Development results** (the 992 development clips, interim folds; development data,
+chosen on, so optimistic; not a test):
+
+| Comparison | Difference [95 %] |
+|---|---|
+| M6, T_p: `spectrum_v2` 2.424 s vs `spectrum` 2.461 s | −0.037 s [−0.109, +0.050] |
+| M7, H_s: `clip_breaking` 0.564 m vs `clip_refit` 0.533 m | +0.032 m [+0.017, +0.051] (worse) |
+| untrained T_pix, T_p: v2 3.00 s vs v1 3.19 s | −0.19 s [−0.46, +0.04] |
+| untrained T_pix, T_e: v2 3.55 s vs v1 3.85 s | −0.30 s [−0.56, −0.05] |
+| T_p: `clip_spectrum_v2` 2.398 s vs `clip_ridge` 2.666 s | −0.27 s [−0.67, +0.16] |
+| M6 with a camera intercept | −0.012 s [−0.076, +0.066] |
+| M7 with a camera intercept | +0.019 m [+0.006, +0.034] |
+| T_e: `spectrum_v2` 1.510 s vs `spectrum` 1.575 s | −0.065 s [−0.136, +0.029] |
+
+Climatology on these clips: H_s 0.740 m, T_p 2.72 s, T_e 1.71 s. At Oak Island, T_p of
+`spectrum_v2` 2.70 s and `clip_spectrum_v2` 2.59 s against Kamagata's 1.42 s (climatology
+there 2.97 s). The untrained periods still read long (v2: +0.61 s on T_p, +2.4 s on T_e).
+
+**Power.** The paired date bootstrap's 95 % half-width on random subsets of the
+development dates shrinks roughly as 1 / sqrt(dates): at 18 dates it is 0.008 m (M3),
+0.081 s (M6) and 0.018 m (M7). The remaining four sample weeks (2024-10, 2025-01,
+2025-04, 2026-01) give about 28 confirmation dates, so the half-widths become about
+0.006 m, 0.065 s and 0.014 m. A true difference equal to the half-width is detected half
+the time; for 80 % power it must be about 1.43 times larger:
+
+| Bar | Half-width at ~28 dates | Smallest difference resolved (50 % / 80 % power) | Development estimate |
+|---|---|---|---|
+| M3 (H_s) | 0.006 m | 0.006 / 0.009 m | −0.011 m (interim run): resolvable |
+| M6 (T_p) | 0.065 s | 0.065 / 0.093 s | −0.037 s: not resolvable |
+| M7 (H_s) | 0.014 m | 0.014 / 0.020 m | +0.032 m (worse): fails either way |
+
+(M3 itself is scored on all final dates, about 46, half-width about 0.005 m.) To resolve
+M6's development estimate with 80 % power would take about 175 confirmation dates (25
+sample weeks, 21 more than planned); asking WebCOOS for them is the user's decision.
+
 ## Progress
 
 - **Smoke test (2026-11-18, `video-days-20261118t1655-smoke-smoke`):** 24 clips from 4
@@ -280,6 +429,11 @@ dates as planned.
   3.2 h, image window probes 0.8 h, about 34 GB of GPU memory) ran side by side on one
   shared H200, on the same 992 clips (the clip-list hashes agree). The download goes on;
   the final run uses the same code and config.
+- **Physics v2 (2026-11-19):** features on the desktop's CPU, about 10 s a 10-min clip on
+  one core (JPEG decoding 3 s, block means 1.4 s, spectra and breaking features 5.7 s);
+  `scripts/webcoos_video_clips.py physics` writes them beside each windows zip and `pack`
+  puts them in the package's `physics_v2.csv`; `pair` adds `Te_label_s`. The final run
+  scores M6-M7 when the package holds `physics_v2.csv`.
 
 ## Results
 

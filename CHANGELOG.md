@@ -68,6 +68,30 @@ separately (`docs/REPRODUCIBILITY.md`).
   its calls follow wind-wave height more than swell height; over 24 held-out
   buoys, swell share predicts the under-call (Spearman −0.89).
 
+### Added (2026-11-19, shore video: physics features v2 and bars M6-M7)
+- The 18 interim dates are now development data (`configs/experiments/webcoos_video_dev_dates.txt`,
+  committed with its SHA-256 before any development); every date the final run adds is a
+  confirmation date, on which alone bars M6-M7 are scored (`docs/experiments/webcoos_video.md`,
+  "Physics features v2").
+- Spectrum recipe v2 (`wave_analysis.processing.pixel_spectrum.physics_v2`; v1 unchanged):
+  the common mode taken out of each water block with its own gain, an onset spectrum of
+  max(dI/dt, 0), a cBathy-style coherence (lambda_1 / sum(lambda) of the cross-spectral
+  matrix), a peak-prominence measure; four features added to v1's ten. Five label-free
+  breaking features for H_s (foam fraction and its Otsu separability, foam arrivals per
+  minute, foam-band width, foam persistence). CDIP energy period Tm-1,0 as a second
+  period label (`Te_label_s`).
+- `scripts/webcoos_video_clips.py physics` (features beside each windows zip, packed as
+  `physics_v2.csv`); `scripts/train_video_probe.py` adds the M6-M7 ridge arms and scores
+  them on confirmation dates only, refusing if the development-date file changed.
+- Development results (chosen on, so optimistic): M6 −0.037 s [−0.109, +0.050] on T_p;
+  M7 +0.032 m [+0.017, +0.051] (the breaking features make H_s worse). With about 28
+  confirmation dates, M6 resolves only differences of about 0.07-0.09 s, so it is
+  underpowered for its development estimate. Coherence weighting, as first planned,
+  lowered the period's correlation with T_p and was dropped as a weight (development log
+  in the doc).
+- Bibliography: Otsu 1979, Welch 1967, Donelan & Pierson 1983, Lippmann & Holman 1989
+  (DOIs checked against Crossref).
+
 ### Results (2026-11-19, shore video interim run: bars M1-M5)
 - First scored run of the WebCOOS video test (`docs/experiments/webcoos_video.md`,
   Results): 992 clips of 18 local dates, folds of whole dates, CDIP labels. **M1 and M2
