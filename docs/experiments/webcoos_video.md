@@ -448,6 +448,17 @@ under the same lock):
   H_s ≥ 2.8 m. By season, 9 DJF, 6 MAM, 3 JJA and 6 SON.
 - That is about 78 GB, at half the sample's measured camera-day sizes (30-min clips:
   Currituck 1.9 GB, Jennette 6.8, Oak Island east 2.2, west 1.8).
+- **Storage (2026-11-19).** The wavedata drive keeps only about 125 GB after the sample.
+  So the storm root is a folder on the desktop's own disk, and each date is processed before
+  the next is fetched:
+  - pair, frames, windows and physics v2 run with `WEBCOOS_VIDEO_SET=storm`, which gives the
+    storm set its own raw root, output folder (`data/processed/video_storm`) and package
+    (`webcoos_video_storm_v1`);
+  - `scripts/webcoos_video_clips.py offload` then moves the date's raw clips to the GPU
+    server (`<BASE>/raw/webcoos_video_storm`, checked against their ledger's SHA-256) and
+    frees them here.
+  The desktop thus holds about one date's clips at a time, with 40 GB kept free. At the end,
+  the storm package and its windows are shipped like the sample's.
 
 **Sealed, the third set beside development and confirmation.** The storm clips have their
 own archive root, `data/raw/webcoos_video_storm`, which the sample's `pair` never reads.

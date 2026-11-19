@@ -7,6 +7,16 @@
     python scripts/webcoos_video_clips.py physics  [--workers 4]  # spectrum recipe v2 + breaking features per clip (M6-M7)
     python scripts/webcoos_video_clips.py pack                    # data/processed/packages/<name>/ (clips + frames + SHA256SUMS)
     GPU_HOST=<ssh-alias> python scripts/webcoos_video_clips.py ship  # the windows to the GPU server, through Cloudflare R2
+    WEBCOOS_VIDEO_SET=storm python scripts/webcoos_video_clips.py <step>  # the same steps for the sealed storm set
+    WEBCOOS_VIDEO_SET=storm GPU_HOST=<ssh-alias> python scripts/webcoos_video_clips.py offload  # its cut raw clips to the server
+
+**Sets.** By default the steps work on the video sample. ``WEBCOOS_VIDEO_SET=storm`` switches
+them to the sealed storm set (``scripts/webcoos_storm_dates.py``): raw clips from
+``data/raw/webcoos_video_storm/``, outputs in ``data/processed/video_storm/``, package
+``webcoos_video_storm_v1``, so no storm file can enter the sample's package. ``offload``
+moves the storm set's raw clips that are cut (or excluded) to ``<BASE>/raw/webcoos_video_storm/``
+on the GPU server through R2, checked against their ledger's SHA-256, and deletes the local
+copy once the server lists it as checked; ``pair`` keeps such clips through its probe cache.
 
 **Pair.** Every clip under ``data/raw/webcoos_video/<camera>/`` (downloaded by
 ``scripts/webcoos_video_sample.sh``) gets its start (file name), length (``ffprobe``,
@@ -93,10 +103,21 @@ from wave_analysis.sources.webcoos import ONPREM_POSITIONS, still_time
 
 N_FRAMES, FPS, SPAN_S = 64, 4, 16
 HEIGHT = 256  # px; width follows the camera's aspect (even)
-OUT = data_dir("processed") / "video"
+# The clip set: the video sample (default), or the sealed storm set (WEBCOOS_VIDEO_SET=storm;
+# docs/experiments/webcoos_video.md, "Storm set"), which has its own raw root, output folder
+# and package, so that no file of it can enter the sample's package. An environment
+# variable, so that the worker processes see the same set.
+SET = os.environ.get("WEBCOOS_VIDEO_SET") or "sample"
+if SET not in ("sample", "storm"):
+    raise SystemExit(f"WEBCOOS_VIDEO_SET is sample or storm, not {SET!r}")
+STORM = SET == "storm"
+RAW = data_dir("raw") / ("webcoos_video_storm" if STORM else "webcoos_video")
+OUT = data_dir("processed") / ("video_storm" if STORM else "video")
+NAME = "webcoos_video_storm_v1" if STORM else "webcoos_video_v1"
 FRAMES = OUT / "frames_4fps"
 WINDOWS = OUT / "windows_4fps"  # whole clips, K windows of 64 frames (bars M3-M5)
 R2_STAGING = "r2:wave-analysis-raw/staging/webcoos_video_windows"
+R2_RAW = "r2:wave-analysis-raw/staging/webcoos_video_storm_raw"  # offload of the storm set's clips
 # Burned-in text, blacked out in the source frame (ffmpeg drawbox; iw/ih = source size).
 MASKS = {"currituck_hampton_inn": "drawbox=x=0:y=ih-170:w=560:h=170:color=black:t=fill"}
 
@@ -157,7 +178,7 @@ def probe(path: str) -> dict:
 
 def pair(args: argparse.Namespace) -> int:
     wp = _pairs_module()
-    root = data_dir("raw") / "webcoos_video"
+    root = RAW
     cams = args.cameras or sorted(c for c in wp.PAIRINGS if (root / c).is_dir())
     OUT.mkdir(parents=True, exist_ok=True)
     cache_path = OUT / "probe_cache.parquet"
@@ -172,6 +193,10 @@ def pair(args: argparse.Namespace) -> int:
                     [cache, pd.DataFrame(pool.map(probe, new, chunksize=8))], ignore_index=True
                 )
             cache.to_parquet(cache_path, index=False)
+        if STORM:  # clips moved to the server (offload) stay in the table through the probe cache
+            files = sorted(
+                set(files) | {f for f in cache["path"] if f.startswith(f"{root / cam}/")}
+            )
         c = cache[cache["path"].isin(files)].copy()
         c["start_utc"] = [still_time(Path(p).name, cam) for p in c["path"]]
         c["mid_utc"] = c["start_utc"] + pd.to_timedelta(c["duration_s"].fillna(0) / 2, unit="s")
@@ -230,6 +255,8 @@ def pair(args: argparse.Namespace) -> int:
     summary = {"clips": len(t), "usable": len(ok), "by_camera": ok["camera"].value_counts().to_dict(),
                "camera_days": int(ok["camera_day"].nunique()), "exclusion": t["exclusion"].replace("", "ok").value_counts().to_dict(),
                "Hs_label_m": ok["Hs_label_m"].describe().round(2).to_dict()}  # fmt: skip
+    if STORM:  # sealed: no label statistics of the storm set
+        del summary["Hs_label_m"]
     with atomic_open(OUT / "clips_summary.json", "w") as fh:
         json.dump(summary, fh, indent=1, default=str)
     print(json.dumps(summary, indent=1, default=str))
@@ -562,43 +589,38 @@ chmod 644 {args.name}.tar.part; mv {args.name}.tar.part {args.name}.tar; echo {c
     return 0
 
 
-def ship(args: argparse.Namespace) -> int:
-    """Send the package's windows to the GPU server through R2, in checked batches."""
+def _host_base(args: argparse.Namespace) -> tuple[str, str]:
     host = args.host or os.environ.get("GPU_HOST")
     if not host:
         raise SystemExit("set GPU_HOST (or --host) to the server name in ~/.ssh/config")
-    base = args.base or _ssh(host, "echo /raid/scratch/$(id -un)/wave-analysis").strip()
-    if args.package:
-        return _ship_package(host, base, args)
-    dest = f"{base}/video_windows/{args.name}"
-    win = pd.read_csv(data_dir("processed") / "packages" / args.name / "windows.csv")
-    _ssh(host, f"mkdir -p {dest} && touch {dest}/VERIFIED")
-    have = {
-        line.split()[1] for line in _ssh(host, f"cat {dest}/VERIFIED").splitlines() if line.strip()
-    }
-    todo = win[
-        [f"{c}/{i}.zip" not in have for c, i in zip(win["camera"], win["clip_id"], strict=True)]
-    ]
-    print(f"{len(win):,} clips with windows; {len(have):,} on the server; {len(todo):,} to send "
-          f"({todo['zip_bytes'].sum() / 1e9:.1f} GB)", flush=True)  # fmt: skip
+    return host, args.base or _ssh(host, "echo /raid/scratch/$(id -un)/wave-analysis").strip()
+
+
+def _r2_send(host: str, dest: str, src: Path, rel: list[str], sha: list[str], nbytes: list[int],
+             staging: str, args: argparse.Namespace) -> int:  # fmt: skip
+    """Send ``src/<rel>`` to ``dest/<rel>`` on the server through R2, in checked batches.
+
+    New files go up to the ``staging`` prefix (``--bwlimit``), the server fetches each through
+    a short-lived signed link (kept off command lines), checks its SHA-256, renames it into
+    place and lists it in ``dest/VERIFIED``; the staged copies are then deleted.
+    """
     t0, sent = time.time(), 0
-    for s in range(0, len(todo), args.batch):
-        b = todo.iloc[s : s + args.batch]
-        rel = [f"{c}/{i}.zip" for c, i in zip(b["camera"], b["clip_id"], strict=True)]
+    for s in range(0, len(rel), args.batch):
+        r_b, h_b = rel[s : s + args.batch], sha[s : s + args.batch]
         with tempfile.NamedTemporaryFile("w", suffix=".txt") as lst:
-            lst.write("\n".join(rel) + "\n")
+            lst.write("\n".join(r_b) + "\n")
             lst.flush()
             subprocess.run(["rclone", "copy", "--files-from", lst.name, "--bwlimit", args.bwlimit,
-                            "--s3-no-check-bucket", str(WINDOWS), f"{R2_STAGING}/{args.name}"], check=True)  # fmt: skip
-        links = [subprocess.run(["rclone", "link", "--expire", "12h", f"{R2_STAGING}/{args.name}/{r}"],
-                                capture_output=True, text=True, check=True).stdout.strip() for r in rel]  # fmt: skip
+                            "--s3-no-check-bucket", str(src), staging], check=True)  # fmt: skip
+        links = [subprocess.run(["rclone", "link", "--expire", "12h", f"{staging}/{r}"],
+                                capture_output=True, text=True, check=True).stdout.strip() for r in r_b]  # fmt: skip
         # curl reads the signed links from a config file (mode 600), never from its command line
         cfg = "".join(
-            f'url = "{u}"\noutput = "{dest}/{r}.part"\n' for u, r in zip(links, rel, strict=True)
+            f'url = "{u}"\noutput = "{dest}/{r}.part"\n' for u, r in zip(links, r_b, strict=True)
         )
         _ssh(host, f"umask 077 && cat > {dest}/.links", stdin=cfg)
-        sums = "".join(f"{h}  {r}.part\n" for h, r in zip(b["zip_sha256"], rel, strict=True))
-        out = _ssh(host, f"""set -e; cd {dest}; mkdir -p {' '.join(sorted({r.split('/')[0] for r in rel}))}
+        sums = "".join(f"{h}  {r}.part\n" for h, r in zip(h_b, r_b, strict=True))
+        out = _ssh(host, f"""set -e; cd {dest}; mkdir -p {' '.join(sorted({str(Path(r).parent) for r in r_b}))}
 curl -sS --fail --retry 3 --create-dirs --parallel --parallel-max 4 -K .links; rm -f .links
 cat > .sums; sha256sum -c --quiet .sums
 while read -r h p; do mv "$p" "${{p%.part}}"; echo "$h  ${{p%.part}}" >> VERIFIED; done < .sums
@@ -606,15 +628,84 @@ rm -f .sums; echo ok""", stdin=sums)  # fmt: skip
         if out.strip().splitlines()[-1:] != ["ok"]:
             raise SystemExit(f"batch {s // args.batch} failed on the server: {out[-300:]}")
         with tempfile.NamedTemporaryFile("w", suffix=".txt") as lst:
-            lst.write("\n".join(rel) + "\n")
+            lst.write("\n".join(r_b) + "\n")
             lst.flush()
-            subprocess.run(
-                ["rclone", "delete", "--files-from", lst.name, f"{R2_STAGING}/{args.name}"],
-                check=True,
-            )
-        sent += int(b["zip_bytes"].sum())
-        print(f"  {s + len(b):,}/{len(todo):,} clips on the server and checked, {sent / 1e9:.1f} GB, "
+            subprocess.run(["rclone", "delete", "--files-from", lst.name, staging], check=True)
+        sent += sum(nbytes[s : s + args.batch])
+        print(f"  {s + len(r_b):,}/{len(rel):,} files on the server and checked, {sent / 1e9:.1f} GB, "
               f"{sent * 8 / 1e6 / (time.time() - t0):.1f} Mbit/s", flush=True)  # fmt: skip
+    return sent
+
+
+def _verified(host: str, dest: str) -> dict[str, str]:
+    _ssh(host, f"mkdir -p {dest} && touch {dest}/VERIFIED")
+    lines = _ssh(host, f"cat {dest}/VERIFIED").splitlines()
+    return {ln.split()[1]: ln.split()[0] for ln in lines if ln.strip()}
+
+
+def ship(args: argparse.Namespace) -> int:
+    """Send the package's windows to the GPU server through R2, in checked batches."""
+    host, base = _host_base(args)
+    if args.package:
+        return _ship_package(host, base, args)
+    dest = f"{base}/video_windows/{args.name}"
+    win = pd.read_csv(data_dir("processed") / "packages" / args.name / "windows.csv")
+    have = _verified(host, dest)
+    todo = win[
+        [f"{c}/{i}.zip" not in have for c, i in zip(win["camera"], win["clip_id"], strict=True)]
+    ]
+    print(f"{len(win):,} clips with windows; {len(have):,} on the server; {len(todo):,} to send "
+          f"({todo['zip_bytes'].sum() / 1e9:.1f} GB)", flush=True)  # fmt: skip
+    rel = [f"{c}/{i}.zip" for c, i in zip(todo["camera"], todo["clip_id"], strict=True)]
+    _r2_send(host, dest, WINDOWS, rel, list(todo["zip_sha256"]), [int(b) for b in todo["zip_bytes"]],
+             f"{R2_STAGING}/{args.name}", args)  # fmt: skip
+    return 0
+
+
+def _cut(cam: str, cid: str) -> bool:
+    """A clip whose windows, spectrum and physics v2 are done (or that has nothing to cut)."""
+    j = WINDOWS / cam / f"{cid}.json"
+    if not j.exists():
+        return False
+    r = json.loads(j.read_text())
+    return "error" in r or r.get("K", 0) < 1 or (WINDOWS / cam / f"{cid}.physics_v2.json").exists()
+
+
+def offload(args: argparse.Namespace) -> int:
+    """Move the storm set's raw clips to the GPU server once they are cut, then free the local copies.
+
+    Each clip goes to ``<BASE>/raw/webcoos_video_storm/<camera>/<YYYY>/<MM>/<DD>/`` through R2,
+    checked against the SHA-256 its download ledger recorded; the local copy is deleted only
+    once the server lists it as checked. The ledgers stay here.
+    """
+    if not STORM:
+        raise SystemExit("offload moves the storm set only (WEBCOOS_VIDEO_SET=storm)")
+    host, base = _host_base(args)
+    dest = f"{base}/raw/webcoos_video_storm"
+    ledger = pd.concat([pd.read_csv(f, usecols=["local_path", "sha256", "size_bytes", "status"])
+                        for f in sorted((RAW / "_manifests").glob("*.csv"))])  # fmt: skip
+    ledger = ledger[ledger["status"] == "verified"]
+    sha = dict(zip(ledger["local_path"].map(lambda x: Path(x).name), ledger["sha256"], strict=True))
+    t = pd.read_parquet(OUT / "clips.parquet")
+    ready = {cid for cam, cid, ex in zip(t["camera"], t["clip_id"], t["exclusion"], strict=True)
+             if ex != "" or _cut(cam, cid)}  # fmt: skip
+    files = [p for p in sorted(RAW.rglob("*.mp4")) if p.stem in ready and p.name in sha]
+    have = _verified(host, dest)
+    rel = [str(p.relative_to(RAW)) for p in files]
+    todo = [(r, p) for r, p in zip(rel, files, strict=True) if r not in have]
+    print(f"{len(files):,} cut clips here ({sum(p.stat().st_size for p in files) / 1e9:.1f} GB); "
+          f"{len(todo):,} to send", flush=True)  # fmt: skip
+    _r2_send(host, dest, RAW, [r for r, _ in todo], [sha[p.name] for _, p in todo],
+             [p.stat().st_size for _, p in todo], R2_RAW, args)  # fmt: skip
+    have = _verified(host, dest)
+    freed = 0
+    for r, p in zip(rel, files, strict=True):
+        if have.get(r) == sha[p.name] and not args.keep:
+            freed += p.stat().st_size
+            p.unlink()
+    print(
+        f"{len(files):,} clips checked on the server; {freed / 1e9:.1f} GB freed here", flush=True
+    )
     return 0
 
 
@@ -636,10 +727,10 @@ def main(argv: list[str] | None = None) -> int:
     h.add_argument("--workers", type=int, default=4)
     h.set_defaults(func=physics)
     k = sub.add_parser("pack")
-    k.add_argument("--name", default="webcoos_video_v1")
+    k.add_argument("--name", default=NAME)
     k.set_defaults(func=pack)
     s = sub.add_parser("ship")
-    s.add_argument("--name", default="webcoos_video_v1")
+    s.add_argument("--name", default=NAME)
     s.add_argument("--host", help="the server in ~/.ssh/config (default: $GPU_HOST)")
     s.add_argument(
         "--base",
@@ -654,6 +745,13 @@ def main(argv: list[str] | None = None) -> int:
         help="upload cap (rclone --bwlimit; the home line does about 4.3M)",
     )
     s.set_defaults(func=ship)
+    o = sub.add_parser("offload")
+    o.add_argument("--host", help="the server in ~/.ssh/config (default: $GPU_HOST)")
+    o.add_argument("--base", help="the project's folder on the server")
+    o.add_argument("--batch", type=int, default=20, help="clips per batch")
+    o.add_argument("--bwlimit", default="3M", help="upload cap (rclone --bwlimit)")
+    o.add_argument("--keep", action="store_true", help="send, but keep the local copies (a test)")
+    o.set_defaults(func=offload)
     args = ap.parse_args(argv)
     return int(args.func(args))
 

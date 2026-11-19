@@ -69,6 +69,11 @@ separately (`docs/REPRODUCIBILITY.md`).
   buoys, swell share predicts the under-call (Spearman −0.89).
 
 ### Added (2026-11-19, shore video: sealed storm set)
+- Storm storage: `WEBCOOS_VIDEO_SET=storm` gives `scripts/webcoos_video_clips.py` the storm set's own raw root,
+  output folder and package (`webcoos_video_storm_v1`). The new `offload` step moves cut storm clips to the GPU
+  server, checked against their ledger SHA-256, and frees the local copies. `ship` and `offload` share one R2 helper.
+  The storm driver now cuts and offloads each date before fetching the next, so the desktop keeps 40 GB free; its
+  budget counts fetched bytes from the ledgers, and dates already done are skipped on a rerun.
 - `scripts/webcoos_storm_dates.py`: storm dates chosen from CDIP records alone. A storm date
   has a daylight mean H_s of 2.0 m or more at the paired buoy. Development and sample dates
   are excluded, and only one date is kept per storm and site. The dates are ordered over
