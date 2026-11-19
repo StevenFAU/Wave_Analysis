@@ -166,6 +166,18 @@ config above unchanged.
   logged every 5 minutes. The resumed loader shuffles with a new seed (DINOv3 seeds it
   with the start step), so the order of views after step 10,000 differs from an
   unbroken run's. The recipe and the data are unchanged.
+- **Memory after the restart.** The resumed loss continued where it stopped (12.42 at
+  step 10,000, against 12.40 before the kill), so the checkpoint loaded. Capping the
+  malloc arenas did not stop the growth. The container still grew linearly, about
+  11.5 GB per 1,000 steps (45 GB at step 10,000, 225 GB at step 26,170). The growth is
+  in the 28 data-loader workers (about 8.6 GB each by then; the training process 28 GB).
+  At step 26,220 the running container's limit was raised to 330 GB
+  (`docker update`, no restart), enough for the remaining 3,780 steps. The cause is not
+  found. One guess was ruled out locally: DINOv3 disables Python's garbage collector
+  before its workers fork, but with that state, a buoy-like strip and torchvision crops,
+  workers stayed flat (about 0.5 GB over 400 batches, collector off or on). DINOv3's own
+  augmentation and collate were not in that test. A future run of this length needs a
+  limit of about 400 GB, or a restart from a checkpoint partway.
 
 ## Choosing the checkpoint (validation buoys only)
 
