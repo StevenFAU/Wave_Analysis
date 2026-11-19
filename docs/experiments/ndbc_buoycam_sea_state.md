@@ -744,6 +744,64 @@ either arm's three single-seed RMSEs), backbones are settled for the strips and 
 work moves to fusion (stage 2) and new outputs (stage 3). The arm with the lower
 out-of-fold H_s RMSE is the camera model for stages 2 and 3.
 
+**Result (2026-11-19): not met; DINOv3-gentle is the camera model for stages 2 and 3.**
+Five folds x three seeds per arm (30 runs at `8f225d5`, `runs/buoycam-cv-stage1-20261119`).
+Every buoy is predicted once, by models that saw neither it nor any buoy within 300 km.
+RMSE is the typical error in metres; CRPS is the average error of the whole predicted
+distribution, in metres (lower is better).
+
+| Out of fold: 79 buoys, 41,091 strips | Arm A (ImageNet) | DINOv3-gentle |
+|---|---|---|
+| H_s RMSE | 0.550 m [0.504, 0.597] | **0.532 m** [0.488, 0.575] |
+| H_s R², Pearson | 0.78, 0.884 | **0.79, 0.892** |
+| H_s CRPS | 0.310 m | **0.279 m** |
+| H_s RMSE of single seeds | 0.559-0.575 m | 0.539-0.555 m |
+| H_s RMSE by fold 0 / 1 / 2 / 3 / 4 | 0.73 / 0.57 / 0.46 / 0.44 / 0.47 | 0.70 / 0.53 / 0.46 / 0.42 / 0.46 |
+| H_s RMSE at the 12 sealed buoys | 0.442 m | **0.432 m** |
+| Wind-wave RMSE | 0.262 m | **0.260 m** |
+| Swell RMSE (R²) | 0.741 m (0.50) | **0.717 m (0.53)** |
+| Calm vs rough (Choi) | 98.3 % | 98.4 % |
+| Kim's five classes | 65.3 % | 66.7 % [63.9, 69.6] |
+| WMO classes, balanced accuracy | 0.64 | 0.67 |
+
+- **Bar B2-CV:** DINOv3-gentle minus arm A, H_s −0.019 m [−0.028, −0.011] (over the 43
+  groups [−0.027, −0.005]); wind-wave −0.002 m [−0.008, +0.004]. H_s is lower at all 79
+  buoys; the wind-wave interval reaches zero. The bar asked for both: not met.
+- **Seed spread:** each arm's three single seeds span 0.016 m of H_s RMSE; the arms differ
+  by 0.019 m, just more. So by the rule fixed in advance the backbone is not quite
+  settled for H_s; for the wind sea it is (0.002 m apart, seeds span 0.007-0.008 m).
+  DINOv3-gentle has the lower H_s RMSE and is the camera model for stages 2 and 3.
+- **Reading.** With all 79 buoys, B2's H_s gain on 12 buoys (−0.010 m [−0.024, +0.001])
+  is twice as large and clearly below zero. It comes from the swell (−0.024 m
+  [−0.034, −0.014]); the wind sea, which the camera reads best, is level. CRPS gains
+  more than RMSE (−0.031 m [−0.040, −0.023]): DINOv3's predicted spread fits better,
+  not only its centre. The sealed-test headline stays 0.440 m (B2); the out-of-fold
+  0.432 m at those 12 buoys agrees with it.
+- **Against ERA5** (corrected by a line on each fold's training strips): wind-wave
+  camera 0.260 m, ERA5 0.343 m (the camera is better by 0.087 m [0.067, 0.110]); H_s
+  camera 0.514 m, ERA5 0.292 m on the 40,240 strips with ERA5 (worse by 0.22 m
+  [0.18, 0.26]). v2's finding holds at all buoys: the camera is a wind-sea instrument.
+- **Fold 0** (the US West Coast, never seen in training) is the hardest, H_s 0.70 m:
+  the camera under-reads a swell it has not learned.
+
+**Intervals** (DINOv3-gentle; coverage is the share of true values inside a 90 %
+interval, 0.90 is right):
+
+- The head alone (mu ± 1.645 sigma, uncalibrated) is overconfident at new buoys: it
+  covers 0.75 of H_s (arm A 0.59) and 0.88 of wind-wave heights.
+- **Buoy-level conformal:** H_s coverage 0.904 over all strips, 0.907 averaged over
+  buoys, mean width 1.83 m (arm A needs 2.34 m for 0.894); wind-wave 0.916, width 0.72 m.
+- By sea state of the true H_s: smooth 0.80, slight 0.90, moderate 0.92, rough or more
+  0.92.
+- **Per buoy:** 11 of 79 below 0.80 for H_s (3 for wind-wave), none below 0.50. Six are
+  West Coast buoys whose H_s the camera under-reads by 0.6-0.7 m on average (46042,
+  46047, 46013, 46069, 46022, 46014); the other five it over-reads by 0.4 m (46081 at
+  0.55 the worst, 44013, 42002, 44008, 45002). Conformal promises 90 % on average over
+  new buoys, not at each one; a buoy whose level the camera misjudges falls outside.
+- Calibrated on each fold's own validation buoys instead, the intervals over-cover
+  (0.944) and are wider (2.04 m). Without the predicted spread (an unnormalised score)
+  0.908 needs 2.38 m: the spread narrows H_s intervals by about a quarter.
+
 ## Stage 2: partition-aware fusion (fixed 2026-11-18, before any fusion was fitted or scored)
 
 Rank 3 of the architecture review. The camera reads the wind sea better than ERA5
@@ -800,6 +858,43 @@ conditions. The set needs ERA5, which runs about 5 days behind real time, and a 
 snapshot saved after the weeks it labels. It is large enough to score when ERA5 covers
 at least 7 days after the package (about 6,000 strips at 70 or more buoys), which is
 expected around 2026-11-26.
+
+**Result (2026-11-19): met out of fold; confirmation on new weeks pending.** Camera:
+stage 1's DINOv3-gentle, out of fold (`runs/buoycam-cv-fusion-20261119`). 39,767 strips
+at 77 buoys have every input (ERA5 and buoy wind); 36,791 have a wind-wave label.
+
+| Out of fold, 77 buoys | H_s RMSE | minus ERA5 + wind | Wind-wave RMSE | minus ERA5 + wind |
+|---|---|---|---|---|
+| ERA5 + wind (the bar) | 0.288 m | | 0.293 m | |
+| **Gated partition swap** | **0.267 m** | **−0.021 [−0.031, −0.012]** | 0.240 m | **−0.053 [−0.067, −0.039]** |
+| Full swap (k = 1), gated | 0.268 m | −0.020 [−0.031, −0.010] | 0.240 m | −0.053 [−0.067, −0.040] |
+| Full swap, gate open | 0.278 m | −0.011 [−0.025, +0.002] | 0.253 m | −0.040 [−0.056, −0.023] |
+| Test 3's ridge with the camera | 0.274 m | −0.015 [−0.030, −0.000] | 0.229 m | −0.064 [−0.078, −0.050] |
+| Gradient boosting, all inputs | 0.297 m | +0.008 [−0.017, +0.034] | **0.226 m** | −0.067 [−0.081, −0.052] |
+| Partition rule on raw ERA5, nothing fitted | 0.323 m | +0.035 [+0.010, +0.062] | 0.252 m | −0.041 [−0.058, −0.025] |
+| ERA5 alone (line) | 0.292 m | +0.004 [−0.006, +0.013] | 0.337 m | +0.044 [+0.030, +0.060] |
+| Camera alone | 0.514 m | +0.226 [+0.185, +0.265] | 0.252 m | −0.041 [−0.058, −0.025] |
+
+- **Bar S2: met.** Both intervals lie below zero, and stay there over the 43 station
+  groups (H_s [−0.034, −0.009], wind-wave [−0.070, −0.035]).
+- **What it means.** Swapping ERA5 + wind's wind sea for the camera's lowers the
+  total-height error by 7 % (0.288 to 0.267 m) at buoys none of the models saw. On the
+  12 test buoys Test 3's ridge left the total level; under the folds it gains
+  −0.015 m, with its interval just reaching zero. Adding the camera as wind-sea energy
+  gains more, and clearly.
+- **Fitted values.** k (the share of the wind-sea correction that reaches the total) is
+  0.78-0.88 across folds, and b (the camera's scale) 0.94-0.99. The gate acts mostly as
+  a fixed blend of wind-sea energy, about four parts camera to one part ERA5 + wind (mean
+  0.79; below 0.5 on 0.1 % of strips). It leans towards ERA5 in low sun (0.77) and on
+  the fifth of strips where the camera is least sure (0.74). Forcing the camera in fully
+  (gate open) halves the H_s gain, and its interval reaches zero.
+- **For the wind sea alone the swap is not the best combiner.** Test 3's ridge (0.229 m)
+  and gradient boosting (0.226 m) beat its 0.240 m, because its wind-sea output is a
+  blend chosen for the total. Gradient boosting is the worst combiner for the total
+  (0.297 m). Raw ERA5 with nothing fitted is worse than ERA5 + wind (+0.035 m): ERA5's
+  heights need the buoy-wind correction first.
+- **Confirmation** on strips archived after the package is still to come (protocol
+  above, about 2026-11-26). Until then this counts as found, not confirmed.
 
 ## Stage 3: periods, wind-sea spectrum and direction (fixed 2026-11-18, before any stage-3 run)
 
@@ -938,11 +1033,14 @@ without it).
       far worse (+0.111 m). Backbones differ by about 0.01 m once each has its recipe.
 - [x] Protocol check R (2026-11-18): the random split lowers H_s error by 0.02 m and
       leaves Kim's five-class accuracy at 69 %: the gap to Kim is not the split.
-- [ ] Grouped cross-validation (2026-11-18): package `ndbc_buoycam_heights_v2cv`, five
-      folds over the 43 groups; bar B2-CV fixed before any run.
-- [ ] Stage 2, partition-aware fusion (2026-11-18): NDBC's partition adds as energies on
-      every record; bar S2 fixed before any fusion. Confirmation on new weeks from about
-      2026-11-26.
+- [x] Grouped cross-validation (2026-11-19, five folds x three seeds per arm): B2-CV not
+      met. DINOv3-gentle lowers H_s RMSE at all 79 buoys (−0.019 m [−0.028, −0.011]) but
+      not the wind sea (−0.002 m). Out of fold H_s RMSE 0.532 m, R² 0.79; buoy-level
+      conformal 90 % intervals cover 0.90, but 11 buoys fall below 0.80.
+- [x] Stage 2, partition-aware fusion (2026-11-19): bar S2 met out of fold. The gated
+      swap lowers ERA5 + wind's H_s RMSE from 0.288 to 0.267 m (−0.021 m [−0.031, −0.012])
+      and its wind-wave RMSE from 0.293 to 0.240 m.
+- [ ] Stage 2 confirmation on strips archived after the package, from about 2026-11-26.
 - [ ] Stage 3, periods, spectrum and direction (2026-11-18): the caption carries no
       heading (a fixed "90°"); labels from each buoy's spectra; bar S3 fixed before any run.
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.
