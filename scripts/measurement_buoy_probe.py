@@ -1,4 +1,10 @@
-"""Fit matched wind, geometry and frozen visual probes inside one registered buoy fold."""
+"""Fit matched wind, geometry and frozen visual probes inside one registered buoy fold.
+
+Every ridge is fitted on the fold's training strips only (the buoys the checkpoint trained
+on); the fold's test buoys are predicted and never fitted. A sensitivity refits the same
+arms on the fold's validation strips, whose image features the encoder never trained on
+by gradient (they chose its epoch only). Bar M-S1: docs/experiments/wave_measurements.md.
+"""
 
 import argparse
 import hashlib
@@ -44,17 +50,40 @@ def horizon_path(package):
     return data_dir("processed") / "horizon/ndbc_buoycam_sea_state_v0/horizons.parquet"
 
 
+GEOMETRY = ["roll", "row_sd", "roll_dm", "pitch_dm"]
+
+
 def geometry(table, package):
+    """Per-strip horizon motion over at least three clear views.
+
+    ``roll`` and ``row_sd`` use the strip alone (raw angle RMS, spread of the horizon row).
+    ``roll_dm`` and ``pitch_dm`` remove each camera's mounting first, as the motion study
+    (scripts/buoycam_horizon.py): the median angle and row of each station, camera and view
+    over all its strips, from images only (no label), then the RMS of what remains.
+    """
     p = horizon_path(package)
     views = pd.read_parquet(p).query("ok").copy()
+    views = views.merge(
+        table[["sample_id", "station_id", "camera_code"]], on="sample_id", how="inner"
+    )
+    key = ["station_id", "camera_code", "view"]
     views["roll2"] = views.angle_deg**2
+    views["roll_dm2"] = (views.angle_deg - views.groupby(key).angle_deg.transform("median")) ** 2
+    views["pitch_dm2"] = (views.row_frac - views.groupby(key).row_frac.transform("median")) ** 2
     geo = (
         views.groupby("sample_id")
-        .agg(n=("view", "size"), roll=("roll2", "mean"), row_sd=("row_frac", "std"))
+        .agg(
+            n=("view", "size"),
+            roll=("roll2", "mean"),
+            row_sd=("row_frac", "std"),
+            roll_dm=("roll_dm2", "mean"),
+            pitch_dm=("pitch_dm2", "mean"),
+        )
         .query("n>=3")
     )
-    geo["roll"] = np.sqrt(geo.roll)
-    return table.merge(geo, on="sample_id", how="left", validate="1:1")
+    for col in ("roll", "roll_dm", "pitch_dm"):
+        geo[col] = np.sqrt(geo[col])
+    return table.merge(geo[GEOMETRY], on="sample_id", how="left", validate="1:1")
 
 
 def wind_features(table):
@@ -63,7 +92,7 @@ def wind_features(table):
     return np.column_stack([speed, gust, speed**2, gust**2, speed * gust])
 
 
-def extract(pkg, table, run, device, batch, water_only):
+def extract(pkg, table, run, device, batch, water_only, workers=0):
     import torch
     from torch.utils.data import DataLoader
 
@@ -97,7 +126,9 @@ def extract(pkg, table, run, device, batch, water_only):
     start = 0
     features = []
     with torch.inference_mode():
-        for inputs, _ in DataLoader(ds, batch_size=batch):
+        for inputs, _ in DataLoader(
+            ds, batch_size=batch, num_workers=workers, pin_memory=device != "cpu"
+        ):
             if water_only:
                 views, mask = inputs
                 for i, fracs in enumerate(h[start : start + len(views)]):
@@ -124,12 +155,12 @@ def extract(pkg, table, run, device, batch, water_only):
     return np.concatenate(features)
 
 
-def dictionary_shapes(table, features, complete, test, results):
+def dictionary_shapes(table, features, complete, train, test, results):
     """Four nonnegative spectral prototypes learned only from the training fold."""
     cols = [f"band_{j}_m2" for j in range(4)]
     energy = table[cols].to_numpy()
     total = energy.sum(1)
-    fit = (~test) & complete & np.isfinite(total) & (total > 0)
+    fit = train & complete & np.isfinite(total) & (total > 0)
     take = test & complete
     if fit.sum() < 8 or not take.any():
         return
@@ -150,14 +181,14 @@ def dictionary_shapes(table, features, complete, test, results):
             results.loc[table.index[take], f"{arm}_dictionary__{col}"] = est[:, j]
 
 
-def spectral_correction(table, features, complete, test, results):
+def spectral_correction(table, features, complete, train, test, results):
     """Positive multiplicative corrections on the three fully covered ERA5 bands."""
     for j in (1, 2, 3):
         target = f"band_{j}_m2"
         prior = table["prior_" + target].to_numpy()
         true = table[target].to_numpy()
         valid = (prior > 0) & np.isfinite(prior) & complete
-        fit = valid & ~test & np.isfinite(true)
+        fit = valid & train & np.isfinite(true)
         take = valid & test
         if fit.sum() < 2 or not take.any():
             continue
@@ -187,6 +218,7 @@ def main():
         help="keep only the water region below each detected horizon",
     )
     ap.add_argument("--batch", type=int, default=8)
+    ap.add_argument("--workers", type=int, default=0, help="image-decoding processes")
     ap.add_argument("--device", default="cpu")
     ap.add_argument(
         "--smoke", action="store_true", help="up to 12 rows per partition; plumbing only"
@@ -206,17 +238,20 @@ def main():
             validate="1:1",
             suffixes=("", "_prior"),
         )
+    # A spectrum with no energy at all is a dropout (WVHT 0.0), not a calm sea: no slope.
+    for col in ("slope_rms", "slope_finite_depth", "slope_below_035"):
+        table.loc[table[col] <= 0, col] = np.nan
     split = f"split_fold{args.fold}"
     if table.groupby("station_group")[split].nunique().max() != 1:
         raise ValueError("a station group crosses partitions")
-    table = table[table[split].isin(["train", "test"])].copy()
+    table = table[table[split].isin(["train", "val", "test"])].copy()
     if args.smoke:
         table = pd.concat(
             [g.sample(min(12, len(g)), random_state=0) for _, g in table.groupby(split)]
         )
     table = table.reset_index(drop=True)
     w = wind_features(table)
-    g = table[["roll", "row_sd"]].to_numpy()
+    g = table[GEOMETRY].to_numpy()
     features = {"wind": w, "geometry": g, "wind_geometry": np.column_stack([w, g])}
     ckhash = None
     if args.checkpoint_run:
@@ -230,15 +265,29 @@ def main():
             raise ValueError(
                 "a full images-only heights-v2cv checkpoint from the same fold is required"
             )
+        # The checkpoint's own held-out strips must be this fold's test strips exactly.
+        own = pd.read_csv(
+            args.checkpoint_run / "predictions.csv", usecols=["sample_id", "partition"]
+        )
+        package_test = set(table.loc[table[split].eq("test"), "sample_id"])
+        if not args.smoke and set(own.loc[own.partition.eq("test"), "sample_id"]) != package_test:
+            raise ValueError("the checkpoint's test strips differ from this fold's test strips")
         with (args.checkpoint_run / "best.pt").open("rb") as fh:
             ckhash = hashlib.file_digest(fh, "sha256").hexdigest()
         image = extract(
-            args.package, table, args.checkpoint_run, args.device, args.batch, args.water_only
+            args.package,
+            table,
+            args.checkpoint_run,
+            args.device,
+            args.batch,
+            args.water_only,
+            args.workers,
         )
         features.update(image=image, all_inputs=np.column_stack([w, g, image]))
     # Primary comparisons use the same strips for all arms; keep exclusions in outputs.
     complete = np.isfinite(np.column_stack(list(features.values()))).all(axis=1)
-    test = table[split].eq("test").to_numpy()
+    role = table[split].to_numpy()
+    train, val, test = (role == "train"), (role == "val"), (role == "test")
     results = table.loc[
         test,
         [
@@ -252,24 +301,26 @@ def main():
         ],
     ].copy()
     results["eligible_inputs"] = complete[test]
-    for target in TARGETS:
-        y = table[target].to_numpy()
-        fit = ~test & complete & np.isfinite(y)
-        take = test & complete
-        if fit.sum() < 2 or not take.any():
-            continue
-        for arm, x in features.items():
-            p = ridge(x[fit], y[fit], x[take])
-            p = np.clip(p, 0, 1) if target == "wind_r1" else np.maximum(p, 0)
-            results.loc[table.index[take], f"{arm}__{target}"] = p
-            if target == "wind_r1":
-                results.loc[table.index[take], f"{arm}__wind_spread_deg"] = np.rad2deg(
-                    np.sqrt(2 * (1 - p))
-                )
-        results.loc[table.index[take], f"median__{target}"] = np.median(y[fit])
-    dictionary_shapes(table, features, complete, test, results)
+    # Primary: fitted on the training buoys. Sensitivity ("valfit_"): the validation buoys.
+    for prefix, fit_rows in [("", train), ("valfit_", val)]:
+        for target in TARGETS:
+            y = table[target].to_numpy()
+            fit = fit_rows & complete & np.isfinite(y)
+            take = test & complete
+            if fit.sum() < 2 or not take.any():
+                continue
+            for arm, x in features.items():
+                p = ridge(x[fit], y[fit], x[take])
+                p = np.clip(p, 0, 1) if target == "wind_r1" else np.maximum(p, 0)
+                results.loc[table.index[take], f"{prefix}{arm}__{target}"] = p
+                if target == "wind_r1":
+                    results.loc[table.index[take], f"{prefix}{arm}__wind_spread_deg"] = np.rad2deg(
+                        np.sqrt(2 * (1 - p))
+                    )
+            results.loc[table.index[take], f"{prefix}median__{target}"] = np.median(y[fit])
+    dictionary_shapes(table, features, complete, train, test, results)
     if args.prior_bands:
-        spectral_correction(table, features, complete, test, results)
+        spectral_correction(table, features, complete, train, test, results)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     from tempfile import TemporaryDirectory
 
@@ -295,8 +346,12 @@ def main():
                     else None,
                     "arms": list(features),
                     "ridge_penalty": 10,
-                    "n_fit_inputs": int((~test & complete).sum()),
+                    "checkpoint_run": args.checkpoint_run.name if args.checkpoint_run else None,
+                    "geometry": GEOMETRY,
+                    "n_fit_inputs": int((train & complete).sum()),
+                    "n_valfit_inputs": int((val & complete).sum()),
                     "n_test": int(test.sum()),
+                    "n_test_eligible": int((test & complete).sum()),
                 },
                 indent=2,
             )

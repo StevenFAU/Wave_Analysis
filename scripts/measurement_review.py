@@ -179,6 +179,56 @@ def paired(y, a, b, group, mae=False):
     }
 
 
+def slope_bar(data, metadata):
+    """Bar M-S1 (docs/experiments/wave_measurements.md): slope RMSE, all inputs vs wind + geometry."""
+    y = "slope_rms"
+    out = {
+        "test_strips": len(data),
+        "test_buoys": int(data.station_id.nunique()),
+        "test_groups": int(data.station_group.nunique()),
+        "eligible_strips": int(data.eligible_inputs.sum()),
+        "eligible_buoys": int(data.loc[data.eligible_inputs, "station_id"].nunique()),
+        "checkpoints": {m["fold"]: m.get("checkpoint_run") for m in metadata},
+    }
+    for prefix, name in [("", "primary"), ("valfit_", "valfit_sensitivity")]:
+        a, b = data[f"{prefix}all_inputs__{y}"], data[f"{prefix}wind_geometry__{y}"]
+        if a.notna().any():
+            out[name] = paired(data[y], a, b, data.station_group)
+    ok = data.eligible_inputs & data[y].notna()
+    out["scored_strips"] = int(ok.sum())
+    out["scored_buoys"] = int(data.loc[ok, "station_id"].nunique())
+    rmse = {}
+    for arm in ["all_inputs", "wind_geometry", "wind", "geometry", "image", "median"]:
+        col = f"{arm}__{y}"
+        if col in data:
+            rmse[arm] = float(np.sqrt(np.mean((data.loc[ok, col] - data.loc[ok, y]) ** 2)))
+    out["rmse_by_arm"] = rmse
+    out["slope_sd_eligible"] = float(data.loc[ok, y].std())
+    out["by_fold_delta"] = {
+        int(k): float(
+            np.sqrt(np.mean((g[f"all_inputs__{y}"] - g[y]) ** 2))
+            - np.sqrt(np.mean((g[f"wind_geometry__{y}"] - g[y]) ** 2))
+        )
+        for k, g in data[ok].groupby("fold")
+    }
+    out["camera_alone_vs_wind_geometry"] = (
+        paired(data[y], data[f"image__{y}"], data[f"wind_geometry__{y}"], data.station_group)
+        if f"image__{y}" in data
+        else None
+    )
+    out["wind_wave_check"] = (
+        paired(
+            data.wind_wave_label_m,
+            data["all_inputs__wind_wave_label_m"],
+            data["wind_geometry__wind_wave_label_m"],
+            data.station_group,
+        )
+        if "all_inputs__wind_wave_label_m" in data
+        else None
+    )
+    return out
+
+
 def direction_control(args):
     labels = pd.read_csv(args.package / "labels.csv", low_memory=False)
     oof = pd.read_csv(args.oof, usecols=["sample_id", "pred_dir_deg", "dir_agreement"])
@@ -272,6 +322,7 @@ def scores(args):
                     r["seed"],
                     r.get("water_only"),
                     r.get("prior_sha256"),
+                    tuple(r.get("geometry") or ()),
                 )
                 for r in metadata
             }
@@ -280,11 +331,15 @@ def scores(args):
     ):
         raise ValueError("provide one full visual probe per fold, same package, seed and recipe")
     data = pd.concat(
-        [pd.read_parquet(r / "predictions.parquet") for r in args.probes], ignore_index=True
+        [
+            pd.read_parquet(r / "predictions.parquet").assign(fold=m["fold"])
+            for r, m in zip(args.probes, metadata, strict=True)
+        ],
+        ignore_index=True,
     )
     if data.sample_id.duplicated().any():
         raise ValueError("duplicate test strips")
-    report = {}
+    report = {"bar_M_S1": slope_bar(data, metadata)}
     for name in [*TARGETS, "wind_spread_deg"]:
         y = data[name]
         a = data["all_inputs__" + name]

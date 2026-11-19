@@ -23,7 +23,7 @@ Run these from **the measurement worktree**. The plan prints local commands and 
 ```bash
 cd ~/Projects/Wave_Analysis-measurements
 scripts/measurements status
-GPU_HOST=<lab-host> deploy/dgx/run.sh check
+GPU_HOST=<ssh-alias> deploy/dgx/run.sh check
 scripts/measurements plan --arm dinov3 --seed 0 --stage probe
 S3=../Wave_Analysis/runs/buoycam-cv-spectral-20261119/oof_spectral.csv
 scripts/measurements peaks --package runs/prep-v1/buoys-depth --oof "$S3"

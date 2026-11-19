@@ -1,6 +1,7 @@
 """Regression tests for measurement definitions and held-out scoring."""
 
 import importlib
+import json
 from pathlib import Path
 
 import numpy as np
@@ -237,3 +238,68 @@ def test_foam_fraction_on_held_out_water(scripts, tmp_path):
     result = pd.read_csv(out)
     assert len(result) == 3 and np.allclose(result.visible_foam_fraction, 40 / 360)
     assert np.isfinite(result.color_texture).all()
+
+
+def _probe_package(tmp_path, n=40):
+    """Tiny tabular package: four groups, one per role plus a second training group."""
+    rng = np.random.default_rng(0)
+    m = importlib.import_module("measurement_buoy_probe")
+    roles = {"g0": "train", "g1": "train", "g2": "val", "g3": "test"}
+    rows, views = [], []
+    for g, role in roles.items():
+        for i in range(n):
+            sid = f"{g}-{i}"
+            wind = rng.uniform(1, 15)
+            slope = {"train": 0.004, "val": 0.008, "test": 1.0}[role] * wind
+            row = {
+                "sample_id": sid,
+                "station_id": g,
+                "camera_code": "Z",
+                "station_group": g,
+                "split_fold0": role,
+                "sun_elevation_deg": 30.0,
+                "usable_views": 6,
+                "wind_speed_mps": wind,
+                "wind_gust_mps": 1.3 * wind,
+                "wind_spread_deg": 30.0,
+            }
+            row.update(dict.fromkeys(m.TARGETS, slope))
+            rows.append(row)
+            for v in range(6):
+                # a fixed mounting tilt per camera view plus the strip's own motion
+                views.append(
+                    {"sample_id": sid, "view": v, "angle_deg": 5.0 * v + rng.normal(0, 1),
+                     "row_frac": 0.4 + 0.01 * v + rng.normal(0, 0.01), "ok": True}
+                )  # fmt: skip
+    pd.DataFrame(rows).to_csv(tmp_path / "labels.csv", index=False)
+    pd.DataFrame(views).to_parquet(tmp_path / "horizons.parquet", index=False)
+    return m
+
+
+def test_buoy_probe_fits_training_buoys_only(scripts, tmp_path, monkeypatch):
+    m = _probe_package(tmp_path)
+    out = tmp_path / "probe"
+    monkeypatch.setattr(
+        "sys.argv",
+        ["probe", "--package", str(tmp_path), "--fold", "0", "--out", str(out)],
+    )
+    m.main()
+    pred = pd.read_parquet(out / "predictions.parquet")
+    assert set(pred.station_group) == {"g3"}  # only the test buoys are predicted
+    labels = pd.read_csv(tmp_path / "labels.csv").set_index("sample_id")
+    wind = labels.loc[pred.sample_id, "wind_speed_mps"].to_numpy()
+    # Primary arms follow the training buoys' relation (slope 0.004 x wind), the sensitivity
+    # the validation buoys' (0.008 x wind); the test labels (1.0 x wind) pull neither.
+    assert np.median(pred["wind__slope_rms"] / wind) == pytest.approx(0.004, rel=0.1)
+    assert np.median(pred["valfit_wind__slope_rms"] / wind) == pytest.approx(0.008, rel=0.1)
+    run = json.loads((out / "run.json").read_text())
+    assert run["n_fit_inputs"] == 80 and run["n_valfit_inputs"] == 40 and run["n_test"] == 40
+
+
+def test_probe_geometry_removes_camera_mounting(scripts, tmp_path):
+    m = _probe_package(tmp_path)
+    table = pd.read_csv(tmp_path / "labels.csv")
+    geo = m.geometry(table, tmp_path)
+    # Raw roll carries the 0-25 degree mounting tilts; de-mounted roll is the 1-degree motion.
+    assert geo.roll.median() > 10
+    assert 0.5 < geo.roll_dm.median() < 1.5
