@@ -253,11 +253,13 @@ def finetune_bar(args):
         k = int(info["split"].removeprefix("fold"))
         m, probe = probes[k]
         if (
-            info["config"] != "buoy_slope_v1"
+            info["config"] != args.config_name
             or info.get("limit_per_partition")
             or Path(info.get("init_heights_run") or "").name != m["checkpoint_run"]
         ):
-            raise ValueError(f"{run}: a full buoy_slope_v1 run from fold {k}'s probe checkpoint")
+            raise ValueError(
+                f"{run}: a full {args.config_name} run from fold {k}'s probe checkpoint"
+            )
         ft = pd.read_csv(run / "predictions.csv")[["sample_id", "partition", "pred_slope_pct"]]
         t = table.merge(ft, on="sample_id", validate="1:1")
         if set(t.loc[t.partition.eq("test"), "sample_id"]) != set(probe.sample_id):
@@ -461,6 +463,7 @@ def main():
     f.add_argument("--package", type=Path, required=True)
     f.add_argument("--probes", nargs=5, type=Path, required=True)
     f.add_argument("--finetunes", nargs=5, type=Path, required=True)
+    f.add_argument("--config-name", default="buoy_slope_v1", help="the fine-tune's config name")
     for task in ("peaks", "direction"):
         a = sub.add_parser(task)
         a.add_argument("--package", required=True, type=Path)

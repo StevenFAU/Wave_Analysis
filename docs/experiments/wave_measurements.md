@@ -236,6 +236,40 @@ and it does no better than the ridge on the same features. Two things follow:
   needs a stable recipe (for example a lower learning rate, gradient clipping or fp32
   after unfreezing), checked on one fold first, under a bar of its own.
 
+## Bar M-S3: a slope fine-tune that trains the backbone (fixed 2026-11-19, before any M-S3 run)
+
+M-S2's fine-tunes never trained the backbone usefully: the loss jumped when it unfroze
+(stage 1's runs show the same jump at epoch 3, 0.12 to 0.36, and recovered; here four
+of five did not). The likely cause: AdamW starts the backbone's state afresh at
+unfreezing, so its first steps move every weight by about the full learning rate,
+including ConvNeXt's tiny layer-scale factors, with no clipping. M-S3 asks the question
+M-S2 left open, whether end-to-end training on slope beats the frozen features, with a
+recipe that stays stable.
+
+**Candidates** (`fit_heights(rewarm_epochs=, grad_clip=)`, off by default, so stage 1 is
+unchanged): **A** `configs/experiments/buoy_slope_v2.yaml` = v1 plus a re-warm-up of
+the backbone's learning rate from zero over one epoch when it unfreezes, and the
+gradient norm clipped to 1.0; **B** `buoy_slope_v2lr.yaml` = A at a third of the
+learning rate (1e-4).
+
+**Pilot, on fold 1 only, validation buoys only.** Both candidates train on fold 1
+(the fold whose M-S2 run collapsed first). Only their epoch lines (training loss and
+validation RMSE) are read; the test lines the trainer writes at the end are not read
+until the bar is scored. Rule, fixed now: a candidate qualifies if its best validation
+slope RMSE comes at an epoch after unfreezing (3 or later) and is below its own best
+heads-only epoch (1-2); of the qualifiers, the lower best validation slope RMSE goes to
+the five folds. **If neither qualifies**, the backbone does not learn slope beyond the
+heads with these recipes; that is reported and no five-fold run follows.
+
+**Bar M-S3** (the chosen candidate, all five folds, seed 0, each from its fold's
+DINOv3-gentle checkpoint): as M-S2. The fine-tuned slope stacked with wind + geometry
+by a ridge on the fold's validation strips must lower the out-of-fold slope RMSE
+against the frozen probe's validation-fit all inputs (0.0084), with the 95 % interval
+of the difference below zero (paired bootstrap over the 43 station groups, 2,000
+draws; `scripts/measurement_review.py finetune --config-name <candidate>`). Reported
+beside: against wind + geometry, the camera alone against the frozen camera alone, the
+epoch each fold chose, and whether any fold still diverged.
+
 ## Review of the prepared experiments (2026-11-19)
 
 Codex's diff against `8f225d5c8` (26 files, about 3,400 lines) was read before any run.

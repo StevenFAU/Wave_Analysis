@@ -232,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
         settings=settings, mean=mean, std=std, device=device, log=log, names=tnames, units=units,
         lp_epochs=int(args.lp_epochs if args.lp_epochs is not None else mcfg.get("lp_epochs", 0)),
         backbone_lr_scale=lr_scale, dist_beta=float(dist.get("beta", 0.5)) if dist else 0.5,
+        rewarm_epochs=float(mcfg.get("rewarm_epochs", 0)), grad_clip=mcfg.get("grad_clip"),
     )  # fmt: skip
     log(
         f"chosen epoch {result.best_epoch} (val RMSE {tnames[0]} {result.best_rmse_m:.3f} {units[0]})"
