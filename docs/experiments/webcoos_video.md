@@ -1,7 +1,8 @@
 # Shore-camera video vs a single image (WebCOOS, CDIP labels)
 
 Status: **design fixed 2026-11-18, before any clip was scored**; whole-clip implementation
-and pixel-spectrum recipe fixed 2026-11-18, before any clip was scored. Config
+and pixel-spectrum recipe fixed 2026-11-18, before any clip was scored; **first scored
+(interim) run 2026-11-19: M3 and M4 met, M1, M2 and M5 not met** (Results). Config
 `configs/experiments/webcoos_video_v1.yaml`; code `scripts/webcoos_video_clips.py`
 (clips, frames, windows, package, shipping) and `scripts/train_video_probe.py` (features,
 heads, scores).
@@ -262,7 +263,75 @@ clips the same way and record a hash of the clip list, which must agree.
   excluded as unreadable. Jennette's clips are about 290 MB each (2592 x 1944), so the
   sample takes about two days at the archive's pace; the first scored run follows the
   first two sample weeks.
+- **Scored interim run (2026-11-19, commit e0bdd4c5c):** started once 17 local dates had
+  at least 10 framed clips each. `video-days-20261119t0628-m12` (the 64-frame arms, 1 h)
+  and `video-days-20261119t0628-wholeclip` (window features 1.8 h, video window probes
+  3.2 h, image window probes 0.8 h, about 34 GB of GPU memory) ran side by side on one
+  shared H200, on the same 992 clips (the clip-list hashes agree). The download goes on;
+  the final run uses the same code and config.
 
 ## Results
 
-None yet.
+### Interim run, 2026-11-19: 992 clips, 18 local dates
+
+422 clips from Currituck, 234 from Jennette's, 208 from Oak Island west and 128 from
+Oak Island east; 33,115 windows; 914 clips have K ≥ 15. Attentive probes throughout.
+
+How to read the numbers:
+
+- **RMSE:** the typical size of the error, in m (H_s) or s (T_p); lower is better.
+- **Difference:** the first arm's RMSE minus the second's, on the same clips; below zero
+  means the first is better. The interval is the 95 % range when whole dates are
+  resampled (2,000 times); a bar is met when the whole interval is below zero.
+- **Climatology** (a reference added for reading the results, not a design arm): every
+  clip given the average label of the other folds' dates. It scores 0.740 m for H_s and
+  2.72 s for T_p; an estimate that does not beat it has not learned that quantity.
+
+| Bar | Compared (RMSE) | Difference [95 %] | Met |
+|---|---|---|---|
+| M1 | H_s: `video` 0.533 m vs `still` 0.535 m | −0.002 m [−0.079, +0.075] | no |
+| M2 | T_p: `video` 2.86 s vs `still` 2.80 s | +0.06 s [−0.03, +0.20] | no |
+| M3 | H_s: `clip` 0.513 m vs `window` 0.524 m | −0.011 m [−0.018, −0.004] | yes |
+| M4 | T_p: `clip` 2.86 s vs `window` 2.88 s | −0.022 s [−0.036, −0.006] | yes |
+| M5 | T_p: `clip` + spectrum 2.47 s vs `clip` 2.86 s | −0.39 s [−0.74, +0.02] | no |
+
+What it means:
+
+- **Motion inside 16 s adds nothing for H_s.** The same encoder given the 64 frames in
+  order, one frame repeated, or the frames shuffled gives the same H_s error
+  (0.533-0.535 m); DINOv3 on one frame gives 0.546 m. All cut the error by 26-28 % from
+  climatology.
+- **Reading the whole clip helps H_s, slightly.** 0.524 to 0.513 m (2 %; R² 0.47 to
+  0.49). Averaging DINOv3 over the same windows gains nothing (0.527 to 0.527 m), so the
+  gain is not simply more looks; but `clip` and `clip-image` cannot be told apart
+  (+0.014 m [−0.009, +0.044]). The mean of log H_s does as well as the energy mean
+  (+0.001 m), and the 11 central windows give most of the gain (−0.008 m).
+- **No attentive probe learned T_p, so M4 is met but worth nothing.** None beats
+  climatology (2.73-2.94 s against 2.72 s; of the mean-token heads only `shuffled` does,
+  2.58 s). DINOv3 averaged the same way gains the
+  same 0.02 s, so M4's gain comes from more looks, not motion. The probes do learn
+  something at Currituck (`clip` 2.04 s against 2.69 s) but are far off at Oak Island
+  (east 4.33 s against 2.98 s).
+- **The pixel spectrum is the only T_p estimate that beats climatology.** Alone (ridge on
+  its 10 features): 2.46 s, R² 0.13, Pearson 0.40. M5's interval just crosses zero on all
+  clips and lies below zero on the clips with K ≥ 15 (−0.45 s [−0.81, −0.03]). About half
+  of M5's gain is recalibration of a poor `clip` estimate: `clip` refitted alone gives
+  2.67 s (−0.19 s [−0.42, +0.07]). With no training at all, the pixel period T_pix
+  follows the buoy's T_p (Pearson 0.43; 0.53 at Currituck, 0.58 at Oak Island east) but
+  reads 0.8 s long on average (RMSE 3.19 s).
+- **The learned record pooler is worse than the plain average** (H_s 0.584 m,
+  +0.071 m [+0.001, +0.131] against `clip`), so it is dropped, as the design says.
+- **Kim's five classes: no skill at unseen dates, whatever the span.** One window
+  58.4 %, the 11 central windows 58.0 %, the whole clip 58.4 %; always naming the
+  average class gives 58.8 % (154 of the 262 clips in Kim's range are in the lowest
+  class). Kim's 78 to 93 % came from a random split.
+- **Kamagata's measures on Oak Island (336 clips):** H_s RMSE 0.661 m, R² 0.28, Pearson
+  0.55 for `clip` (0.62-0.68 m for the 64-frame attentive arms; Kamagata's held-out 0.586 m, 0.107,
+  0.436; climatology here 0.805 m). T_p 2.79 s for `clip` + spectrum (Kamagata 1.42 s;
+  climatology here 2.97 s). The comparison is loose: their test is five videos with
+  labels that cannot be traced to an instrument, ours 336 clips of unseen dates against
+  CDIP 200.
+- **Clips with K ≥ 15 (914):** the same picture; M3 −0.011 m [−0.019, −0.004], M4
+  −0.020 s [−0.032, −0.006].
+
+Full tables, per camera and per arm: each run's `report.md` and `metrics.json`.

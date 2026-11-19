@@ -68,6 +68,18 @@ separately (`docs/REPRODUCIBILITY.md`).
   its calls follow wind-wave height more than swell height; over 24 held-out
   buoys, swell share predicts the under-call (Spearman −0.89).
 
+### Results (2026-11-19, shore video interim run: bars M1-M5)
+- First scored run of the WebCOOS video test (`docs/experiments/webcoos_video.md`,
+  Results): 992 clips of 18 local dates, folds of whole dates, CDIP labels. **M1 and M2
+  not met**: video, a repeated frame and shuffled frames give the same H_s error
+  (0.533-0.535 m; climatology 0.740 m). **M3 met**: reading all windows of a clip cuts
+  H_s RMSE from 0.524 to 0.513 m. **M4 met but empty**: no attentive probe's T_p beats
+  climatology (`clip` 2.86 s against 2.72 s). **M5 not met** (−0.39 s [−0.74, +0.02]; met on
+  clips with K ≥ 15); the pixel spectrum alone is the only T_p estimate that beats
+  climatology (2.46 s). Kim's five classes: no skill at unseen dates (58 %, the same as
+  naming the average class). The record pooler is worse than the plain average and is
+  dropped.
+
 ### Added (2026-11-18, whole-clip video: windows, pixel spectrum, shipping)
 - Shore video, whole-clip bars M3-M5 implemented and their recipe fixed before scoring
   (`docs/experiments/webcoos_video.md`, "Whole-clip implementation"):
