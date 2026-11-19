@@ -47,7 +47,6 @@ from wave_analysis.config import load_yaml
 from wave_analysis.evaluation.regression import pearson, r2
 from wave_analysis.evaluation.uncertainty import paired_block_bootstrap_ci
 from wave_analysis.models.baselines.kim2023 import Kim2023CNNBiLSTM
-from wave_analysis.models.layers.backbones import build_backbone
 from wave_analysis.models.losses import kamagata_physics_loss
 from wave_analysis.models.multimodal.slowfast_head import SlowFastWaveHead
 from wave_analysis.models.video_probe import energy_mean, geometric_mean, midpoint_window
@@ -132,6 +131,17 @@ class KimFrames(torch.utils.data.Dataset):
         ), i
 
 
+def googlenet_imagenet() -> nn.Module:
+    """torchvision's ImageNet GoogLeNet, 1,024-d pooled output. Built here, not through
+    ``build_backbone``: with pretrained weights this torchvision refuses an explicit
+    ``aux_logits=False`` (it loads with the auxiliary heads, then drops them itself)."""
+    import torchvision.models as tvm
+
+    net = tvm.googlenet(weights=tvm.GoogLeNet_Weights.IMAGENET1K_V1)
+    net.fc = nn.Identity()
+    return net
+
+
 @torch.no_grad()
 def kim_features(d: pd.DataFrame, args: argparse.Namespace, cfg: dict) -> dict[str, np.ndarray]:
     """GoogLeNet features ``[T, 1024]`` per clip, cached as ``<kim-cache>/<camera>/<clip>.npy``."""
@@ -146,8 +156,7 @@ def kim_features(d: pd.DataFrame, args: argparse.Namespace, cfg: dict) -> dict[s
             todo.append(r.Index)
     log(f"kim: {len(feats)} clips cached, {len(todo)} to extract")
     if todo:
-        net, _ = build_backbone("googlenet", pretrained=True)
-        net = net.to(args.device).eval()
+        net = googlenet_imagenet().to(args.device).eval()
         rows = d.loc[todo]
         dl = torch.utils.data.DataLoader(KimFrames(rows, args.windows, float(k["seconds"]), int(k["side_px"])),
                                          batch_size=None, num_workers=args.num_workers)  # fmt: skip
