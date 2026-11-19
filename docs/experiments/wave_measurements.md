@@ -143,10 +143,32 @@ spread on these strips is 0.020).
 - Wind-wave height with the same probe (check, not the bar): 0.244 m against 0.370 m for
   wind + geometry. The frozen features still read the wind sea.
 
+**Water-only control** (beside the bar; `--water-only`, the same five checkpoints, commit
+`2c3e196`): each view is cut to the water below its horizon (from 8 % of the view height
+under the horizon line to 90 %) and resized, so the horizon line and the sky are gone.
+38,334 strips at 77 buoys.
+
+| Arm | Slope RMSE |
+|---|---|
+| All inputs, water only | 0.0095 |
+| Wind + geometry | 0.0102 |
+| Camera alone, water only | 0.0113 |
+
+- All inputs still beat wind + geometry with the water alone: −0.0007 [−0.0010, −0.0005]
+  (validation fit −0.0007), lower at every fold. That is about half the whole-view gain
+  (−0.0013).
+- The water alone, without wind, is worse than wind + geometry (+0.0011 [+0.0009,
+  +0.0015]), while the whole views alone are better (0.0093).
+
+So the water texture carries slope information that wind and horizon tilt do not, and
+about half of the whole-view gain needs the horizon region or the sky (the line's
+sharpness or tilt within a view, spray, the clouds of a windy day). The crop is also
+new to an encoder trained on whole views, which can only lower the water-only number.
+
 What it means: at buoys the model never saw, the camera measures the buoy's own wave
 slope better than the buoy's anemometer and its horizon tilt together, and adds to
-them. Not yet shown: the same on later weeks (as stage 2's confirmation), and whether
-the camera reads the water texture or the horizon line (`--water-only`, not run).
+them; the water itself carries part of that. Not yet shown: the same on later weeks
+(as stage 2's confirmation).
 
 ## Bar M-S2: the slope fine-tune (fixed 2026-11-19, before any fine-tune run and before M-S1 was scored)
 
