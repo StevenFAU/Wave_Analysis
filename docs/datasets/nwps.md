@@ -1,0 +1,7 @@
+# NOAA nearshore forecasts
+
+The collector visits the MHX, AKQ, ILM and HFO offices in the eastern and Pacific region listings. It discovers actual cycles, keeps the CG1 station spectra and CG0 tracking GRIB2, and optionally collects the CG1 gridded forecast. Each file is stored by issue date, office, cycle and grid with its original name. The retrieval ledger in `data/raw/nwps/_manifests/nwps.csv` records URL, timestamp, bytes and SHA-256. The operational listing retains approximately five days. Each daily run revisits that window, oldest first, to catch late cycles. A shared lock serializes concurrent invocations. Corrections published at an already archived path require explicit re-verification. [NOAA listing](https://nomads.ncep.noaa.gov/pub/data/nccf/com/nwps/prod/) · [NOAA system description](https://www.emc.ncep.noaa.gov/emc/pages/numerical_forecast_systems/nwps.php)
+
+November 15 measured 204,369,186 bytes in 70 spectra/tracking files across 12 cycles. The matching 12 CG1 grids advertised another 696,113,575 bytes. At this day's rate all three products require about 0.90 GB/day. Actual volume follows office issue schedules. Monitor disk space alongside the archive.
+
+Run `python -m wave_analysis.sources.nwps` with the data root configured. The repository contains a service/timer pair for ongoing operation after integration. The first collection used a separate worktree and transient user units. Treat the station forecast, valid time and lead time as model inputs. The observation for evaluating them must come from an independent instrument.

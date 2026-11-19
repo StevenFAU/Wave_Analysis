@@ -1,0 +1,6 @@
+base: https://nomads.ncep.noaa.gov/pub/data/nccf/com/nwps/prod/
+offices:
+  er: [mhx, akq, ilm]
+  pr: [hfo]
+retention_days: 5
+include_grids: true

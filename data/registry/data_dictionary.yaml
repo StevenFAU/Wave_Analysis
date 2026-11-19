@@ -489,6 +489,26 @@ collections:
       - Same columns as the standard (`.txt`) file above, except PTDY, which only realtime files carry.
 
   # ------------------------------------------------------------------ model
+  - id: earthscope_fdsn
+    group: measurements
+    name: EarthScope vertical seismograms
+    subtitle: Ground motion, digital counts before instrument-response correction
+    provider: EarthScope NSF National Geophysical Facility
+    datasets: [earthscope_fdsn]
+    doc: docs/datasets/earthscope.md
+    roles: [context]
+    where: "data/raw/earthscope/"
+    cadence: "Continuous channel, saved one UTC day at a time"
+  - id: noaa_nwps
+    group: model
+    name: NOAA Nearshore Wave Prediction System
+    subtitle: Discrete directional spectra and tracked wave systems
+    provider: NOAA NCEP
+    datasets: [noaa_nwps]
+    doc: docs/datasets/nwps.md
+    roles: [model]
+    where: "data/raw/nwps/"
+    cadence: "Issued by forecast cycle and office"
   - id: era5_waves
     group: model
     name: ERA5 wave reanalysis

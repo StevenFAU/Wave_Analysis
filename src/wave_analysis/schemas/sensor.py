@@ -19,6 +19,7 @@ class Modality(StrEnum):
     """Sensor modality classes (technical summary §38)."""
 
     IN_SITU_WAVE = "in_situ_wave"  # Waverider, Spotter, NDBC buoy accelerometer
+    SEISMIC = "seismic"  # ground motion recorded by a seismometer
     ACOUSTIC = "acoustic"  # ADCP / AWAC
     RADAR = "radar"  # X-band marine radar, HF radar
     SAR = "sar"
