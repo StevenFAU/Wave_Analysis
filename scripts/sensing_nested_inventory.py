@@ -37,7 +37,9 @@ def checked_roles(runs: list[Path], labels: pd.DataFrame) -> dict[str, dict[str,
     for r in runs:
         meta = run_meta(r)
         col = f"split_{meta['split']}"
-        roles = {p: set(labels.loc[labels[col] == p, "station_group"]) for p in ("train", "val", "test")}
+        roles = {
+            p: set(labels.loc[labels[col] == p, "station_group"]) for p in ("train", "val", "test")
+        }
         pred = pd.read_csv(r / "predictions.csv", usecols=["sample_id", "partition"])
         for p in ("val", "test"):
             seen = set(group.loc[pred.loc[pred["partition"] == p, "sample_id"]])
@@ -58,10 +60,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--inner", type=Path, nargs="*", default=[])
     ap.add_argument("--station", type=Path, nargs="*", default=[])
     args = ap.parse_args(argv)
-    labels = pd.read_csv(args.package / "labels.csv", dtype={"station_id": str, "cv_fold": str}, low_memory=False)
+    labels = pd.read_csv(
+        args.package / "labels.csv", dtype={"station_id": str, "cv_fold": str}, low_memory=False
+    )
     labels = labels[labels["cv_fold"].notna()]
     folds = sorted(labels["cv_fold"].astype(int).unique())
-    groups = {k: set(labels.loc[labels["cv_fold"].astype(int) == k, "station_group"]) for k in folds}
+    groups = {
+        k: set(labels.loc[labels["cv_fold"].astype(int) == k, "station_group"]) for k in folds
+    }
     cam = checked_roles(args.camera, labels)
     inner = checked_roles(args.inner, labels) if args.inner else {}
     seeds = sorted({run_meta(r)["seed"] for r in args.camera})
@@ -69,8 +75,10 @@ def main(argv: list[str] | None = None) -> int:
     def count(roles: dict[str, set[str]], k: int) -> str:
         return "/".join(str(len(groups[k] & roles[p])) for p in ("train", "val", "test"))
 
-    print("| Outer fold k | Groups (buoys, strips) | Calibration fold j | Cached fold-j models: fold-k groups train/val/test"
-          + (" | Inner pair {j,k} model: fold-k groups train/val/test |" if inner else " |"))
+    print(
+        "| Outer fold k | Groups (buoys, strips) | Calibration fold j | Cached fold-j models: fold-k groups train/val/test"
+        + (" | Inner pair {j,k} model: fold-k groups train/val/test |" if inner else " |")
+    )
     print("|---|---|---|---|" + ("---|" if inner else ""))
     for k in folds:
         lk = labels[labels["cv_fold"].astype(int) == k]
@@ -80,14 +88,20 @@ def main(argv: list[str] | None = None) -> int:
             if inner:
                 row += f" | {count(inner[f'pair{min(j, k)}{max(j, k)}'], k)}"
             print(row + " |")
-    print(f"\nCached camera runs checked: {len(args.camera)} (seeds {seeds}); "
-          f"every fold-j model's test groups are fold j's and nothing else.")
+    print(
+        f"\nCached camera runs checked: {len(args.camera)} (seeds {seeds}); "
+        f"every fold-j model's test groups are fold j's and nothing else."
+    )
     for r in args.station:
         meta = run_meta(r)
         col = f"split_{meta['split']}"
-        roles = {p: set(labels.loc[labels[col] == p, "station_group"]) for p in ("train", "val", "test")}
-        print(f"{r.name}: per outer fold, groups train/val/test: "
-              + ", ".join(f"fold {k} {count(roles, k)}" for k in folds))
+        roles = {
+            p: set(labels.loc[labels[col] == p, "station_group"]) for p in ("train", "val", "test")
+        }
+        print(
+            f"{r.name}: per outer fold, groups train/val/test: "
+            + ", ".join(f"fold {k} {count(roles, k)}" for k in folds)
+        )
     return 0
 
 

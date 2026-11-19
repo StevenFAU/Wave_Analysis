@@ -56,16 +56,24 @@ def rmse(y, pred):
     return float(np.sqrt(np.mean((y - pred) ** 2)))
 
 
-def evaluate(d, cols):
+FOLDS = [f"fold{k}" for k in range(5)]
+
+
+def evaluate(d, cols, splits=FOLDS):
+    """Every split's test strips predicted by arms fitted on its training groups.
+
+    ``splits`` name ``split_<name>`` columns: the five outer folds, or the nested
+    pairs of ``scripts/sensing_nested_splits.py`` (each predicts two folds).
+    """
     wind = ["wind_speed_mps", "wind_gust_mps"]
     valid = d.bulletin_present & np.isfinite(d[cols + wind]).all(axis=1)
     # This historical arm standardizes the logs and predicts a log height.
     old = np.log(np.maximum(d[["era5_hs_m", "era5_windsea_m", "era5_swell_m"]], 0.05))
     old[wind] = np.log(np.maximum(d[wind], 0.5))
     outputs = []
-    for k in range(5):
-        roles = d[f"split_fold{k}"]
-        if d.groupby("station_group")[f"split_fold{k}"].nunique().max() != 1:
+    for k in splits:
+        roles = d[f"split_{k}"]
+        if d.groupby("station_group")[f"split_{k}"].nunique().max() != 1:
             raise ValueError("geographic group crosses roles")
         for target in ["Hs_label_m", "wind_wave_label_m"]:
             eligible = valid & np.isfinite(d[target])
@@ -75,6 +83,8 @@ def evaluate(d, cols):
             y = d[target]
             out = d.loc[test, ["sample_id", "station_id", "station_group", "cv_fold"]].copy()
             out["target"], out["observed"] = target, y[test]
+            if splits != FOLDS:
+                out["split"] = k
             base = make_pipeline(StandardScaler(), Ridge(alpha=1))
             base.fit(old[train], np.log(np.maximum(y[train], 0.05)))
             out["era5_wind"] = np.exp(base.predict(old[test]))
@@ -100,7 +110,8 @@ def evaluate(d, cols):
                 out[name + "_val_rmse"] = validation[chosen]
             outputs.append(out)
     result = pd.concat(outputs, ignore_index=True)
-    if result.duplicated(["target", "sample_id"]).any():
+    key = ["target", "sample_id"] if splits == FOLDS else ["split", "target", "sample_id"]
+    if result.duplicated(key).any():
         raise ValueError("duplicate held predictions")
     return result
 
@@ -109,6 +120,9 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     for n in ["labels", "matched", "era", "depths", "out"]:
         p.add_argument("--" + n, required=True, type=Path)
+    p.add_argument(
+        "--splits", nargs="+", default=FOLDS, help="split_<name> columns (default the folds)"
+    )
     a = p.parse_args()
     if a.out.exists():
         raise FileExistsError(a.out)
@@ -117,7 +131,7 @@ def main():
         for path in (a.labels, a.depths)
     )
     d, cols = prepare(labels, pd.read_parquet(a.matched), pd.read_parquet(a.era), depths)
-    predictions = evaluate(d, cols)
+    predictions = evaluate(d, cols, a.splits)
     predictions.to_parquet(a.out, index=False)
     for target, g in predictions.groupby("target"):
         print(

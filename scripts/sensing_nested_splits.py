@@ -76,11 +76,17 @@ def pair_roles(t: pd.DataFrame) -> tuple[dict[str, dict[str, str]], pd.DataFrame
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--src", type=Path, default=data_dir("processed") / "packages/ndbc_buoycam_heights_v2cv")
-    ap.add_argument("--out", type=Path, default=data_dir("processed") / "packages/ndbc_buoycam_heights_v2cvn")
+    ap.add_argument(
+        "--src", type=Path, default=data_dir("processed") / "packages/ndbc_buoycam_heights_v2cv"
+    )
+    ap.add_argument(
+        "--out", type=Path, default=data_dir("processed") / "packages/ndbc_buoycam_heights_v2cvn"
+    )
     args = ap.parse_args(argv)
     src, out = args.src, args.out
-    labels = pd.read_csv(src / "labels.csv", dtype={"station_id": str, "cv_fold": str}, low_memory=False)
+    labels = pd.read_csv(
+        src / "labels.csv", dtype={"station_id": str, "cv_fold": str}, low_memory=False
+    )
     use = labels["cv_fold"].notna().to_numpy() & (labels["cv_fold"].astype(str) != "")
     t = labels.loc[use].copy()
     role, summary = pair_roles(t)
@@ -110,15 +116,23 @@ def main(argv: list[str] | None = None) -> int:
         **{f"role_{n}": folds["station_group"].map(lambda g, n=n: role[g][n]) for n in names}
     )
     pairs.to_csv(out / "pairs.csv", index=False, float_format="%.4f")
-    sums = {n: hashlib.sha256((out / n).read_bytes()).hexdigest() for n in ("labels.csv", "pairs.csv")}
+    sums = {
+        n: hashlib.sha256((out / n).read_bytes()).hexdigest() for n in ("labels.csv", "pairs.csv")
+    }
     lines = []
     for line in (src / "SHA256SUMS").read_text().splitlines():
         _sha, name = line.split(None, 1)
-        lines.append(f"{sums['labels.csv']}  {name.strip()}" if name.strip().lstrip("./") == "labels.csv" else line)
+        lines.append(
+            f"{sums['labels.csv']}  {name.strip()}"
+            if name.strip().lstrip("./") == "labels.csv"
+            else line
+        )
     prefix = "./" if any(" ./" in x for x in lines) else ""
     lines.append(f"{sums['pairs.csv']}  {prefix}pairs.csv")
     (out / "SHA256SUMS").write_text("\n".join(lines) + "\n")
-    print(f"{out}: {len(t):,} strips, {t['station_group'].nunique()} groups; validation {VAL_OF_POOL:.4f} of each pool")
+    print(
+        f"{out}: {len(t):,} strips, {t['station_group'].nunique()} groups; validation {VAL_OF_POOL:.4f} of each pool"
+    )
     print(summary.to_string(index=False, float_format=lambda x: f"{x:.3f}"))
     return 0
 
