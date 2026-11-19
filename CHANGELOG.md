@@ -68,6 +68,24 @@ separately (`docs/REPRODUCIBILITY.md`).
   its calls follow wind-wave height more than swell height; over 24 held-out
   buoys, swell share predicts the under-call (Spearman −0.89).
 
+### Results (2026-11-19, test 3 video half: Kamagata's network)
+- T3-S: the project's whole-clip read-out (H_s RMSE 0.513 m) is ahead of Kamagata's
+  SlowFast head with its physics loss (1.140 m) on the same 992 clips and date folds,
+  -0.627 m [-0.924, -0.364]. The physics term (T_p^2 = 6 H_s) collapses the head to about
+  2.0 m for every clip; without it the head reaches 0.653 m and the project is still ahead,
+  -0.140 m [-0.207, -0.061]. Write-up: `docs/experiments/sensing_per_wave_bars.md`.
+- Kim's network: smoke test only (GoogLeNet loading fixed); the full run waits for the
+  sealed storm set, where the class endpoints are now decided (bars fixed before any storm
+  label was opened).
+
+### Added (2026-11-19, test 9: time-exposure and brightest images)
+- Bar T9 fixed before any run (`docs/experiments/sensing_timex_bars.md`): a still, a
+  `timex` and a `brt` image of the same ten minutes at the four CDIP-paired cameras,
+  frozen DINOv3 probes, trained on 2024 and scored on 2025 (97.5 % day-bootstrap
+  intervals for each input against the still). Package of 30,931 triples
+  (`scripts/sensing_timex_package.py`; 5 truncated source images excluded and listed),
+  probes `scripts/sensing_timex_probe.py`, config `configs/experiments/sensing_timex_v1.yaml`.
+
 ### Added (2026-11-19, shore per-wave labels: tests 2 and 3, video half)
 - CDIP per-wave labels for the shore clips on the 18 development dates
   (`scripts/sensing_cdip_waves.py`, Codex's, checked): mean individual height,

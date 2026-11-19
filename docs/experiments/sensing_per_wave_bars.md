@@ -3,8 +3,8 @@
 Status: **labels built and counted 2026-11-19 (development dates only); bars T2 and T3-V
 fixed 2026-11-19, before any arm was scored on these labels; the class endpoints moved to
 the sealed storm set before any storm label was opened; test 2 scored on the
-development dates: class endpoints unassessable (coverage), T2-C not met; test 3 queued
-behind the paper strip runs** (Results). Test 2 needs no training. Test 3's networks need
+development dates: class endpoints unassessable (coverage), T2-C not met; T3-S: project
+ahead of Kamagata's network** (Results). Test 2 needs no training. Test 3's networks need
 the GPU server (see "Order and compute").
 
 Code: `scripts/sensing_cdip_waves.py` (labels), `scripts/sensing_cdip_inventory.py`
@@ -330,31 +330,38 @@ What it means:
 - **Wave count** times T_z is 1,594 s at the median, the record's 1,600 s: N carries
   nothing beyond T_z, as stated above.
 
-### Test 3, video half: queued (2026-11-19)
+### Test 3, video half: Kamagata's network (2026-11-19)
 
-- **T3-S (Kamagata) is queued, not run.** The GPU queue puts the paper strip runs first:
-  at 15:42 EST Kim's snapshot seeds 0 and 1 were running on the server, with Kim's
-  recipe triplet, Yang and its control still to come, and the project held five
-  containers, the cap. The run starts when those runs are done and a container slot is
-  free.
-- **T3-K (Kim)** is not trained on the development dates (coverage rule); a smoke test
-  goes with T3-S, and the full run waits for the storm set. The frame reader
-  was checked on real clips of all four cameras (360 frames of 224 px each, under a
-  second per clip on one CPU core).
+Run `video-days-20261119t2143-t3-kamagata` (commit 8b9e8e48d, one GPU, 77 min), after a
+smoke test; launched under the project's GPU rule once the queue order was relaxed. The
+992 interim clips, 18 dates, five folds, five seeds.
 
-Launch, from this worktree at the commit that records this section (container paths;
-`GPU_HOST` is the server's name in the SSH config):
+| Bar | Compared (H_s RMSE) | Difference [95 %] | Verdict |
+|---|---|---|---|
+| T3-S | project `clip` 0.513 m vs Kamagata `clip` 1.140 m | -0.627 m [-0.924, -0.364] | project ahead |
 
-```bash
-GPU_HOST=$GPU_HOST PKG=sensing_shore_v1 deploy/dgx/run.sh push
-GPU_HOST=$GPU_HOST KIND=video TAG=t3-kamagata PKG=sensing_shore_v1 \
-  CONFIG=configs/experiments/sensing_shore_v1.yaml TRAIN_SCRIPT=scripts/sensing_shore_test3.py \
-  deploy/dgx/run.sh train days --windows /data/video_windows/webcoos_video_v1 \
-  --window-cache /data/cache/video_window_features/878d1c2078a6 \
-  --kim-cache /data/cache/kim_googlenet_v1 --arms kamagata
-```
+What it means:
 
-The Kim smoke test is the same command with `TAG=t3-kim` and `--arms kim --limit 40
---epochs 2`. It downloads torchvision's GoogLeNet weights into the server's torch cache
-on first use; record that file's row (URL, size, SHA-256) in the cache's
-`wave-sensing-weights.csv`, as the strip track did for VGG16 and ResNet-18.
+- **The project's read-out is ahead, and the physics loss is why the gap is this wide.**
+  With it, Kamagata's head predicts about 2.0 m for every clip (spread 0.09 m against the
+  labels' 0.72 m) and T_p about 3.6 s against a mean of 8.9 s (T_p RMSE 5.96 s). The term
+  pulls T_p^2 towards 6 H_s, a fixed steepness far from real seas, and beside targets
+  scaled to [0, 1] it outweighs the fit; the paper, fitting unscaled targets (degrees
+  included), would weight it far less. The scaling was fixed in the bar and is kept for
+  the verdict; this is the reading of it.
+- **Without the physics loss (reported, not a bar)** the same head reaches 0.653 m
+  (Pearson 0.45 against 0.75 for the project), and the project is still ahead:
+  -0.140 m [-0.207, -0.061]. Climatology is 0.740 m.
+- **Reading the whole clip changes nothing for this head** (midpoint window 1.141 m):
+  its windows give the same estimate.
+- **Oak Island, the paper's own sites:** RMSE 1.17 m, R² -1.27, Pearson 0.26, against the
+  paper's held-out 0.586 m, 0.107, 0.436 and the project's 0.661 m here. T_z: 1.12 s,
+  better than the pixel spectrum (1.29 s) and climatology (1.37 s) on the 922 labelled
+  clips, found, not confirmed.
+
+**Kim's network:** the first smoke test failed in setup (this torchvision refuses
+`aux_logits=False` with pretrained GoogLeNet weights); fixed in 1864e3af0, smoke test
+relaunched. No Kim training has happened; the full run waits for the storm set.
+
+GoogLeNet's ImageNet weights (`googlenet-1378be20.pth`, SHA-256 `1378be20a8e8...`) are in
+the server's torch cache with a row in its weights ledger.
