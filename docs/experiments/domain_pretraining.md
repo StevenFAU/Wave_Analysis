@@ -130,6 +130,32 @@ throughout), 700 steps with the stages shortened (frozen to step 200, two checkp
   its starting value (11.06 against log 65,536 ≈ 11.09): the new heads had only begun
   to learn, as expected after a few hundred steps.
 
+### Full run: checks while it trains
+
+Run `pretrain-vitb16-fino-20261118t2317`, GPU 3, started 2026-11-18 23:18 UTC with the
+config above unchanged.
+
+- **Divergence check at step 8,000** (2,000 steps after the 1,000-step ramp that
+  follows the unfreezing at step 5,000): no step not a number, and every loss still
+  falling. Medians over the logging window as the log prints them, step 5,000 → 8,000: total 15.36 → 13.23,
+  DINO global 10.37 → 8.76, DINO local 10.38 → 8.97, iBOT 4.98 → 4.28, SIGReg 0.035 →
+  0.031. Before the unfreezing the heads alone had taken the DINO loss from 11.09
+  (log 65,536, its starting value) to 10.38. The station guide's accuracy (its head
+  learns the buoy while gradient reversal pushes the backbone to hide it) stayed under
+  1 % while the backbone was frozen and rose to 4 % by step 8,000. Chance among 55
+  buoys is 1.8 %, so the features carry a little more buoy identity than before. This
+  is watched, not a stop rule.
+- **Early probe of the step-7,500 teacher** (an early signal only; the checkpoint is
+  chosen when the run ends). The rule below, 11 validation buoys:
+
+  | Weights | H_s RMSE | Wind-wave RMSE | H_s, all 12 buoys | Feature spread |
+  |---|---|---|---|---|
+  | Public (off the shelf) | 0.642 m | 0.371 m | 1.412 m | 0.091 |
+  | Step 7,500 | 0.582 m | 0.344 m | 0.722 m | 0.150 |
+
+  The feature spread rose rather than fell, so there is no collapse. The probe shared
+  the GPU with the training run and took 41 minutes, against 12 alone.
+
 ## Choosing the checkpoint (validation buoys only)
 
 `scripts/dinov3_probe.py`, for the off-the-shelf weights and each teacher checkpoint:
