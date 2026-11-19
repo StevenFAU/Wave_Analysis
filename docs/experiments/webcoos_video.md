@@ -244,6 +244,17 @@ same predictions on those clips only. The 64-frame arms and the whole-clip arms 
 as two containers on the same GPU (`--clip-arms-only`, `--whole-clip-only`); both select
 clips the same way and record a hash of the clip list, which must agree.
 
+## Development and confirmation dates (fixed 2026-11-19, before any v2 development)
+
+The 18 local dates of the interim run are development data from now on:
+`configs/experiments/webcoos_video_dev_dates.txt` (SHA-256 `64685e3602fac031...`,
+2024-04-08 to 2026-09-24, the 992 interim clips). Their labels may be looked at to choose
+between variants of later features, and every such look is recorded here. Every local
+date outside this list that the final run adds is a **confirmation date**: its labels
+and any score of a new feature on it stay unopened until that feature's recipe and bars
+are committed. M1-M5 and spectrum recipe v1 are unchanged and are scored on all final
+dates as planned.
+
 ## Progress
 
 - **Smoke test (2026-11-18, `video-days-20261118t1655-smoke-smoke`):** 24 clips from 4
