@@ -214,6 +214,15 @@ separately (`docs/REPRODUCIBILITY.md`).
   extra outputs raise H_s RMSE by 0.086 m, so heights stay with stage 1's model.
 - `deploy/dgx/run.sh`: split names may contain digits (`fold0`).
 
+### Added (2026-11-19, bar S2 on new weeks: the tool)
+- `scripts/buoycam_fusion_confirm.py` (`build`, `predict`, `score`): the pre-registered
+  confirmation of bar S2 on strips archived after the package. The package's light rules
+  and labels, each strip predicted by its own buoy's fold's three seed models (CPU,
+  float32), and each fold's ERA5 lines and fitted combiners applied without refitting.
+  Before scoring it checks that its camera, ERA5 lines and combiners reproduce the
+  out-of-fold tables on the package's strips; a dry run counts strips but scores none.
+  `scripts/buoycam_pairs.py --start` pairs only strips taken from a given time on.
+
 ### Fixed (2026-11-14)
 - `sources.ndbc.buoycam.caption_band_rows`: the caption is a fixed 30-row band in
   both strip formats (measured); it was scaled to 25 rows for 2304 × 246 strips.

@@ -859,6 +859,33 @@ snapshot saved after the weeks it labels. It is large enough to score when ERA5 
 at least 7 days after the package (about 6,000 strips at 70 or more buoys), which is
 expected around 2026-11-26.
 
+**How the confirmation runs (fixed 2026-11-19, before any new strip was scored).**
+`scripts/buoycam_fusion_confirm.py` (`build`, `predict`, `score`; commands in its header).
+Nothing in it is fitted.
+
+- *Strips and labels:* the pairing of the package (`scripts/buoycam_pairs.py --start
+  2026-11-14T16:00Z`), with the realtime snapshot taken on the day of the run; the
+  package's filters; each buoy's strips end 1 h before its latest snapshot, so every
+  30-min label window is complete. The caption is cut as in the package (the same bytes
+  on package strips).
+- *Camera:* each strip by its buoy's fold's three seed models, on the desktop's CPU in
+  float32 (stage 1 ran in bfloat16 on GPUs). On 200 package strips (40 per fold) the
+  merged heights differ from the out-of-fold table by 0.4 % on average for H_s (largest
+  3.5 %) and 0.3 % for the wind-wave height, with no bias; their RMSE on those strips
+  changes by 0.001 m. About 0.45 s per strip and model.
+- *ERA5 and combiners:* each fold's ERA5 line and fitted combiners are reused, and
+  reproduce the out-of-fold tables on the package's strips to the rounding of the files
+  (largest difference 0.00005 m). Fed the package's own out-of-fold strips as if they
+  were new, `score` returns the out-of-fold result above exactly (the same strips, every
+  RMSE within 10⁻⁷ m, the same intervals).
+- *When:* the rule is ERA5's coverage (to 2026-11-21 16:00 UTC); all new strips with
+  every input up to ERA5's end on the day of the run are scored. The size estimate is
+  reported, not used as a gate: since the package, cameras have archived strips at 70
+  of the 79 buoys (none at 41002, 44007, 45002, 46006, 46053, 46061, 46071, 46082 and
+  46084), and 46085 has sent no wave record since 11-01, so about 69 buoys are
+  expected. A dry run checks and counts but scores nothing. The run is set for
+  2026-11-27, when ERA5 (about 5 days behind) should reach 11-22.
+
 **Result (2026-11-19): met out of fold; confirmation on new weeks pending.** Camera:
 stage 1's DINOv3-gentle, out of fold (`runs/buoycam-cv-fusion-20261119`). 39,767 strips
 at 77 buoys have every input (ERA5 and buoy wind); 36,791 have a wind-wave label.
