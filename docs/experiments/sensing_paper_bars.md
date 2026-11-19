@@ -13,3 +13,19 @@ The Choi class named `Choi2020Regressor` implements the paper's different **ship
 Use training splits for fitting and validation only for epoch selection. Use three initialization seeds; average predictions before calculating accuracy or RMSE. Obtain 95% paired percentile intervals using 2,000 resamples of whole sealed buoys, seed 0; use station groups for the five-fold analysis. Success for each classification row requires a positive lower endpoint; success for Yang requires a negative upper endpoint. Record every row including null results. Report the single-view and geometrically matched project controls beside the operational six-view baseline to expose any advantage from input coverage. Sealed results reused for earlier decisions are retrospective. A fresh archive window is required for confirmation. [Paper comparisons](../literature/benchmark_targets.md)
 
 **First sealed run settings.** Use ten AdamW epochs, learning rate 0.0001, weight decay 0.01, eight strips per batch and validation accuracy (classification) or validation RMSE (height) to select one epoch. VGG16 uses ImageNet initialization and global average pooling. Kim uses the published convolution widths and grayscale, with the project's view-quality mask. For Yang the package provides roll in degrees and a relative horizon row fraction. Use atan(pitch_frac) as a normalized pinhole proxy (one image height focal length), fix missing yaw at zero, and report the assumption with any result. Require all six valid viewpoints for the ordered Yang/control pair to avoid supplying missing entries to the temporal transformer. Crop/resize to 224 square; use full views for Kim/Yang. These are project-side adaptations to the available images and labels.
+
+### GPU queue
+
+The sealed strip order is Choi VGG16, Kim snapshot, Yang and its no-attitude control. Each arm uses seeds 0, 1 and 2. Submit one seed at a time and fetch its predictions and settings before aggregating. The deployment runner expects the existing heights package locally for checksum comparison. Set `GPU_HOST` to the authorized SSH alias. Use a current shared-server utilization check to select the device. Torchvision will require the official VGG16 and ResNet18 ImageNet weights in the server torch cache or network access during initialization. Use the same cloned weights for the three seeds.
+
+```bash
+export PKG=ndbc_buoycam_heights_v2cv CONFIG=configs/experiments/sensing_paper_strips.yaml
+export TRAIN_SCRIPT=scripts/train_sensing_papers.py
+deploy/dgx/run.sh check
+deploy/dgx/run.sh push
+deploy/dgx/run.sh setup
+# First run once GPU is selected at check-in
+GPU="$SLOT" TAG=paper-choi deploy/dgx/run.sh train station --arm choi --seed 0
+```
+
+Use the matching seed's existing sealed DINOv3-gentle station predictions for the comparison. Scores for a completed triplet use the common test-strip intersection across all seeds and models. `predictions.csv` contains probabilities for classification and metres for height. A qualitative check of predictions on the test split during training would compromise the comparison.
