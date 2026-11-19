@@ -107,3 +107,111 @@ plausible; a large one is not.
 each horizon (`--water-only`), the control that the camera does not read the slope from
 the horizon line alone; and the confirmation of a pass on strips archived after the
 package (from 2026-11-14 16:00 UTC), as stage 2's.
+
+## Review of the prepared experiments (2026-11-19)
+
+Codex's diff against `8f225d5c8` (26 files, about 3,400 lines) was read before any run.
+Fixed means fixed on this branch before the run it affects; open means not fixed and
+not needed for the runs here; rejected means not run.
+
+**Leakage in the slope probe.**
+
+- Folds: the measurement package's `cv_fold`, `split_fold0` .. `split_fold4`, station
+  and group columns equal `ndbc_buoycam_heights_v2cv`'s on all 41,091 strips; every
+  group sits in one partition per fold. Checked.
+- Checkpoints: the five seed-0 DINOv3-gentle runs are full images-only v2cv runs of
+  their own fold (lp 2, backbone scale 0.1), and each one's own test strips are exactly
+  its fold's test strips; their SHA-256 is the same on the desktop and the server.
+  The probe now enforces the test-strip match. Checked.
+- Fitting: standardisation and every ridge come from the fold's training strips only.
+  **Fixed:** the fit was written as "not test"; once the validation strips are
+  extracted that would have folded them in, so the training strips are now named
+  explicitly (also in the band dictionary and the ERA5 correction). A unit test with
+  test labels 250 times the training relation shows the test labels pull nothing.
+- The de-mounted geometry uses each camera's median over its own strips, the test
+  buoy's included: a calibration from images, with no label. Stated in the bar.
+- The camera's features are in-sample on the training strips, which can only hurt the
+  camera: the validation-fit sensitivity is added for that.
+
+**Labels.** The slope is computed correctly: deep-water k = (2 pi f)² / g, NDBC's
+nominal band widths, s = sqrt(sum k² E df), dimensionless; definition, units and
+citations are in the bar. **Fixed:** 50 strips with an all-zero spectrum (buoy 46081,
+WVHT 0.0) get no slope. The finite-depth variant uses all 79 depths from NDBC's
+station pages.
+
+**Comparator.** Wind speed and gust with their squares and product, fitted inside the
+same folds, is fair. **Fixed:** the geometry was the raw horizon angle, which carries
+each camera's mounting tilt; the de-mounted roll and pitch RMS of the motion study are
+added, which can only strengthen the comparator.
+
+**Code quality.** The tests pass: 342 (Codex reported 329) and 344 with the two new
+probe tests. `uv run pytest` in a fresh worktree fails at collection, because the
+default environment lacks the `imaging` and `ml` extras; use the main checkout's
+environment or `uv sync --extra imaging --extra ml --extra netcdf`.
+
+- **Fixed:** the probe decoded every image in the main process (no loader workers).
+- **Fixed:** the aggregator reported the slope delta only; it now reports the bar,
+  coverage, per-fold deltas, the sensitivity and the wind-wave check.
+- **Fixed:** the probe could not be launched through `deploy/dgx/run.sh`, whose
+  container entry point adds `--config` and `--split`; `deploy/dgx/measure.sh` and
+  `deploy/container/measure.sh` launch it the same way (committed code, package tar,
+  labelled container).
+- Open, for the fine-tune only: `metrics.json` does not record `--init-heights-run`
+  (only the provenance inputs do), and the zero spectra would enter it at the 0.05 %
+  floor of the log target. Both are to be fixed before a fine-tune runs.
+- **Rejected, breakers (`train_measurement_breakers.py`), not run.** (1) Both encoders
+  are frozen, yet every clip is pulled from the 5 GB zip and decoded by ffmpeg again for
+  every item of every epoch: about 700,000 decodes for the twelve runs, where 9,000
+  would do. (2) Its 16 frames are spread over the whole 30-s clip, one every 1.9 s, so
+  the R3D-18 "video" arm cannot follow a breaking event that lasts a second or two; the
+  comparison with frames + GRU does not test motion, and the two arms also differ by
+  backbone. (3) There is no bar, and the published comparator (Yin et al.'s own
+  leave-one-site-out results) is not in hand: the paper page refuses automated reading.
+  These are design changes, not fixes; they are left to a session of their own.
+- Open, minor: `measurement_period.py` maps `jennette_south` to the Jennette site but
+  not `jennette_north`, which would become a site of its own in a site holdout (no such
+  clip in the current eight); its error says "dates" for every split.
+  `measurement_heave.py` uses the deprecated `np.fromstring`.
+
+**Shared code and merge conflicts** (`scripts/train_wave_heights.py`,
+`src/wave_analysis/models/wave_heights.py`; not resolved here):
+
+- `claude/strips-grouped-cv-085fd2`: none in these files. Its commits after `8f225d5c8`
+  touch neither. `CHANGELOG.md` will conflict textually (both add entries at the top).
+  This bar lives in its own doc so as not to touch `ndbc_buoycam_sea_state.md`, which
+  that branch edits.
+- `claude/dinov3-continued-pretraining-fc2b1a` (branched at `1dfcc5f29`, so it must
+  first take the strips branch's changes to these files): three hunks in
+  `train_wave_heights.py`. (a) Both add an option right after `--backbone-lr-scale`
+  (`--init-heights-run`, `--backbone-weights`): keep both. (b) The model's
+  `pretrained=...` line and the block after it: keep both blocks and refuse the two
+  options together (each replaces the encoder's weights). (c) The provenance `inputs`
+  expression (that branch edits its closing line, Codex appends after it): keep both;
+  the same for `run_info` once `--init-heights-run` is recorded there.
+  `wave_heights.py` (Codex's `units`) does not conflict with that branch.
+
+**Hostnames.** **Fixed:** the handoff's `GPU_HOST=<lab-host>` is now `<ssh-alias>`. The whole
+diff has no other lab hostname, bastion name or IP address.
+
+**Data licences** (read 2026-11-19):
+
+- Yin et al., VWBT_9000 (figshare, [doi:10.6084/m9.figshare.28814993.v5](https://doi.org/10.6084/m9.figshare.28814993.v5)):
+  **CC BY 4.0** in the record's metadata; use with attribution (the dataset and the
+  [data paper](https://doi.org/10.1038/s41597-025-06005-5)). Its clip names are WebCOOS
+  cameras (`jennette_north`, `oakisland_east`, ...); WebCOOS's usage guidelines
+  ([webcoos.md](../datasets/webcoos.md#usage-guidelines)) apply to that footage too.
+- Carini, Duck 2016 thermal IR and lidar ([hdl:1773/46586](http://hdl.handle.net/1773/46586)):
+  **CC BY** (`dc.rights` of the UW repository record); use with attribution.
+
+Neither licence stops training; the breakers are not run for the reasons above.
+
+**Not runnable yet** (readiness only):
+
+- Crest timing: 8 clocked clips at three sites on five local dates, reader sheets A and
+  B ready; needs two independent readers and a tolerance fixed from their agreement.
+- Foam: 25 buoy views ready for masks (codes 0, 1, 2, 255); needs a reader.
+- ERA5 band correction: one station-day request (41004, 2026-10-01) and a tested
+  decoder; needs the CDS retrieval and a coverage check before any fit.
+- Stereo: all 53 usable bursts peak at the crop's longest wavelength, so no wavelength
+  claim; elevation RMS and period only.
+- Shore video: owned by the video session (`claude/video-whole-clip-491c90`).
