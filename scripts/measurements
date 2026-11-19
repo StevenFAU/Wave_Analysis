@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Run the preparation tools with code from this checkout and the shared data archive.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+root=$(pwd -P)
+common=$(git rev-parse --path-format=absolute --git-common-dir)
+shared=$(dirname "$common")
+export WAVE_ANALYSIS_ROOT="$root"
+export WAVE_ANALYSIS_DATA="${WAVE_ANALYSIS_DATA:-$shared/data}"
+export PYTHONPATH="$root/src:$root/runs/measurement-runtime${PYTHONPATH:+:$PYTHONPATH}"
+prep=${MEASURE_PREP:-runs/prep-v1}
+upstream=${MEASURE_RUNS:-$shared/runs}
+task=${1:-status}
+if (( $# )); then shift; fi
+case "$task" in
+    status|plan|peaks|direction|probes)
+        script=measurement_review
+        case "$task" in
+            status|plan) set -- "$task" --runs "$upstream" --prep "$prep" "$@" ;;
+            *) set -- "$task" "$@" ;;
+        esac ;;
+    probe) script=measurement_buoy_probe ;;
+    finetune) script=train_wave_heights ;;
+    stereo|export|labels|annotation|depths|heave|references|era5_spectrum|yin|shore|breakers|period)
+        script="measurement_$task" ;;
+    train-breakers) script=train_measurement_breakers; export TORCH_HOME="${TORCH_HOME:-$root/runs/measurement-weights}" ;;
+    *) echo "Unknown task: $task" >&2; exit 2 ;;
+esac
+case "$task" in
+    probe|finetune|period|train-breakers) python_bin=${MEASURE_ML_PYTHON:-$shared/.venv-rocm/bin/python} ;;
+    *) python_bin=${MEASURE_PYTHON:-$shared/.venv/bin/python} ;;
+esac
+if [[ ! -x "$python_bin" ]]; then python_bin=${VIRTUAL_ENV:+$VIRTUAL_ENV/bin/}python; fi
+exec "$python_bin" "scripts/$script.py" "$@"

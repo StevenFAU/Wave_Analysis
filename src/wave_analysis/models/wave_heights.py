@@ -288,6 +288,7 @@ def fit_heights(
     huber_delta: float = 1.0,
     log: Callable[[str], object] = print,
     names: Sequence[str] = ("hs", "wind_wave", "swell"),
+    units: Sequence[str] | None = None,
     lp_epochs: int = 0,
     backbone_lr_scale: float = 1.0,
     dist_beta: float = 0.5,
@@ -303,6 +304,7 @@ def fit_heights(
     loss of the point head, with equal weight; the epoch is still chosen on the point head.
     """
     model.to(device).to(memory_format=torch.channels_last)
+    units = list(units) if units is not None else ["m"] * len(names)
     enc = getattr(model, "encoder", None)
     enc_ids = {id(q) for q in enc.parameters()} if enc is not None else set()
     groups = [
@@ -362,13 +364,13 @@ def fit_heights(
             "train_loss": total / max(1, n),
             "seconds": time.monotonic() - t0,
         }
-        for j, name in enumerate(names):
+        for j, (name, unit) in enumerate(zip(names, units, strict=True)):
             ok_v = np.isfinite(val_true_m[:, j])
-            row[f"val_rmse_{name}_m"] = float(
+            row[f"val_rmse_{name}_{unit}"] = float(
                 np.sqrt(np.mean((pred_m[ok_v, j] - val_true_m[ok_v, j]) ** 2))
             )
         history.append(row)
-        chosen = row[f"val_rmse_{names[0]}_m"]
+        chosen = row[f"val_rmse_{names[0]}_{units[0]}"]
         mark = ""
         if chosen < best[0]:
             best = (chosen, epoch)
@@ -376,7 +378,10 @@ def fit_heights(
             mark = "  <- best"
         log(
             f"epoch {epoch:>2}/{settings.epochs}: loss {row['train_loss']:.4f}, "
-            + ", ".join(f"val RMSE {nm} {row[f'val_rmse_{nm}_m']:.3f} m" for nm in names)
+            + ", ".join(
+                f"val RMSE {nm} {row[f'val_rmse_{nm}_{unit}']:.3f} {unit}"
+                for nm, unit in zip(names, units, strict=True)
+            )
             + f", {row['seconds']:.0f} s{mark}"
         )
     return HeightsFit(best[1], best[0], history, best_state)
