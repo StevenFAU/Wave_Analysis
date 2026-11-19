@@ -105,13 +105,23 @@ def assign_split(d: pd.DataFrame, cfg: dict) -> pd.Series:
     return pd.Series(split, index=d.index)
 
 
-def _resize(job: tuple[str, str, str, int, int, list | None]) -> tuple[str, str]:
-    """Mask in source pixels, resize to ``height`` (aspect kept, even width), JPEG; returns sha256."""
+def _resize(job: tuple[str, str, str, int, int, list | None]) -> tuple[str, str | None, str]:
+    """Mask in source pixels, resize to ``height`` (aspect kept, even width), JPEG.
+
+    Returns ``(dest, sha256, "")``, or ``(dest, None, error)`` when the source does not decode
+    fully (a truncated or damaged file: a data-quality exclusion, made before any label is
+    read). An output already written by an earlier run is kept (resume)."""
     src, dest, _, height, quality, mask = job
-    im = Image.open(src)
-    w0, h0 = im.size
-    im.draft("RGB", (int(np.ceil(height * w0 / h0)), height))  # fast JPEG decode at a reduced scale
-    im = im.convert("RGB")
+    if Path(dest).exists():  # written whole (renamed from .part) by an earlier run
+        return dest, hashlib.sha256(Path(dest).read_bytes()).hexdigest(), ""
+    try:
+        im = Image.open(src)
+        w0, h0 = im.size
+        im.draft("RGB", (int(np.ceil(height * w0 / h0)), height))  # fast decode at a reduced scale
+        im.load()  # decode all of it now: a truncated file fails here
+        im = im.convert("RGB")
+    except (OSError, SyntaxError, ValueError) as e:
+        return dest, None, f"{type(e).__name__}: {e}"
     if mask:
         x, from_bottom, mw, mh = mask
         r = im.size[1] / h0
@@ -130,7 +140,7 @@ def _resize(job: tuple[str, str, str, int, int, list | None]) -> tuple[str, str]
     tmp = dest + ".part"
     im.save(tmp, "JPEG", quality=quality)
     os.replace(tmp, dest)
-    return dest, hashlib.sha256(Path(dest).read_bytes()).hexdigest()
+    return dest, hashlib.sha256(Path(dest).read_bytes()).hexdigest(), ""
 
 
 def main() -> None:
@@ -159,19 +169,53 @@ def main() -> None:
             dest = out / "images" / r.camera / k / f"{r.stamp}.jpg"
             jobs.append((str(raw / getattr(r, f"{k}_path")), str(dest), k, int(cfg["data"]["height_px"]),
                          int(cfg["data"]["jpeg_quality"]), cfg["data"]["masks"].get(r.camera)))  # fmt: skip
-    sums = {}
+    sums, failed = {}, []
     with ProcessPoolExecutor(a.workers) as ex:
-        for i, (dest, sha) in enumerate(ex.map(_resize, jobs, chunksize=64)):
-            sums[str(Path(dest).relative_to(out))] = sha
+        for i, ((dest, sha, err), job) in enumerate(
+            zip(ex.map(_resize, jobs, chunksize=64), jobs, strict=True)
+        ):
+            if sha is None:
+                failed.append((job, err))
+            else:
+                sums[str(Path(dest).relative_to(out))] = sha
             if i % 10000 == 0:
-                print(f"{i:,}/{len(jobs):,} images", flush=True)
+                print(f"{i:,}/{len(jobs):,} images, {len(failed)} unreadable", flush=True)
+    # Unreadable sources: their whole triple leaves the package and is listed (path, size, SHA-256)
+    skipped = []
+    for (src, dest, kind, *_), err in failed:
+        f = Path(src)
+        skipped.append({"camera": Path(dest).parent.parent.name, "stamp": Path(dest).stem, "kind": kind,
+                        "raw_path": str(f.relative_to(raw)), "size_bytes": f.stat().st_size if f.exists() else None,
+                        "sha256": hashlib.sha256(f.read_bytes()).hexdigest() if f.exists() else None,
+                        "error": err})  # fmt: skip
+    share = len(failed) / max(1, len(jobs))
+    print(f"unreadable source images: {len(failed)} of {len(jobs):,} ({share:.3%})")
+    if share > 0.01:
+        raise SystemExit(
+            "more than 1 % of the source images do not decode: a collector problem? stopping"
+        )
+    bad = {(r["camera"], r["stamp"]) for r in skipped}
+    keep = np.array([(c, st) not in bad for c, st in zip(d["camera"], d["stamp"], strict=True)])
+    for c, st in bad:
+        for k in KINDS:
+            rel = f"images/{c}/{k}/{st}.jpg"
+            sums.pop(rel, None)
+            (out / rel).unlink(missing_ok=True)
+    d = d[keep].reset_index(drop=True)
+    pd.DataFrame(skipped, columns=["camera", "stamp", "kind", "raw_path", "size_bytes", "sha256", "error"]).to_csv(
+        out / "skipped_images.csv", index=False)  # fmt: skip
+    sums["skipped_images.csv"] = hashlib.sha256(
+        (out / "skipped_images.csv").read_bytes()
+    ).hexdigest()
     cols = ["camera", "cdip_station", "stamp", "start_utc", "still_utc", "local_day", "split",
             "Hs_label_m", "Tp_label_s", "n_label_records", "sun_elevation_deg",
             "still_path", "timex_path", "brt_path"]  # fmt: skip
     d[cols].to_csv(out / "triples.csv", index=False)
     sums["triples.csv"] = hashlib.sha256((out / "triples.csv").read_bytes()).hexdigest()
     (out / "SHA256SUMS").write_text("".join(f"{s}  {f}\n" for f, s in sorted(sums.items())))
-    print(f"{len(d):,} triples, {len(jobs):,} images in {out}")
+    print(
+        f"{len(d):,} triples ({len(bad)} dropped for unreadable images), {3 * len(d):,} images in {out}"
+    )
 
 
 if __name__ == "__main__":

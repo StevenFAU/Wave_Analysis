@@ -41,7 +41,7 @@ def test_resize_masks_currituck_caption(tmp_path):
     m = _mod("sensing_timex_package")
     src = tmp_path / "a.jpg"
     Image.fromarray(np.full((1520, 2688, 3), 200, np.uint8)).save(src)
-    dest, sha = m._resize(
+    dest, sha, _err = m._resize(
         (str(src), str(tmp_path / "o" / "b.jpg"), "still", 256, 90, [0, 170, 560, 170])
     )
     im = np.asarray(Image.open(dest))
@@ -84,3 +84,19 @@ def test_probe_end_to_end(tmp_path, monkeypatch):
         2,
         3,
     ]
+
+
+def test_resize_skips_truncated_and_resumes(tmp_path):
+    m = _mod("sensing_timex_package")
+    src = tmp_path / "a.jpg"
+    Image.fromarray(np.random.default_rng(0).integers(0, 255, (600, 800, 3), np.uint8)).save(src)
+    data = src.read_bytes()
+    bad = tmp_path / "bad.jpg"
+    bad.write_bytes(data[: len(data) // 2])  # a truncated file, as found in the archive
+    dest, sha, err = m._resize((str(bad), str(tmp_path / "o" / "bad.jpg"), "timex", 256, 90, None))
+    assert sha is None and "truncated" in err and not Path(dest).exists()
+    out = tmp_path / "o" / "a.jpg"
+    _, sha1, _ = m._resize((str(src), str(out), "still", 256, 90, None))
+    src.unlink()  # resume: an output already written is kept without reading the source again
+    _, sha2, err2 = m._resize((str(src), str(out), "still", 256, 90, None))
+    assert sha1 == sha2 and err2 == ""
