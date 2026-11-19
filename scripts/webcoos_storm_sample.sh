@@ -7,8 +7,9 @@
 # Each date is processed before the next: pair, frames, windows and physics v2 of the storm set
 # (WEBCOOS_VIDEO_SET=storm scripts/webcoos_video_clips.py), then `offload` moves its raw clips to
 # the GPU server, checked against the SHA-256 their ledger recorded, and frees them here. So the
-# desktop holds about one date's clips at a time, and MIN_FREE_GB (default 40) stays free on the
-# storm root's drive. At the end: pack, then ship the windows and the package
+# desktop holds about one date's clips at a time (all of them, if the server login is down:
+# a failed offload is retried with the next date), and MIN_FREE_GB (default 40) stays free on
+# the storm root's drive. At the end: pack, then ship the windows and the package
 # (webcoos_video_storm_v1). A date counted once is not fetched again (<root>/_dates/<rank>).
 #
 # Same pace and the same lock as the video sample (one connection to WebCOOS;
@@ -57,7 +58,7 @@ s = pd.concat([pd.read_csv(f, usecols=["size_bytes", "status"]) for f in fs]) if
 print(round(float(s.loc[s["status"] == "verified", "size_bytes"].sum()) / 1e9, 1))
 PY
 }
-cut_and_offload() {  # the storm set's clips so far: cut, then their raw clips to the server
+cut_and_offload() {  # the storm set's clips so far: cut, then the cut raw clips to the server
     ((CUT)) || return 0
     (
         cd "$REPO" || exit 1
@@ -66,8 +67,10 @@ cut_and_offload() {  # the storm set's clips so far: cut, then their raw clips t
         "${C[@]}" frames --workers 4 2>&1 | tail -1
         "${C[@]}" windows --workers 4 2>&1 | tail -1
         "${C[@]}" physics --workers 4 2>&1 | tail -1
-        "${C[@]}" offload 2>&1 | tail -1
-        exit "${PIPESTATUS[0]}"
+        # A failed offload (no server login) is not fatal: the clips wait here, the disk guard
+        # keeps MIN_FREE_GB free, and the next offload sends every cut clip not yet on the server.
+        "${C[@]}" offload 2>&1 | tail -1 || echo "offload failed (server login?): the clips stay here for now"
+        exit 0
     )
 }
 
@@ -98,7 +101,7 @@ while IFS=, read -r rank site day season band hs cameras gb; do
         k=$(clips "$cam" "$a" "$b")
         ((k > best)) && best=$k
     done
-    ((best > 0)) && { cut_and_offload || { echo "cutting or offload failed at rank $rank: rerun when the server login is open"; exit 6; }; }
+    ((best > 0)) && { cut_and_offload || { echo "cutting failed at rank $rank"; exit 6; }; }
     if ((best >= MIN_CLIPS)); then
         n=$((n + 1))
         echo "video $best" >"$DONE/$rank"
@@ -112,6 +115,7 @@ done <"$LIST"
 echo "storm set fetched: $n dates with video, $(fetched_gb) GB"
 if ((CUT)); then
     cd "$REPO" || exit 1
+    uv run python scripts/webcoos_video_clips.py offload | tail -1
     uv run python scripts/webcoos_video_clips.py pack | tail -2 &&
         uv run python scripts/webcoos_video_clips.py ship | tail -1 &&
         uv run python scripts/webcoos_video_clips.py ship --package | tail -1
