@@ -580,7 +580,9 @@ collections:
       - name: i10fg
         meaning: >-
           Instantaneous 10-m wind gust: the largest gust of the hour before each
-          stamp, from ERA5's post-processing (as `u10`).
+          stamp, from ERA5's post-processing. Same grid and box as `u10`, in its own
+          files (`data/raw/era5/buoys_gust*/`): CDS leaves it out of a NetCDF request
+          with the wind components.
         unit: m/s
         role: model
     notes:

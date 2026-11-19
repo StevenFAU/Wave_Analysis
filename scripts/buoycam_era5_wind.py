@@ -16,7 +16,7 @@ with three other parameters:
 
 ``download`` asks for all three over one box that holds every buoy of the package (its
 strips' positions, 1 deg margin), one calendar month per request (``ERA5WaveSource``:
-files ``data/raw/era5/buoys_wind/era5_waves_buoys_wind_<YYYY-MM>.nc``, each attempt a
+files ``data/raw/era5/buoys_{wind,gust}[_dateline]/era5_waves_<name>_<YYYY-MM>.nc``, each attempt a
 row of ``data/manifests/raw/era5.csv``; ERA5T months are requested again on a later run).
 
 ``extract`` reads, for each buoy, the grid point nearest its position (its strips'
@@ -49,12 +49,21 @@ from wave_analysis.sources.era5 import (
     months,
 )
 
-NAME = "buoys_wind"
-WIND = (
-    WaveParameter("10m_u_component_of_wind", "u10", 165, "wind_u_10m", "era5_hourly"),
-    WaveParameter("10m_v_component_of_wind", "v10", 166, "wind_v_10m", "era5_hourly"),
-    WaveParameter("instantaneous_10m_wind_gust", "i10fg", 228029, "wind_gust_10m", "era5_hourly"),
-)
+#: Collection -> parameters. The gust is its own request: CDS's unarchived NetCDF holds
+#: one kind of field per file and silently left ``i10fg`` out of a request with the
+#: instantaneous wind components (2026-11-19).
+SETS = {
+    "buoys_wind": (
+        WaveParameter("10m_u_component_of_wind", "u10", 165, "wind_u_10m", "era5_hourly"),
+        WaveParameter("10m_v_component_of_wind", "v10", 166, "wind_v_10m", "era5_hourly"),
+    ),
+    "buoys_gust": (
+        WaveParameter(
+            "instantaneous_10m_wind_gust", "i10fg", 228029, "wind_gust_10m", "era5_hourly"
+        ),
+    ),
+}
+WIND = tuple(p for ps in SETS.values() for p in ps)
 
 
 def positions(package) -> pd.DataFrame:
@@ -66,10 +75,10 @@ def positions(package) -> pd.DataFrame:
     return lab.groupby("station_id")[["latitude", "longitude"]].median().reset_index()
 
 
-def groups(pos: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
+def groups(pos: pd.DataFrame, name: str) -> list[tuple[str, pd.DataFrame]]:
     """One box west of the date line, one small box for buoys east of it (46071 at 179.8 E)."""
     east = pos.longitude > 0
-    return [(NAME, pos[~east]), (NAME + "_dateline", pos[east])]
+    return [(name, pos[~east]), (name + "_dateline", pos[east])]
 
 
 def box(pos: pd.DataFrame, margin: float = 1.0) -> list[float]:
@@ -110,13 +119,14 @@ def download(args: argparse.Namespace) -> int:
         src = ERA5WaveSource(log=log)
         entries = []
         try:
-            for name, sub in groups(positions(args.package)):
-                area = box(sub)
-                log(f"{name}: {len(sub)} buoys, box {area} (north, west, south, east)")
-                entries += src.fetch_area(
-                    name, area, months(args.start, args.end), dest_root=dest, parameters=WIND,
-                    refresh=args.refresh, sink=record,
-                )  # fmt: skip
+            for what in args.what:
+                for name, sub in groups(positions(args.package), f"buoys_{what}"):
+                    area = box(sub)
+                    log(f"{name}: {len(sub)} buoys, box {area} (north, west, south, east)")
+                    entries += src.fetch_area(
+                        name, area, months(args.start, args.end), dest_root=dest,
+                        parameters=SETS[f"buoys_{what}"], refresh=args.refresh, sink=record,
+                    )  # fmt: skip
         except CDSConfigError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
@@ -124,13 +134,14 @@ def download(args: argparse.Namespace) -> int:
     return 1 if any(e.status == EntryStatus.FAILED for e in entries) else 0
 
 
-def _read(files, pos, hourly, points) -> None:
-    """Append each buoy's hourly ERA5 wind and gust at its nearest grid point."""
+def _read(files, pos, hourly, points, what) -> None:
+    """Append each buoy's hourly ERA5 wind (or gust) at its nearest grid point."""
     import xarray as xr
 
     for path in files:
         with xr.open_dataset(path) as ds:
-            for p in WIND:
+            params = SETS[f"buoys_{what}"]
+            for p in params:
                 pid = ds[p.short].attrs.get("GRIB_paramId")
                 if pid is not None and int(pid) != p.param_id:
                     raise SystemExit(f"{path.name}: {p.short} has GRIB_paramId {pid}")
@@ -142,7 +153,8 @@ def _read(files, pos, hourly, points) -> None:
                 blon = r.longitude - 360 if r.longitude > 180 else r.longitude
                 d = np.asarray(haversine_m(r.latitude, blon, glat, glon)) / 1000
                 i, j = np.unravel_index(int(np.argmin(d)), d.shape)
-                points[r.station_id] = {
+                points[(r.station_id, what)] = {
+                    "set": what,
                     "station_id": r.station_id,
                     "grid_latitude": float(lat[i]),
                     "grid_longitude": float(lon[j]),
@@ -150,29 +162,28 @@ def _read(files, pos, hourly, points) -> None:
                 }
                 v = {
                     p.short: ds[p.short].isel(latitude=int(i), longitude=int(j)).to_numpy()
-                    for p in WIND
+                    for p in params
                 }
+                value = np.hypot(v["u10"], v["v10"]) if what == "wind" else v["i10fg"]
                 hourly.append(
-                    pd.DataFrame(
-                        {
-                            "station_id": r.station_id,
-                            "time_utc": times,
-                            "wind": np.hypot(v["u10"], v["v10"]),
-                            "gust": v["i10fg"],
-                        }
-                    )
+                    pd.DataFrame({"station_id": r.station_id, "time_utc": times, what: value})
                 )
 
 
 def extract(args: argparse.Namespace) -> int:
-    hourly, points, paths = [], {}, []
-    for name, pos in groups(positions(args.package)):
-        files = sorted((data_dir("raw") / "era5" / name).glob(f"*_{name}_*.nc"))
-        if not files:
-            raise SystemExit(f"no {name} files; run the download first")
-        paths += files
-        _read(files, pos, hourly, points)
-    hourly = pd.concat(hourly).drop_duplicates(["station_id", "time_utc"], keep="last")
+    hourly, points, paths = {"wind": [], "gust": []}, {}, []
+    for what in ("wind", "gust"):
+        for name, pos in groups(positions(args.package), f"buoys_{what}"):
+            files = sorted((data_dir("raw") / "era5" / name).glob(f"*_{name}_*.nc"))
+            if not files:
+                raise SystemExit(f"no {name} files; run the download first")
+            paths += files
+            _read(files, pos, hourly[what], points, what)
+    hourly = (
+        pd.concat(hourly["wind"])
+        .merge(pd.concat(hourly["gust"]), on=["station_id", "time_utc"], how="outer")
+        .drop_duplicates(["station_id", "time_utc"], keep="last")
+    )
     lab = pd.read_csv(
         args.package / "labels.csv", usecols=["sample_id", "station_id", "time_utc"],
         dtype={"station_id": str},
@@ -221,6 +232,10 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--start", required=True)
     d.add_argument("--end", required=True)
     d.add_argument("--refresh", action="store_true")
+    d.add_argument(
+        "--what", nargs="+", choices=["wind", "gust"], default=["wind", "gust"],
+        help="which collections to request",
+    )  # fmt: skip
     e = sub.add_parser("extract")
     for p in (d, e):
         p.add_argument("--package", type=Path, required=True)
