@@ -7,6 +7,19 @@ separately (`docs/REPRODUCIBILITY.md`).
 
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
+### Added (2026-11-19, wave measurements beyond height)
+- Review of Codex's prepared measurement experiments and bars M-S1 and M-S2, fixed before
+  their runs, in `docs/experiments/wave_measurements.md`. Fixed before any run: the slope
+  probe's comparator gains the de-mounted horizon roll and pitch, every ridge fits on the
+  fold's training buoys by name (plus a validation-fit sensitivity), the checkpoint's test
+  strips must equal the fold's, and 50 all-zero spectra get no slope. The breaker trainer
+  is not run (re-decodes every clip every epoch for frozen encoders; one frame per 1.9 s).
+- `deploy/dgx/measure.sh`: frozen buoy probes on the GPU server in the `run.sh` pattern.
+- **Bar M-S1 met** (five folds over the 43 station groups, 38,387 strips at 77 buoys):
+  the buoy's RMS slope is predicted with RMSE 0.0089 from camera + wind + horizon
+  geometry against 0.0102 from wind + geometry, −0.0013 [−0.0017, −0.0008]; the camera
+  alone (0.0093) also beats wind + geometry.
+
 ### Added (2026-11-14)
 - NDBC buoy-camera sea-state dataset (`ndbc_buoycam_sea_state_v0`): every archived
   strip paired with its own buoy's wave height (`scripts/buoycam_pairs.py`), and a
