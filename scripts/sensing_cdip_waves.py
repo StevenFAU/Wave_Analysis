@@ -141,11 +141,19 @@ def main():
     p.add_argument("--clips", type=Path, required=True)
     p.add_argument("--limit", type=int, help="number of distinct windows for acquisition QA")
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument(
+        "--dates",
+        type=Path,
+        help="local dates to label (default: the development dates). Sealed dates (storm set, "
+        "confirmation) only once their bars are committed: docs/experiments/sensing_per_wave_bars.md",
+    )
     args = p.parse_args()
     if args.out.exists():
         raise FileExistsError(args.out)
     days = set(
-        (repo_root() / "configs/experiments/webcoos_video_dev_dates.txt").read_text().split()
+        (args.dates or repo_root() / "configs/experiments/webcoos_video_dev_dates.txt")
+        .read_text()
+        .split()
     )
     clips = pd.read_csv(
         args.clips,
