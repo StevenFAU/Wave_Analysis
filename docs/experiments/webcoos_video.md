@@ -408,6 +408,54 @@ the time; for 80 % power it must be about 1.43 times larger:
 M6's development estimate with 80 % power would take about 175 confirmation dates (25
 sample weeks, 21 more than planned); asking WebCOOS for them is the user's decision.
 
+## Storm set (sealed; selected 2026-11-19, before any storm clip was downloaded)
+
+**Why.** The sample is too calm for Kim et al.'s five classes. Of 1,444 labelled clips,
+1,133 have a mean wave height below 0.75 m, only 5 reach 1.75-2.25 m and none goes higher
+(the shore-labels session, `docs/experiments/sensing_per_wave_bars.md` on its branch).
+Kim's mean height is about 0.631 H_s, so the upper classes begin at an H_s of about
+2.0 m (mean height 1.25 m), 2.8 m (1.75 m) and 3.6 m (2.25 m).
+
+**Selection, from the buoys' records only** (`scripts/webcoos_storm_dates.py`, whose
+docstring holds the full rule):
+
+- A storm camera-day has a daylight mean H_s of 2.0 m or more at its paired buoy. Daylight
+  means the CDIP records whose centre has the sun at or above 0 deg at the camera, at
+  least 10 of them. The local days run from 2024-03-01 (the video archive's start) to
+  2026-11-18, within each buoy's records.
+- Excluded: the development dates and the sample's dates (test-set days and the six
+  weeks, each widened by a day on both sides).
+- A storm date is a site (north: Currituck and Jennette; Oak Island: both views) on a
+  local day with at least one storm camera-day.
+- The dates are ordered by taking turns over four strata: north ≥ 2.8 m, Oak Island
+  ≥ 2.8 m, north 2.0-2.8 m and Oak Island 2.0-2.8 m. Within a stratum the seasons take
+  turns, largest H_s first. One date is kept per storm and site: a date within three days
+  of an earlier one is dropped.
+
+The ordered list, `configs/experiments/webcoos_video_storm_dates.csv` (SHA-256
+`80e7bfc127665b7f...`), has 72 storm dates: 54 north and 18 Oak Island, 17 of them with
+H_s ≥ 2.8 m. Choosing dates by buoy H_s is stratified sampling; no clip's label is seen.
+
+**Download** (`scripts/webcoos_storm_sample.sh`, after the sample, at the same pace and
+under the same lock):
+
+- Hourly clips of each date's storm cameras over its local day, in list order.
+- It stops once 24 dates have video (at least 6 clips from one camera), once the storm
+  root holds 120 GB, or at the end of the list. A date without video is skipped: video is
+  sometimes missing on rough days even when stills exist (Jennette on 2026-09-24, Oak
+  Island east on 2024-04-12).
+- The first 24 dates cover 22 distinct days: 13 north and 11 Oak Island, 8 of them with
+  H_s ≥ 2.8 m. By season, 9 DJF, 6 MAM, 3 JJA and 6 SON.
+- That is about 78 GB, at half the sample's measured camera-day sizes (30-min clips:
+  Currituck 1.9 GB, Jennette 6.8, Oak Island east 2.2, west 1.8).
+
+**Sealed, the third set beside development and confirmation.** The storm clips have their
+own archive root, `data/raw/webcoos_video_storm`, which the sample's `pair` never reads.
+So they cannot enter the `webcoos_video_v1` package or the final run's development or
+confirmation dates. No per-clip label, feature or score of a storm date is opened until
+the bars that use them are committed; the shore-labels session writes those bars. The
+date-level buoy H_s in the list is the stratification variable.
+
 ## Progress
 
 - **Smoke test (2026-11-18, `video-days-20261118t1655-smoke-smoke`):** 24 clips from 4

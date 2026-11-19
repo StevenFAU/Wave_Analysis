@@ -68,6 +68,19 @@ separately (`docs/REPRODUCIBILITY.md`).
   its calls follow wind-wave height more than swell height; over 24 held-out
   buoys, swell share predicts the under-call (Spearman −0.89).
 
+### Added (2026-11-19, shore video: sealed storm set)
+- `scripts/webcoos_storm_dates.py`: storm dates chosen from CDIP records alone. A storm date
+  has a daylight mean H_s of 2.0 m or more at the paired buoy. Development and sample dates
+  are excluded, and only one date is kept per storm and site. The dates are ordered over
+  site × H_s band (2.0-2.8 m, ≥ 2.8 m) × season.
+  `configs/experiments/webcoos_video_storm_dates.csv` lists 72 dates (17 with H_s ≥ 2.8 m).
+- `scripts/webcoos_storm_sample.sh` downloads them in that order: hourly clips, until 24
+  dates have video or 120 GB is reached (about 78 GB expected). It runs after the video
+  sample, under the same lock and pace, into its own root `data/raw/webcoos_video_storm`.
+  The sample's pairing never reads that root, so the set stays out of the final run.
+- The storm set is sealed: no per-clip label, feature or score of a storm date is opened
+  until the bars that use it are committed (`docs/experiments/webcoos_video.md`, "Storm set").
+
 ### Added (2026-11-19, shore video: physics features v2 and bars M6-M7)
 - The 18 interim dates are now development data (`configs/experiments/webcoos_video_dev_dates.txt`,
   committed with its SHA-256 before any development); every date the final run adds is a
