@@ -9,6 +9,7 @@ model:
   targets: [slope_percent, wind_wave_label_m]
   target_names: [slope, wind_wave]
   target_units: [pct, m]
+  missing_if_nonpositive: [slope_percent]
   mixer: {d_model: 256, heads: 4, layers: 1, dropout: 0.1}
   augment: {scale: [1.0, 1.0], rotate_deg: 0.0, brightness: 0.2, contrast: 0.2, saturation: 0.1}
   lp_epochs: 2

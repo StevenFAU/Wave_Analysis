@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from measurement_buoy_probe import TARGETS, ridge
+from measurement_buoy_probe import GEOMETRY, TARGETS, geometry, ridge, wind_features
 from wave_analysis.config import data_dir
 
 
@@ -229,6 +229,66 @@ def slope_bar(data, metadata):
     return out
 
 
+def finetune_bar(args):
+    """Bar M-S2 (docs/experiments/wave_measurements.md): the fine-tuned slope against the probe.
+
+    Both cameras are stacked with wind + geometry by a ridge on each fold's validation
+    strips (out of sample for both encoders) and scored on its test buoys.
+    """
+    y = "slope_rms"
+    table = geometry(
+        pd.read_csv(args.package / "labels.csv", dtype={"station_id": str}, low_memory=False),
+        args.package,
+    )
+    table.loc[table[y] <= 0, y] = np.nan
+    probes = {}
+    for r in args.probes:
+        m = json.loads((r / "run.json").read_text())
+        if m["smoke"] or m.get("water_only"):
+            raise ValueError(f"{r}: a full probe on whole views is required")
+        probes[m["fold"]] = (m, pd.read_parquet(r / "predictions.parquet"))
+    rows = []
+    for run in args.finetunes:
+        info = json.loads((run / "metrics.json").read_text())["run"]
+        k = int(info["split"].removeprefix("fold"))
+        m, probe = probes[k]
+        if (
+            info["config"] != "buoy_slope_v1"
+            or info.get("limit_per_partition")
+            or Path(info.get("init_heights_run") or "").name != m["checkpoint_run"]
+        ):
+            raise ValueError(f"{run}: a full buoy_slope_v1 run from fold {k}'s probe checkpoint")
+        ft = pd.read_csv(run / "predictions.csv")[["sample_id", "partition", "pred_slope_pct"]]
+        t = table.merge(ft, on="sample_id", validate="1:1")
+        if set(t.loc[t.partition.eq("test"), "sample_id"]) != set(probe.sample_id):
+            raise ValueError(f"{run}: test strips differ from the probe's")
+        camera = t.pred_slope_pct.to_numpy() / 100  # the fine-tune predicts percent
+        x = np.column_stack([wind_features(t), t[GEOMETRY].to_numpy(), camera])
+        ok = np.isfinite(x).all(axis=1)
+        fit = ok & t.partition.eq("val").to_numpy() & t[y].notna().to_numpy()
+        take = ok & t.partition.eq("test").to_numpy()
+        out = t.loc[take, ["sample_id"]].copy()
+        out["finetune_all_inputs"] = np.maximum(0, ridge(x[fit], t.loc[fit, y].to_numpy(), x[take]))
+        out["finetune_camera"] = camera[take]
+        out["fold"] = k
+        rows.append(probe.merge(out, on="sample_id", how="left", validate="1:1"))
+    if sorted(r.fold.iloc[0] for r in rows) != list(range(5)):
+        raise ValueError("one fine-tune per fold")
+    data = pd.concat(rows, ignore_index=True)
+    data = data[data.eligible_inputs & data[y].notna()]
+    g = data.station_group
+    return {
+        "scored_strips": int(data.finetune_all_inputs.notna().sum()),
+        "bar_M_S2": paired(data[y], data.finetune_all_inputs, data[f"valfit_all_inputs__{y}"], g),
+        "finetune_vs_wind_geometry": paired(
+            data[y], data.finetune_all_inputs, data[f"valfit_wind_geometry__{y}"], g
+        ),
+        "finetune_camera_alone_vs_probe_camera": paired(
+            data[y], data.finetune_camera, data[f"valfit_image__{y}"], g
+        ),
+    }
+
+
 def direction_control(args):
     labels = pd.read_csv(args.package / "labels.csv", low_memory=False)
     oof = pd.read_csv(args.oof, usecols=["sample_id", "pred_dir_deg", "dir_agreement"])
@@ -282,6 +342,8 @@ def direction_control(args):
 def scores(args):
     if args.task == "direction":
         return direction_control(args)
+    if args.task == "finetune":
+        return finetune_bar(args)
     if args.task == "peaks":
         lab = pd.read_csv(
             args.package / "labels.csv",
@@ -395,6 +457,10 @@ def main():
     q.add_argument("--device", default="cuda")
     b = sub.add_parser("probes")
     b.add_argument("probes", nargs="+", type=Path)
+    f = sub.add_parser("finetune", help="bar M-S2: fine-tuned slope against the frozen probe")
+    f.add_argument("--package", type=Path, required=True)
+    f.add_argument("--probes", nargs=5, type=Path, required=True)
+    f.add_argument("--finetunes", nargs=5, type=Path, required=True)
     for task in ("peaks", "direction"):
         a = sub.add_parser(task)
         a.add_argument("--package", required=True, type=Path)

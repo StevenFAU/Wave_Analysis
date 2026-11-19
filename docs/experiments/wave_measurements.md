@@ -108,6 +108,36 @@ each horizon (`--water-only`), the control that the camera does not read the slo
 the horizon line alone; and the confirmation of a pass on strips archived after the
 package (from 2026-11-14 16:00 UTC), as stage 2's.
 
+## Bar M-S2: the slope fine-tune (fixed 2026-11-19, before any fine-tune run and before M-S1 was scored)
+
+Fixed while the probe's folds 1-4 were running (fold 0 had been checked for its
+outputs). It applies only if M-S1 or its validation-fit sensitivity is met.
+
+**Model.** `configs/experiments/buoy_slope_v1.yaml` through
+`scripts/train_wave_heights.py --init-heights-run <fold k's seed-0 DINOv3-gentle run>
+--backbone timm:convnext_tiny.dinov3_lvd1689m --seed 0`: the fold's encoder and view
+mixer, new heads for the slope (in percent, log scale) and the wind-wave height, two
+epochs of heads only, then eight with the backbone at a tenth of the learning rate; the
+epoch is chosen on the validation buoys' slope RMSE. No rotation or scale augmentation,
+so the horizon's tilt survives. The 50 dropout spectra are left out
+(`missing_if_nonpositive`). One run per fold, seed 0.
+
+**Comparison** (`scripts/measurement_review.py finetune`). The fine-tuned camera's
+slope, with wind + geometry, by a ridge fitted on the fold's validation strips, against
+the frozen probe's all inputs fitted on the same validation strips (its validation-fit
+arm). Validation strips are the fair place to stack both: the fine-tune never trained
+on them by gradient, and the frozen features are out of sample there too. Same eligible
+test strips as M-S1.
+
+**Bar M-S2.** The fine-tuned stack must lower the out-of-fold slope RMSE against the
+frozen probe's, with the 95 % interval of the difference below zero (paired bootstrap
+over the 43 station groups, 2,000 draws). Reported beside: the fine-tuned stack against
+wind + geometry, and the fine-tuned camera alone against the frozen camera alone.
+
+**Expected in advance.** The fine-tune chooses its epoch on the validation buoys' slope,
+which makes its validation predictions slightly better than a new buoy's; the stacking
+ridge then trusts it a little too much, which can only hurt it at the test buoys.
+
 ## Review of the prepared experiments (2026-11-19)
 
 Codex's diff against `8f225d5c8` (26 files, about 3,400 lines) was read before any run.
@@ -156,9 +186,9 @@ environment or `uv sync --extra imaging --extra ml --extra netcdf`.
   container entry point adds `--config` and `--split`; `deploy/dgx/measure.sh` and
   `deploy/container/measure.sh` launch it the same way (committed code, package tar,
   labelled container).
-- Open, for the fine-tune only: `metrics.json` does not record `--init-heights-run`
-  (only the provenance inputs do), and the zero spectra would enter it at the 0.05 %
-  floor of the log target. Both are to be fixed before a fine-tune runs.
+- **Fixed, for the fine-tune:** `metrics.json` did not record `--init-heights-run`
+  (only the provenance inputs did), and the zero spectra would have entered it at the
+  0.05 % floor of the log target (`missing_if_nonpositive` in the config now drops them).
 - **Rejected, breakers (`train_measurement_breakers.py`), not run.** (1) Both encoders
   are frozen, yet every clip is pulled from the 5 GB zip and decoded by ffmpeg again for
   every item of every epoch: about 700,000 decodes for the twelve runs, where 9,000

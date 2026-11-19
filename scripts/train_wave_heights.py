@@ -145,6 +145,9 @@ def main(argv: list[str] | None = None) -> int:
         boot["group_col"][args.split] if isinstance(boot["group_col"], dict) else boot["group_col"]
     )
     table = labels[labels[col].isin([TRAIN, *PARTITIONS])].reset_index(drop=True)
+    for c in mcfg.get("missing_if_nonpositive", []):
+        # zero here means no measurement (an all-zero spectrum), not a calm sea
+        table.loc[table[c] <= 0, c] = np.nan
     if args.limit:
         rng = np.random.default_rng(seed)
         keep = np.zeros(len(table), bool)
@@ -284,6 +287,7 @@ def main(argv: list[str] | None = None) -> int:
         "distribution": dist, "gpu": torch.cuda.get_device_name(device) if device.type == "cuda" else None,
         "torch": torch.__version__, "limit_per_partition": args.limit, "seed": seed,
     }  # fmt: skip
+    run_info["init_heights_run"] = str(args.init_heights_run) if args.init_heights_run else None
     (out / "metrics.json").write_text(
         json.dumps({"run": run_info, "partitions": metrics}, indent=1, default=str)
     )
