@@ -18,16 +18,26 @@ Outputs in ``--out`` (fp16 memmaps, clip order of ``clips.csv``):
 * ``b_resnet18.npy`` (N, 60, 512): the same ResNet-18 on Set B's 60 frames;
 * ``clips.csv`` (per clip: frames decoded, fps, Set B frame names) and ``meta.json``.
 
+With ``--encoders vjepa2`` (bar Y-B3) the pass writes instead, for each of three versions
+of every Set A clip (``video``: the frames in order; ``shuffled``: the same 150 frames in
+a fixed random order per clip; ``still``: each window's middle frame repeated):
+
+* ``a_vjepa2_<version>.npy`` (N, 75, 1024): frozen V-JEPA 2 ViT-L on three 64-frame
+  windows (starting at frames 0, 42, 86) resized to 256 x 256, the encoder output averaged
+  over its 16 x 16 spatial positions (one token per 2-frame tubelet, 0.4 s), each of the
+  clip's 75 tubelets taken from the window whose centre is nearest.
+
 Each clip is read from its zip once; nothing is written to disk but the features.
 
     python scripts/breaker_features.py --source <dir with the three files> --out <dir> \\
-        --device cuda [--limit 16]
+        --device cuda [--encoders vjepa2] [--limit 16]
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -39,6 +49,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 
 CLASSES = ["Spilling", "Plunging", "Surging"]
 A_FRAMES = 150  # 30 s at 5 fps
@@ -47,6 +58,11 @@ SIDE = 224
 MEAN = (0.485, 0.456, 0.406)  # ImageNet; also DINOv3's (timm pretrained_cfg)
 STD = (0.229, 0.224, 0.225)
 DINOV3 = "vit_base_patch16_dinov3.lvd1689m"
+VJEPA2 = "facebook/vjepa2-vitl-fpc64-256"
+VJ_WINDOW = 64  # frames per window: the model's clip length (12.8 s at 5 fps)
+VJ_STARTS = (0, 42, 86)  # three windows covering frames 0-149; even, on tubelet bounds
+VJ_SIDE = 256  # the model's input size; HF's rotary positions assume its 16 x 16 grid
+VJ_VERSIONS = ("video", "shuffled", "still")
 CLIP_RE = re.compile(r"^(Spilling|Plunging|Surging)-(\d+)-([A-Za-z0-9_]+)-(\d{14}Z)$")
 
 
@@ -273,6 +289,83 @@ class Encoders:
         return torch.cat(out)
 
 
+def stitch_plan(
+    starts: tuple[int, ...] = VJ_STARTS,
+    window: int = VJ_WINDOW,
+    tubelet: int = 2,
+    n_frames: int = A_FRAMES,
+) -> tuple[np.ndarray, np.ndarray]:
+    """For each of the clip's n_frames / tubelet tubelets: the window it is read from (the
+    one whose centre is nearest, ties to the earlier) and its token position there."""
+    if n_frames % tubelet or window % tubelet or any(s % tubelet for s in starts):
+        raise ValueError("windows must start and end on tubelet bounds")
+    if starts[0] != 0 or starts[-1] + window != n_frames:
+        raise ValueError(f"windows at {starts} do not span frames 0-{n_frames - 1}")
+    if any(b - a > window for a, b in itertools.pairwise(starts)):
+        raise ValueError(f"windows at {starts} leave a gap")
+    centre_t = np.arange(0, n_frames, tubelet) + (tubelet - 1) / 2
+    centre_w = np.array(starts) + (window - 1) / 2
+    win = np.abs(centre_t[:, None] - centre_w[None]).argmin(1)  # argmin: ties to the first
+    pos = (np.arange(0, n_frames, tubelet) - np.array(starts)[win]) // tubelet
+    if (pos < 0).any() or (pos >= window // tubelet).any():
+        raise ValueError("a tubelet falls outside its window")
+    return win, pos
+
+
+def version_frames(
+    version: str, clip: str, starts: tuple[int, ...] = VJ_STARTS, window: int = VJ_WINDOW
+) -> np.ndarray:
+    """Frame indices (windows x window) into the decoded clip for one version: ``video`` in
+    order, ``shuffled`` the clip's frames permuted once (seeded by its name), ``still`` the
+    window's middle frame repeated."""
+    from wave_analysis.models.video_probe import arm_order
+
+    n = starts[-1] + window
+    if version == "video":
+        frames = np.arange(n)
+    elif version == "shuffled":
+        frames = arm_order("shuffled", n, clip)
+    elif version == "still":
+        return np.stack([np.full(window, s + window // 2) for s in starts])
+    else:
+        raise ValueError(f"unknown version {version!r}")
+    return np.stack([frames[s : s + window] for s in starts])
+
+
+class VJepa2:
+    """Frozen V-JEPA 2 ViT-L (Hugging Face ``facebook/vjepa2-vitl-fpc64-256``): the encoder
+    output after its final norm, averaged over the spatial grid of each tubelet."""
+
+    def __init__(self, device: str, model: torch.nn.Module | None = None) -> None:
+        self.device = device
+        dtype = torch.bfloat16 if device != "cpu" else torch.float32
+        if model is None:  # a model may be given in tests
+            from transformers import VJEPA2Model
+
+            model = VJEPA2Model.from_pretrained(VJEPA2, torch_dtype=dtype)
+        self.model = model.to(device=device, dtype=dtype).eval().requires_grad_(False)
+        cfg = self.model.config
+        self.tubelet, self.patch = int(cfg.tubelet_size), int(cfg.patch_size)
+        if cfg.crop_size != VJ_SIDE or cfg.frames_per_clip != VJ_WINDOW:
+            raise ValueError(f"{VJEPA2}: crop {cfg.crop_size}, {cfg.frames_per_clip} frames")
+        self.dim, self.dtype = int(cfg.hidden_size), dtype
+        self.mean = torch.tensor(MEAN, device=device).view(1, 1, 3, 1, 1)
+        self.std = torch.tensor(STD, device=device).view(1, 1, 3, 1, 1)
+
+    @torch.inference_mode()
+    def tokens(self, x: torch.Tensor) -> torch.Tensor:
+        """uint8 windows (W, T, 3, H, W) -> spatially averaged tokens (W, T / tubelet, D)."""
+        from wave_analysis.models.video_probe import pool_tokens
+
+        w, t = x.shape[:2]
+        v = x.to(self.device, non_blocking=True).flatten(0, 1).float()
+        v = F.interpolate(v, size=(VJ_SIDE, VJ_SIDE), mode="bilinear", align_corners=False)
+        v = ((v.view(w, t, 3, VJ_SIDE, VJ_SIDE) / 255 - self.mean) / self.std).to(self.dtype)
+        out = self.model(pixel_values_videos=v, skip_predictor=True).last_hidden_state
+        grid = (t // self.tubelet, VJ_SIDE // self.patch, VJ_SIDE // self.patch)
+        return pool_tokens(out, grid, (grid[0], 1, 1))
+
+
 def sha256(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -281,13 +374,18 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def weight_files() -> dict[str, str]:
+def weight_files(encoders: str = "base") -> dict[str, str]:
     """SHA-256 of the cached weights actually loaded (torch hub and Hugging Face caches)."""
     out = {}
+    hf = Path(os.environ.get("HF_HOME", Path.home() / ".cache/huggingface")) / "hub"
+    if encoders == "vjepa2":
+        repo = "models--" + VJEPA2.replace("/", "--")
+        for p in sorted(hf.glob(f"{repo}/snapshots/*/*.safetensors")):
+            out[f"{VJEPA2}/{p.parent.name[:12]}/{p.name}"] = sha256(p)
+        return out
     hub = Path(torch.hub.get_dir()) / "checkpoints"
     for p in sorted(hub.glob("resnet18-*.pth")):
         out[p.name] = sha256(p)
-    hf = Path(os.environ.get("HF_HOME", Path.home() / ".cache/huggingface")) / "hub"
     for p in sorted(hf.glob(f"models--timm--{DINOV3}/snapshots/*/*.safetensors")):
         out[f"{DINOV3}/{p.parent.name[:12]}/{p.name}"] = sha256(p)
     return out
@@ -301,6 +399,9 @@ def run(args: argparse.Namespace) -> None:
         clips = clips.groupby("site").head(max(1, args.limit // 6)).reset_index(drop=True)
     n = len(clips)
     args.out.mkdir(parents=True, exist_ok=False)
+    if args.encoders == "vjepa2":
+        run_vjepa2(args, clips, t0)
+        return
     with zipfile.ZipFile(args.source / "Set_B.zip") as z:
         b_members, b_found = set_b_members(z.namelist(), clips)
     clips["b_frames"] = [" ".join(Path(m).name for m in ms) for ms in b_members]
@@ -382,7 +483,7 @@ def run(args: argparse.Namespace) -> None:
             "a_resnet18": "torchvision resnet18 IMAGENET1K_V1, frozen, fp32, eval-mode batch norm, global average pool",
             "b_resnet18": "the same ResNet-18 on Set B's 60 JPEG frames",
         },
-        "weights_sha256": weight_files(),
+        "weights_sha256": weight_files("base"),
         "inputs": {
             p: (args.source / p).stat().st_size
             for p in ("Set_A.zip", "Set_B.zip", "loso_split_by_database_filename.csv")
@@ -396,6 +497,93 @@ def run(args: argparse.Namespace) -> None:
     log(
         f"features written to {args.out}: {json.dumps(meta['set_a'])}, Set B {meta['set_b']['frames_read_values']}"
     )
+
+
+def run_vjepa2(args: argparse.Namespace, clips: pd.DataFrame, t0: float) -> None:
+    """Bar Y-B3's pass: every Set A clip decoded once, three versions through V-JEPA 2."""
+    n = len(clips)
+    log(f"{n:,} clips; {torch.cuda.get_device_name(0) if args.device == 'cuda' else 'cpu'}")
+    enc = VJepa2(args.device)
+    win, pos = stitch_plan(tubelet=enc.tubelet)
+    n_tok = len(win)
+    mm = {
+        v: np.lib.format.open_memmap(
+            args.out / f"a_vjepa2_{v}.npy", "w+", np.float16, (n, n_tok, enc.dim)
+        )
+        for v in VJ_VERSIONS
+    }
+    a_frames, a_fps = np.zeros(n, int), np.zeros(n)
+    win_t, pos_t = torch.as_tensor(win), torch.as_tensor(pos)
+    with tempfile.TemporaryDirectory(dir=args.tmp) as tmpdir:
+        loader = torch.utils.data.DataLoader(
+            SetA(args.source / "Set_A.zip", list(clips.member_a), tmpdir),
+            batch_size=args.batch,
+            num_workers=args.workers,
+            collate_fn=collate,
+            pin_memory=True,
+            prefetch_factor=4 if args.workers else None,
+        )
+        for b, (x, idx, nf, fps) in enumerate(loader):
+            k = idx.numpy()
+            x = x.to(args.device, non_blocking=True)  # (B, 150, 3, 224, 224) uint8
+            for v in VJ_VERSIONS:
+                frames = torch.as_tensor(
+                    np.stack([version_frames(v, clips.filename.iloc[i]) for i in k]),
+                    device=x.device,
+                )  # (B, windows, 64)
+                xw = torch.stack([x[j][frames[j].flatten()] for j in range(len(k))])
+                xw = xw.view(len(k) * len(VJ_STARTS), VJ_WINDOW, *x.shape[2:])
+                tok = enc.tokens(xw).view(len(k), len(VJ_STARTS), -1, enc.dim)
+                mm[v][k] = tok[:, win_t, pos_t].half().cpu().numpy()
+            a_frames[k], a_fps[k] = nf.numpy(), fps.numpy()
+            if b % 100 == 0:
+                log(
+                    f"V-JEPA 2: {min((b + 1) * args.batch, n):,}/{n:,} clips, {time.time() - t0:.0f} s"
+                )
+    for m in mm.values():
+        m.flush()
+    clips["a_frames_decoded"], clips["a_fps"] = a_frames, a_fps
+    clips.to_csv(args.out / "clips.csv", index=False)
+    finite = {
+        k: bool(np.isfinite(np.asarray(v[:: max(1, n // 200)], np.float32)).all())
+        for k, v in mm.items()
+    }
+    meta = {
+        "clips": n,
+        "set_a": {
+            "frames": A_FRAMES,
+            "fps_values": sorted(set(np.round(a_fps, 3).tolist())),
+            "frames_decoded_values": sorted(set(a_frames.tolist())),
+        },
+        "encoders": {
+            f"a_vjepa2_{v}": f"HF {VJEPA2}, frozen, bf16, {VJ_SIDE} x {VJ_SIDE} (bilinear from 224), "
+            "ImageNet mean/std, last_hidden_state averaged over the spatial grid"
+            for v in VJ_VERSIONS
+        },
+        "versions": {
+            "video": "the 150 frames in order",
+            "shuffled": "the 150 frames in a fixed random order per clip "
+            "(wave_analysis.models.video_probe.arm_order, seeded by the file name)",
+            "still": "each window's middle frame repeated",
+        },
+        "windows": {"starts": list(VJ_STARTS), "frames": VJ_WINDOW, "tubelet": enc.tubelet},
+        "stitch": {
+            "window_of_tubelet": win.tolist(),
+            "position_in_window": pos.tolist(),
+            "tubelets_per_window": np.bincount(win).tolist(),
+        },
+        "weights_sha256": weight_files("vjepa2"),
+        "inputs": {
+            p: (args.source / p).stat().st_size
+            for p in ("Set_A.zip", "loso_split_by_database_filename.csv")
+        },
+        "finite_sample": finite,
+        "seconds": round(time.time() - t0),
+        "commit": os.environ.get("COMMIT", ""),
+        "limit": args.limit,
+    }
+    (args.out / "meta.json").write_text(json.dumps(meta, indent=2))
+    log(f"V-JEPA 2 features written to {args.out}: {json.dumps(meta['set_a'])}, finite {finite}")
 
 
 def main() -> None:
@@ -416,6 +604,12 @@ def main() -> None:
         "--tmp", default=None, help="folder for the per-clip MP4 written for the decoder"
     )
     ap.add_argument("--limit", type=int, default=0, help="a smoke test on about this many clips")
+    ap.add_argument(
+        "--encoders",
+        choices=["base", "vjepa2"],
+        default="base",
+        help="base: ResNet-18 and DINOv3 (Y-B1, Y-B2); vjepa2: V-JEPA 2 in three versions (Y-B3)",
+    )
     run(ap.parse_args())
 
 

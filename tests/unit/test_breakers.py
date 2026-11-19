@@ -303,3 +303,218 @@ def test_fit_and_score_end_to_end_on_a_fake_cache(scripts, tmp_path):
     assert {"Y-B1", "Y-B2"} <= set(s["comparisons"]) and s["clips"] == 16
     assert len(s["arms"]["dinov3_temporal"]["macro_f1_pooled_per_seed"]) == 2
     assert set(s["random5"]) == {"dinov3_orderfree"}
+
+
+# ---------------------------------------------------------------- bar Y-B3: V-JEPA 2
+
+
+def test_vjepa2_windows_cover_each_tubelet_once_from_the_nearest_window(scripts):
+    bf = scripts("breaker_features")
+    win, pos = bf.stitch_plan()
+    assert len(win) == 75 and np.bincount(win).tolist() == [27, 21, 27]
+    first = [bf.VJ_STARTS[w] + 2 * p for w, p in zip(win, pos, strict=True)]
+    assert first == list(range(0, 150, 2))  # every 2-frame tubelet once, in order
+    assert pos.min() >= 0 and pos.max() <= 31
+    centres = np.array(bf.VJ_STARTS) + 31.5
+    for k, w in enumerate(win):  # the nearest window centre, ties to the earlier window
+        d = np.abs(centres - (2 * k + 0.5))
+        assert w == np.flatnonzero(d == d.min())[0]
+    with pytest.raises(ValueError, match="gap"):
+        bf.stitch_plan(starts=(0, 70, 86))
+    with pytest.raises(ValueError, match="span"):
+        bf.stitch_plan(starts=(0, 42, 84))
+    with pytest.raises(ValueError, match="tubelet"):
+        bf.stitch_plan(starts=(0, 43, 86))
+
+
+def test_vjepa2_versions_keep_the_pixels_and_drop_the_order(scripts):
+    bf = scripts("breaker_features")
+    video = bf.version_frames("video", "a.mp4")
+    assert video.shape == (3, 64) and (video == np.arange(64) + np.c_[[0, 42, 86]]).all()
+    shuffled = bf.version_frames("shuffled", "a.mp4")
+    assert (shuffled == bf.version_frames("shuffled", "a.mp4")).all()  # fixed per clip
+    assert not (shuffled == bf.version_frames("shuffled", "b.mp4")).all()  # differs by clip
+    perm = np.r_[shuffled[0], shuffled[1, 22:], shuffled[2, 20:]]  # one permutation of 150
+    assert sorted(perm.tolist()) == list(range(150))
+    assert (shuffled[1, :22] == shuffled[0, 42:]).all()  # windows cut from the same order
+    still = bf.version_frames("still", "a.mp4")
+    assert (still == np.c_[[32, 74, 118]]).all()  # each window's middle frame
+    with pytest.raises(ValueError):
+        bf.version_frames("reversed", "a.mp4")
+
+
+def test_vjepa2_tokens_are_the_spatial_mean_of_the_encoder_output(scripts, monkeypatch):
+    transformers = pytest.importorskip("transformers")
+    bf = scripts("breaker_features")
+    cfg = transformers.VJEPA2Config(
+        hidden_size=32,
+        num_hidden_layers=1,
+        num_attention_heads=2,
+        crop_size=32,
+        image_size=32,
+        patch_size=16,
+        tubelet_size=2,
+        frames_per_clip=4,
+        pred_hidden_size=16,
+        pred_num_hidden_layers=1,
+        pred_num_attention_heads=2,
+        mlp_ratio=2,
+    )
+    torch.manual_seed(0)
+    model = transformers.VJEPA2Model(cfg)
+    monkeypatch.setattr(bf, "VJ_SIDE", 32)
+    monkeypatch.setattr(bf, "VJ_WINDOW", 4)
+    enc = bf.VJepa2("cpu", model=model)
+    x = torch.randint(0, 256, (3, 4, 3, 24, 24), dtype=torch.uint8)
+    tok = enc.tokens(x)
+    assert tok.shape == (3, 2, 32)  # 4 frames -> 2 tubelets, one token each
+    v = torch.nn.functional.interpolate(
+        x.flatten(0, 1).float(), size=(32, 32), mode="bilinear", align_corners=False
+    ).view(3, 4, 3, 32, 32)
+    mean = torch.tensor(bf.MEAN).view(1, 1, 3, 1, 1)
+    std = torch.tensor(bf.STD).view(1, 1, 3, 1, 1)
+    with torch.no_grad():
+        out = model(pixel_values_videos=(v / 255 - mean) / std, skip_predictor=True)
+    expect = out.last_hidden_state.view(3, 2, 4, 32).mean(2)  # (t, h, w) grid, h * w averaged
+    assert torch.allclose(tok, expect, atol=1e-5)
+    monkeypatch.setattr(bf, "VJ_SIDE", 48)
+    with pytest.raises(ValueError, match="crop"):
+        bf.VJepa2("cpu", model=model)
+
+
+class _FrameMeanEncoder:
+    """Stands in for V-JEPA 2: each tubelet's token is the mean pixel value of its frames."""
+
+    tubelet, dim = 2, 2
+
+    def __init__(self, device):
+        pass
+
+    def tokens(self, x):
+        m = x.float().mean((2, 3, 4)).view(x.shape[0], -1, 2).mean(-1)
+        return torch.stack([m, -m], -1)
+
+
+class _FlatClips(torch.utils.data.Dataset):
+    """Stands in for SetA: frame i of every clip is filled with the value i."""
+
+    def __init__(self, zip_path, members, tmpdir):
+        self.members = members
+
+    def __len__(self):
+        return len(self.members)
+
+    def __getitem__(self, i):
+        x = torch.arange(150, dtype=torch.uint8).view(150, 1, 1, 1).expand(150, 3, 4, 4)
+        return x.contiguous(), i, 150, 5.0
+
+
+def test_vjepa2_pass_stitches_each_version(scripts, monkeypatch, tmp_path):
+    bf = scripts("breaker_features")
+    monkeypatch.setattr(bf, "VJepa2", _FrameMeanEncoder)
+    monkeypatch.setattr(bf, "SetA", _FlatClips)
+    src = tmp_path / "src"
+    src.mkdir()
+    fake_split(per_site=2).to_csv(
+        src / "loso_split_by_database_filename.csv", index=False, encoding="utf-8-sig"
+    )
+    (src / "Set_A.zip").write_bytes(b"")
+    out = tmp_path / "vj"
+    args = argparse.Namespace(
+        source=src, out=out, device="cpu", batch=4, workers=0, tmp=None, limit=0, encoders="vjepa2"
+    )
+    bf.run(args)
+    clips = pd.read_csv(out / "clips.csv")
+    video = np.load(out / "a_vjepa2_video.npy")
+    assert video.shape == (12, 75, 2) and video.dtype == np.float16
+    assert (video[:, :, 0] == np.arange(75) * 2 + 0.5).all()  # frames 2k, 2k + 1 in order
+    assert (video[:, :, 1] == -video[:, :, 0]).all()
+    shuffled = np.load(out / "a_vjepa2_shuffled.npy")[:, :, 0]
+    for i, name in enumerate(clips.filename):
+        perm = scripts("wave_analysis.models.video_probe").arm_order("shuffled", 150, name)
+        assert (shuffled[i] == (perm[0::2] + perm[1::2]) / 2).all()
+    still = np.load(out / "a_vjepa2_still.npy")[0, :, 0]
+    assert (still == np.repeat([32, 74, 118], [27, 21, 27])).all()
+    meta = json.loads((out / "meta.json").read_text())
+    assert meta["stitch"]["tubelets_per_window"] == [27, 21, 27]
+    assert meta["set_a"]["frames_decoded_values"] == [150] and all(meta["finite_sample"].values())
+
+
+def _vjepa_cache(tmp_path, scripts, per_site=8):
+    split = fake_split(per_site=per_site)
+    src = tmp_path / "src"
+    src.mkdir()
+    split.to_csv(src / "loso_split_by_database_filename.csv", index=False, encoding="utf-8-sig")
+    clips = scripts("breaker_features").clip_table(split)
+    n = len(clips)
+    pd.DataFrame(
+        {
+            "filename": clips.filename,
+            "wave_height": 1.0,
+            "wave_period": np.linspace(4, 10, n),
+            "wind_speed": 5.0,
+        }
+    ).to_csv(src / "ERA5_offshore_wave_wind_by_clip.csv", index=False)
+    cache = tmp_path / "vj"
+    cache.mkdir()
+    clips.to_csv(cache / "clips.csv", index=False)
+    rng = np.random.default_rng(0)
+    for v in ("video", "shuffled", "still"):
+        np.save(cache / f"a_vjepa2_{v}.npy", rng.normal(size=(n, 75, 16)).astype(np.float16))
+    return src, cache, n
+
+
+def test_vjepa2_arms_fit_and_score_beside_another_run(scripts, tmp_path):
+    hb = scripts("train_breaker_heads")
+    torch.set_num_threads(2)
+    src, cache, n = _vjepa_cache(tmp_path, scripts)
+    vj = [a for a in hb.NEURAL if a.startswith("vjepa2")]
+    assert hb.default_arms(cache) == [*vj, *hb.PHYSICS]  # no DINOv3 or ResNet in this cache
+    assert hb.BARS["Y-B3"] == ("vjepa2_video", "vjepa2_shuffled")
+    assert hb.NEURAL["vjepa2_video"]["kernel"] == hb.NEURAL["dinov3_temporal"]["kernel"]
+    out = tmp_path / "run"
+    common = {
+        "source": src,
+        "device": "cpu",
+        "seeds": [0],
+        "folds": [],
+        "random5": [],
+        "max_epochs": 1,
+    }
+    hb.fit(argparse.Namespace(cache=cache, out=out, arms=vj, **common))
+    pred = pd.read_csv(out / "predictions.csv")
+    assert set(pred.arm) == set(vj) and pred.groupby("arm").filename.nunique().eq(n).all()
+    # another run's arms (as Y-B1's) are added; arms this run has are not replaced
+    other = pred[pred.arm.eq("vjepa2_video")].assign(arm="dinov3_temporal")
+    dup = pred[pred.arm.eq("vjepa2_still")].assign(pred="Surging")
+    pd.concat([other, dup]).to_csv(tmp_path / "other.csv", index=False)
+    hb.score(argparse.Namespace(run=out, draws=50, with_=[tmp_path / "other.csv"]))
+    s = json.loads((out / "score.json").read_text())
+    assert list(s["merged_from"].values()) == [["dinov3_temporal"]]
+    assert {"Y-B3", "vjepa2_video - dinov3_temporal", "vjepa2_video - vjepa2_still"} <= set(
+        s["comparisons"]
+    )
+    assert s["comparisons"]["vjepa2_video - dinov3_temporal"]["pooled"]["delta"] == 0
+    own = pred[pred.arm.eq("vjepa2_still")]  # not the other file's all-surging copy
+    f1 = hb.macro_f1(hb.confusion(own.label.map(CLASSES.index), own.pred.map(CLASSES.index)))
+    assert s["arms"]["vjepa2_still"]["macro_f1_pooled"] == pytest.approx(f1)
+    assert isinstance(s["comparisons"]["Y-B3"]["met"], bool)
+
+
+def test_scoring_refuses_arms_on_different_clips(scripts):
+    hb = scripts("train_breaker_heads")
+    base = pd.DataFrame(
+        {
+            "protocol": "loso",
+            "seed": 0,
+            "fold": 1,
+            "site": "SiteA",
+            "site_day": ["SiteA 1", "SiteA 2"],
+            "label": "Spilling",
+            "pred": "Spilling",
+        }
+    )
+    a = base.assign(arm="vjepa2_video", filename=["x", "y"])
+    b = base.assign(arm="vjepa2_shuffled", filename=["x", "z"])
+    with pytest.raises(ValueError, match="different clips"):
+        hb.score_tables(pd.concat([a, b]), n_draws=10)

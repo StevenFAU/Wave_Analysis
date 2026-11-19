@@ -8,7 +8,9 @@
 #   deploy/dgx/breakers.sh push                    # the code of this commit
 #   deploy/dgx/breakers.sh decoder                 # OpenCV (its own FFmpeg) beside the environment
 #   GPU=<index> deploy/dgx/breakers.sh features <tag> [--limit 24]   # decode once, frozen features
+#   GPU=<index> deploy/dgx/breakers.sh features <tag> --encoders vjepa2 [--limit 24]  # V-JEPA 2 (Y-B3)
 #   GPU=<index> deploy/dgx/breakers.sh heads <features run> <tag> [fit options]  # heads + score
+#     WITH=<heads run>: score beside that run's out-of-site predictions (same draws)
 #   deploy/dgx/breakers.sh results <run>           # the run's small files into runs/<run>
 #   deploy/dgx/run.sh status | logs <run> [-f] | stop <run>
 #
@@ -45,8 +47,8 @@ pick_gpu() {  # sets gpu
     ((free >= MIN_FREE_GB)) || { echo "GPU $gpu has $free GB free, less than $MIN_FREE_GB" >&2; exit 1; }
     say "GPU $gpu: $free GB free"
 }
-start() {  # start <run> <gpu> <mode> <extra args>
-    local run="$1" gpu="$2" mode="$3" extra="$4"
+start() {  # start <run> <gpu> <mode> <extra args> [score args]
+    local run="$1" gpu="$2" mode="$3" extra="$4" score="${5:-}"
     r "docker ps -a --format '{{.Names}}' | grep -qx wave-$run" && { echo "run $run exists; wait a minute" >&2; exit 1; }
     r bash -s <<EOF
 set -e
@@ -56,7 +58,7 @@ docker run -d --rm --name wave-$run --label app=wave-analysis --label run=$run \
     --mount type=tmpfs,destination=/scratch,tmpfs-size=8g \
     --user \$(id -u):\$(id -g) -e HOME=/scratch -v $BASE:/data \
     -e RUN=$run -e MODE=$mode -e COMMIT=$COMMIT -e ENV_DIR=/data/envs/$LOCK -e CV2_DIR=/data/envs/$CV2_DIR \
-    -e SRC=/data/$SRC -e "EXTRA_ARGS=$extra" -e NUM_WORKERS=12 -e TORCH_HOME=/data/cache/torch \
+    -e SRC=/data/$SRC -e "EXTRA_ARGS=$extra" -e "SCORE_ARGS=$score" -e NUM_WORKERS=12 -e TORCH_HOME=/data/cache/torch \
     -e HF_HOME=/data/cache/hf -e HF_HUB_OFFLINE=1 -e PYTHONUNBUFFERED=1 -e TORCH_DISABLE_NATIVE_JIT=1 \
     $IMAGE bash -c 'bash /data/repo/$COMMIT/deploy/container/breakers.sh >/data/logs/$run.log 2>&1; s=\$?;
         echo "finished with exit code \$s at \$(date -u +%FT%TZ)" >>/data/logs/$run.log; exit \$s' >/dev/null
@@ -134,8 +136,14 @@ heads)
     [[ "$extra" =~ ^[A-Za-z0-9\ ._=/:-]*$ ]] || { echo "options may hold only letters, digits, spaces and ._=/:-" >&2; exit 1; }
     need_code
     r test -f "$BASE/runs/$features/features/meta.json" || { echo "no finished feature cache $features" >&2; exit 1; }
+    score=""
+    if [[ -n "${WITH:-}" ]]; then
+        [[ "$WITH" =~ ^video-breakers-[a-z0-9-]+$ ]] || { echo "bad WITH run" >&2; exit 1; }
+        r test -f "$BASE/runs/$WITH/heads/predictions.csv" || { echo "no predictions in $WITH" >&2; exit 1; }
+        score="--with /data/runs/$WITH/heads/predictions.csv"
+    fi
     pick_gpu
-    start "video-breakers-$(date -u +%Y%m%dt%H%M)-heads-$tag" "$gpu" heads "--cache /data/runs/$features/features $extra"
+    start "video-breakers-$(date -u +%Y%m%dt%H%M)-heads-$tag" "$gpu" heads "--cache /data/runs/$features/features $extra" "$score"
     ;;
 results)
     run="${1:?which run}"
@@ -146,7 +154,7 @@ results)
     say "small files of $run in runs/$run"
     ;;
 *)
-    sed -n '2,18p' "${BASH_SOURCE[0]}"
+    sed -n '2,20p' "${BASH_SOURCE[0]}"
     exit 1
     ;;
 esac

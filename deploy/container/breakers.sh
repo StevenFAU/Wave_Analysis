@@ -2,7 +2,7 @@
 # Runs INSIDE the container started by deploy/dgx/breakers.sh. MODE=features: decode each
 # VWBT_9000 clip once and cache frozen features (scripts/breaker_features.py); MODE=heads:
 # train and score the heads on that cache (scripts/train_breaker_heads.py fit, then score).
-# Variables: RUN, MODE, COMMIT, ENV_DIR, CV2_DIR, SRC, EXTRA_ARGS, NUM_WORKERS.
+# Variables: RUN, MODE, COMMIT, ENV_DIR, CV2_DIR, SRC, EXTRA_ARGS, SCORE_ARGS, NUM_WORKERS.
 set -euo pipefail
 echo "run $RUN: $MODE, commit $COMMIT, on $(hostname) at $(date -u +%FT%TZ)"
 cd "/data/repo/$COMMIT"
@@ -12,7 +12,7 @@ import torch
 print(f"torch {torch.__version__}, CUDA {torch.version.cuda}, {torch.cuda.get_device_name(0)}")
 PY
 mkdir -p "/data/runs/$RUN"
-# EXTRA_ARGS holds zero or more arguments, so it is split on purpose.
+# EXTRA_ARGS and SCORE_ARGS hold zero or more arguments, so they are split on purpose.
 # shellcheck disable=SC2086
 case "$MODE" in
 features)
@@ -23,7 +23,7 @@ features)
 heads)
     "$ENV_DIR/bin/python" scripts/train_breaker_heads.py fit --source "$SRC" --out "/data/runs/$RUN/heads" \
         --device cuda $EXTRA_ARGS
-    "$ENV_DIR/bin/python" scripts/train_breaker_heads.py score --run "/data/runs/$RUN/heads"
+    "$ENV_DIR/bin/python" scripts/train_breaker_heads.py score --run "/data/runs/$RUN/heads" ${SCORE_ARGS:-}
     ;;
 *)
     echo "MODE must be features or heads" >&2

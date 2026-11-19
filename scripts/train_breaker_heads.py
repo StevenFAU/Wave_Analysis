@@ -16,6 +16,10 @@ writes one prediction per clip, arm and seed. Arms:
   temporal convolution head (kernel 5 = 1 s, dilations 1, 2, 4: 5.8 s of context);
 * ``dinov3_orderfree``: the same head with kernel 1: each frame alone, then pooled, so
   the clip's frame order (its motion) cannot be used;
+* ``vjepa2_video`` / ``vjepa2_shuffled`` / ``vjepa2_still`` (bar Y-B3): frozen V-JEPA 2
+  ViT-L tokens (75 per clip, 0.4 s apart, averaged over space) of the clip in order, of its
+  frames shuffled, and of each window's middle frame repeated, with the temporal head;
+  ``vjepa2_video_orderfree`` / ``vjepa2_shuffled_orderfree``: the same with kernel 1;
 * ``iribarren_fixed`` / ``iribarren_fit``: no pixels: the surf-similarity number from
   ERA5 offshore H_s, T_p (Yin et al.'s per-clip file) and each site's beach slope (their
   Table 1), with Battjes' thresholds or a logistic regression fitted on training sites.
@@ -24,10 +28,11 @@ writes one prediction per clip, arm and seed. Arms:
 score on the same fold) for the comparator, as a check of the re-implementation.
 
 ``score`` computes the bars: pooled out-of-site macro-F1 over present classes, paired
-bootstrap over site-days stratified by site.
+bootstrap over site-days stratified by site. ``--with`` adds another run's out-of-site
+predictions (arms this run lacks), scored on the same draws.
 
     python scripts/train_breaker_heads.py fit --cache <features> --source <yin dir> --out <dir> --device cuda
-    python scripts/train_breaker_heads.py score --run <dir>
+    python scripts/train_breaker_heads.py score --run <dir> [--with <other run>/predictions.csv]
 """
 
 from __future__ import annotations
@@ -57,17 +62,44 @@ NEURAL = {
     "yin_crnn_a5fps": {"features": "a_resnet18", "frames": "all", "head": "yin"},
     "dinov3_temporal": {"features": "a_dinov3", "frames": "all", "head": "conv", "kernel": 5},
     "dinov3_orderfree": {"features": "a_dinov3", "frames": "all", "head": "conv", "kernel": 1},
+    # bar Y-B3: the V-JEPA 2 cache (breaker_features.py --encoders vjepa2)
+    "vjepa2_video": {"features": "a_vjepa2_video", "frames": "all", "head": "conv", "kernel": 5},
+    "vjepa2_shuffled": {
+        "features": "a_vjepa2_shuffled",
+        "frames": "all",
+        "head": "conv",
+        "kernel": 5,
+    },
+    "vjepa2_still": {"features": "a_vjepa2_still", "frames": "all", "head": "conv", "kernel": 5},
+    "vjepa2_video_orderfree": {
+        "features": "a_vjepa2_video",
+        "frames": "all",
+        "head": "conv",
+        "kernel": 1,
+    },
+    "vjepa2_shuffled_orderfree": {
+        "features": "a_vjepa2_shuffled",
+        "frames": "all",
+        "head": "conv",
+        "kernel": 1,
+    },
 }
 PHYSICS = ["iribarren_fixed", "iribarren_fit"]
 BARS = {
     "Y-B1": ("dinov3_temporal", "yin_crnn_b2hz"),
     "Y-B2": ("dinov3_temporal", "dinov3_orderfree"),
+    "Y-B3": ("vjepa2_video", "vjepa2_shuffled"),
 }
 BESIDE = [
     ("dinov3_temporal", "iribarren_fit"),
     ("yin_crnn_b2hz", "iribarren_fit"),
     ("yin_crnn_a5fps", "yin_crnn_b2hz"),
     ("dinov3_orderfree", "yin_crnn_b2hz"),
+    ("vjepa2_video", "vjepa2_still"),
+    ("vjepa2_video_orderfree", "vjepa2_shuffled_orderfree"),
+    ("vjepa2_video", "dinov3_temporal"),
+    ("vjepa2_video", "dinov3_orderfree"),
+    ("vjepa2_video", "yin_crnn_b2hz"),
 ]
 # Shared by every neural arm: Yin et al.'s batch, epochs and early stopping.
 BATCH, MAX_EPOCHS, PATIENCE, LR = 50, 50, 5, 1e-3
@@ -399,8 +431,17 @@ def physics_arm(arm: str, phys: pd.DataFrame, y: np.ndarray, fold: dict) -> np.n
     return logistic_fit_predict(cols[train], y[train], cols[test])
 
 
+def default_arms(cache: Path) -> list[str]:
+    """Every neural arm whose features the cache holds, and the physics arms."""
+    return [a for a in NEURAL if (cache / f"{NEURAL[a]['features']}.npy").is_file()] + PHYSICS
+
+
 def fit(args: argparse.Namespace) -> None:
     t_start = time.time()
+    if not args.arms:
+        args.arms = default_arms(args.cache)
+    if unknown := set(args.arms) - set(NEURAL) - set(PHYSICS):
+        raise ValueError(f"unknown arms {sorted(unknown)}")
     clips = load_clips(args.cache, args.source)
     y_np = clips.y.to_numpy().copy()
     era5 = pd.read_csv(args.source / "ERA5_offshore_wave_wind_by_clip.csv", encoding="utf-8-sig")
@@ -502,6 +543,10 @@ def score_tables(pred: pd.DataFrame, n_draws: int = 2000, seed: int = 0) -> dict
     n_clips = pred.groupby("as").size()
     if (n_clips != n_clips.iloc[0]).any():
         raise ValueError(f"arms cover different clips: {n_clips.to_dict()}")
+    if "filename" in pred:
+        covered = pred.groupby("as").filename.agg(frozenset)
+        if any(c != covered.iloc[0] for c in covered):
+            raise ValueError("arms cover different clips")
     clusters = (
         pred[["site", "site_day"]]
         .drop_duplicates()
@@ -597,9 +642,26 @@ def random5_table(pred: pd.DataFrame) -> dict:
     }
 
 
+def merge_predictions(pred: pd.DataFrame, others: list[Path]) -> tuple[pd.DataFrame, dict]:
+    """Add the out-of-site predictions of arms this run lacks from other runs' files."""
+    added = {}
+    for path in others:
+        o = pd.read_csv(path)
+        o = o[o.protocol.eq("loso") & ~o.arm.isin(pred.arm.unique())]
+        if o.empty:
+            continue
+        added[str(path)] = sorted(o.arm.unique())
+        pred = pd.concat([pred, o[pred.columns]], ignore_index=True)
+    return pred, added
+
+
 def score(args: argparse.Namespace) -> None:
     pred = pd.read_csv(args.run / "predictions.csv")
+    pred, added = merge_predictions(pred, getattr(args, "with_", []))
+    for path, arms in added.items():
+        print(f"from {path}: {', '.join(arms)}")
     out = score_tables(pred, args.draws)
+    out["merged_from"] = added
     out["random5"] = random5_table(pred)
     (args.run / "score.json").write_text(json.dumps(out, indent=2))
     print(f"{out['clips']:,} clips, {out['site_days']} site-days")
@@ -630,7 +692,9 @@ def main() -> None:
     f.add_argument("--source", type=Path, required=True, help="split CSV and ERA5 CSV")
     f.add_argument("--out", type=Path, required=True)
     f.add_argument("--device", default="cuda")
-    f.add_argument("--arms", nargs="+", default=[*NEURAL, *PHYSICS])
+    f.add_argument(
+        "--arms", nargs="+", default=None, help="default: every arm the cache has features for"
+    )
     f.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2])
     f.add_argument("--folds", nargs="*", type=int, default=[])
     f.add_argument("--random5", nargs="*", default=["yin_crnn_b2hz", "dinov3_temporal"])
@@ -639,6 +703,14 @@ def main() -> None:
     s = sub.add_parser("score")
     s.add_argument("--run", type=Path, required=True)
     s.add_argument("--draws", type=int, default=2000)
+    s.add_argument(
+        "--with",
+        dest="with_",
+        type=Path,
+        nargs="*",
+        default=[],
+        help="other runs' predictions.csv: their arms are scored beside, on the same draws",
+    )
     s.set_defaults(func=score)
     args = ap.parse_args()
     args.func(args)
