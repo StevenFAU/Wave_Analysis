@@ -68,6 +68,25 @@ separately (`docs/REPRODUCIBILITY.md`).
   its calls follow wind-wave height more than swell height; over 24 held-out
   buoys, swell share predicts the under-call (Spearman −0.89).
 
+### Added (2026-11-18/19, domain pretraining)
+- Rank 6 of the architecture review, domain pretraining
+  (`docs/experiments/domain_pretraining.md`, fixed before any pretraining): DINOv3
+  ViT-B/16 continued with FINO's recipe for 30,000 steps on unlabelled buoy-camera views
+  of the 55 training buoys. The sealed test buoys were left out, and the only metadata
+  was the station. Step 7,500 was chosen by a ridge probe at the validation buoys.
+- Bar P1 not met. With B3's frozen recipe, at the 12 test buoys, H_s moved by
+  −0.010 m [−0.027, +0.002] and wind-wave height by −0.012 m [−0.018, −0.006], against
+  the public weights. The distillation follow-up is not triggered. With the gentle
+  recipe the continued weights are worse (H_s +0.028 m [+0.012, +0.040]). About 19
+  GPU-hours used.
+- Code: `src/wave_analysis/pretraining/buoy_views.py` (the views as a dataset for
+  DINOv3's trainer); `scripts/dinov3_pretrain.py`, `scripts/dinov3_weights.py` (timm ⇄
+  DINOv3 conversion) and `scripts/dinov3_probe.py`; `deploy/dgx/pretrain.sh` and
+  `deploy/container/pretrain.sh` (single-GPU `torchrun` in Docker, DINOv3 pinned to
+  `81aae9a`, memory limit `MEM`); `scripts/train_wave_heights.py --backbone-weights`.
+  The continued weights fall under Meta's DINOv3 License (research use, acknowledgement
+  required).
+
 ### Added (2026-11-18, architecture review and whole-clip bars)
 - `reports/Wave camera architectures beyond backbones.md` (notes in `research_notes/`
   under the same name): what to train beyond the backbone choice, ranked by value for

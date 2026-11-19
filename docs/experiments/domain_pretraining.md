@@ -293,6 +293,43 @@ Both arms average three seeds by mean log height over the same 6,183 test strips
   is 96.7 % against 84 %. Kim 2023 average-height accuracy is 63.2 % against 78.3 %, so
   still below it. The off-the-shelf arm scores 0.560 m, 96.6 % and 64.4 %.
 
+### Reported: the gentle recipe, and both continued arms against arm A (2026-11-19)
+
+Each row compares three-seed averages on the same test strips. The difference is the
+first arm minus the second, with its 95 % interval (paired bootstrap over the 12 buoys).
+
+| First arm minus second arm | H_s | Wind-wave height |
+|---|---|---|
+| Continued gentle (0.483 m, 0.214 m) minus off-the-shelf gentle (0.455 m, 0.212 m) | +0.028 [+0.012, +0.040] | +0.003 [−0.002, +0.007] |
+| Continued gentle minus arm A (0.450 m, 0.219 m) | +0.033 [+0.015, +0.048] | −0.004 [−0.014, +0.004] |
+| Continued frozen (0.550 m, 0.246 m) minus arm A | +0.100 [+0.069, +0.132] | +0.027 [+0.013, +0.039] |
+
+- **Fine-tuning erases the gain and turns it into a loss.** Once the backbone trains,
+  the continued weights end 0.028 m worse in H_s than the public weights, and the
+  interval sits clear of zero. Wind-wave height is level.
+- The gentle seeds give 0.550, 0.456 and 0.482 m (chosen epochs 4, 9 and 5); their
+  spread is 0.049 m.
+- On the papers' measures the continued gentle arm sits a little behind the
+  off-the-shelf gentle arm. Kamagata RMSE is 0.483 against 0.455 m, Choi accuracy
+  98.3 % against 98.6 %, and Kim accuracy 67.8 % against 69.6 %.
+- Memory: a gentle run holds about 50 GB of GPU memory once the backbone unfreezes,
+  against about 7 GB frozen.
+
+### What this means for rank 6
+
+Continuing DINOv3's own self-supervised training on 30,000 steps of unlabelled views
+from the 55 training buoys moved its frozen features only slightly. Wind-wave height
+improved by 0.012 m with a clear interval, H_s by 0.010 m without one. The probe at the
+validation buoys had promised more (0.06 m). With the gentle fine-tuning recipe, the
+continued weights did worse than the public ones. At this data scale, domain pretraining
+does not beat starting from the public weights, so it stays out of the camera model and
+the distillation follow-up is not run. A different recipe (longer, more buoys, or the
+test buoys' own unlabelled views) would be a new experiment with its own bar.
+
+**Budget used:** about 19 GPU-hours on one shared H200, against the 150 allowed. That is
+9.1 for pretraining, about 5 for the smoke runs and the two probes, and about 5 for the
+six P1 and gentle runs.
+
 ## Code
 
 - `src/wave_analysis/pretraining/buoy_views.py`: the unlabelled views as a dataset
@@ -321,4 +358,7 @@ it). The continued weights inherit it.
 - [x] Full pretraining run (2026-11-19): 30,000 steps, killed once at its memory limit
       and resumed; no divergence.
 - [x] Checkpoint choice on the validation buoys: step 7,500.
-- [ ] P1 and the gentle comparison.
+- [x] P1 (2026-11-19): not met. H_s −0.010 m [−0.027, +0.002], wind-wave −0.012 m
+      [−0.018, −0.006]. Follow-up not triggered.
+- [x] Gentle comparison (2026-11-19): continued weights worse, H_s +0.028 m
+      [+0.012, +0.040].
