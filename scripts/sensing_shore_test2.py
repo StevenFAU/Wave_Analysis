@@ -250,9 +250,9 @@ def report(all_res: dict) -> str:
         acc = ", ".join(f"{a} {v:.1%}" for a, v in k["accuracy"].items())
         lines += ["", f"Kim range: {k['n_clips']} clips on {k['n_dates']} dates, classes {k['clips_by_class']}.",
                   f"Accuracy: {acc}.", ""]  # fmt: skip
-        lines += ["| Target | " + " | ".join(next(iter(r["regression"].values())).keys()) + " |"]
+        lines += ["| Target | RMSE by arm |", "|---|---|"]
         for t, v in r["regression"].items():
-            lines.append(f"| {t} | " + " | ".join(f"{x:.3f}" for x in v.values()) + " |")
+            lines.append(f"| {t} | " + ", ".join(f"{a} {x:.3f}" for a, x in v.items()) + " |")
         lines.append("")
     return "\n".join(lines)
 
