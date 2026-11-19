@@ -1,0 +1,29 @@
+# Tests 2 and 3 (video half) on the shore video's development dates.
+# Fixed 2026-11-19 before any arm was scored on the per-wave labels:
+# docs/experiments/sensing_per_wave_bars.md. Test 2: scripts/sensing_shore_test2.py (CPU).
+# Test 3: scripts/sensing_shore_test3.py, run by deploy/dgx/run.sh with
+# TRAIN_SCRIPT=scripts/sensing_shore_test3.py PKG=sensing_shore_v1 KIND=video.
+name: sensing_shore_v1
+cohort: the interim video run's 992 clips and its five date folds (predictions_whole_clip.csv)
+labels: runs/cdip-development-v1.csv (scripts/sensing_cdip_waves.py); tier good primary
+seeds: [0, 1, 2, 3, 4]            # the project read-out's ensemble size
+bootstrap: {n_boot: 2000, alpha: 0.05, seed: 0, groups: local_day}
+kim:                              # Kim2023CNNBiLSTM
+  seconds: 180                    # central span, 2 fps from the 4-fps window frames: 360 steps
+  side_px: 224                    # centre square crop, grey copied to 3 channels, ImageNet normalisation
+  backbone: googlenet             # torchvision IMAGENET1K_V1, frozen, 1024-d
+  hidden: 2000
+  dropout: 0.5
+  lr: 1.0e-4                      # Adam
+  batch_size: 16
+  grad_clip: 2.0
+  epochs: 60                      # the inner validation date picks the epoch (cross-entropy)
+  min_windows: 12                 # K >= 12 (192 s) holds the 180-s span
+kamagata:                         # SlowFastWaveHead + kamagata_physics_loss
+  layer_index: 3                  # the cache's fourth layer = V-JEPA 2 block 23 (last)
+  width: 384                      # Linear(1024 -> 384), then the paper's head
+  physics_weight: 0.1
+  lr: 1.0e-4                      # AdamW
+  weight_decay: 0.05
+  batch_size: 128                 # windows
+  epochs: 50
