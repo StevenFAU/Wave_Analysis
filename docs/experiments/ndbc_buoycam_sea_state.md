@@ -883,8 +883,8 @@ Nothing in it is fitted.
   reported, not used as a gate: since the package, cameras have archived strips at 70
   of the 79 buoys (none at 41002, 44007, 45002, 46006, 46053, 46061, 46071, 46082 and
   46084), and 46085 has sent no wave record since 11-01, so about 69 buoys are
-  expected. A dry run checks and counts but scores nothing. The run is set for
-  2026-11-27, when ERA5 (about 5 days behind) should reach 11-22.
+  expected. A dry run checks and counts but scores nothing. ERA5 runs about 5 days
+  behind, so it should reach 11-21 16:00 UTC by 2026-11-27.
 
 **Result (2026-11-19): met out of fold; confirmation on new weeks pending.** Camera:
 stage 1's DINOv3-gentle, out of fold (`runs/buoycam-cv-fusion-20261119`). 39,767 strips
