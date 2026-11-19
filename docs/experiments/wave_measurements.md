@@ -108,6 +108,46 @@ each horizon (`--water-only`), the control that the camera does not read the slo
 the horizon line alone; and the confirmation of a pass on strips archived after the
 package (from 2026-11-14 16:00 UTC), as stage 2's.
 
+### M-S1 result (2026-11-19): met
+
+Five probe runs on the lab server, one per fold (`deploy/dgx/measure.sh`, commit
+`5263299`; about 6 minutes per fold on a shared H200), scored by
+`scripts/measurement_review.py probes`. 38,387 of the 41,091 strips are scored, at 77
+of the 79 buoys (the rest lack wind or three clear horizons, or are the 50 dropouts).
+Slope RMSE is the typical error of the predicted slope (dimensionless; the slope's own
+spread on these strips is 0.020).
+
+| Arm | Slope RMSE |
+|---|---|
+| All inputs (camera + wind + geometry) | **0.0089** |
+| Camera alone | 0.0093 |
+| Wind + geometry (the comparator) | 0.0102 |
+| Wind alone | 0.0106 |
+| Geometry alone | 0.0159 |
+| Training median (no input) | 0.0206 |
+
+- **Bar M-S1 is met.** All inputs minus wind + geometry: **−0.0013 [−0.0017, −0.0008]**
+  (95 % interval over the 43 station groups), 13 % less error. With every group
+  weighted equally: −0.0012. Lower at every fold (−0.0006 to −0.0020) and at 36 of the
+  43 groups.
+- **The camera alone beats wind + geometry:** 0.0093 against 0.0102, −0.0009
+  [−0.0013, −0.0004]. Wind is the strongest input the buoy has, and the pixels of one
+  hourly strip read the slope better than it does.
+- **Validation-fit sensitivity:** −0.0017 [−0.0019, −0.0014] (0.0084 against 0.0101).
+  As expected, the in-sample training features understate the camera somewhat.
+- Twilight (sun below 10°, 7,917 strips): −0.0014 [−0.0019, −0.0007]; daylight:
+  −0.0013 [−0.0017, −0.0008]. The gain does not depend on full daylight.
+- Without the bands above 0.35 Hz the gain is larger: 0.0062 against 0.0098, −0.0036
+  [−0.0042, −0.0029]. The noisy top of the buoy's spectrum is part of the remaining
+  error. Finite-depth slope: the same as deep water to four decimals.
+- Wind-wave height with the same probe (check, not the bar): 0.244 m against 0.370 m for
+  wind + geometry. The frozen features still read the wind sea.
+
+What it means: at buoys the model never saw, the camera measures the buoy's own wave
+slope better than the buoy's anemometer and its horizon tilt together, and adds to
+them. Not yet shown: the same on later weeks (as stage 2's confirmation), and whether
+the camera reads the water texture or the horizon line (`--water-only`, not run).
+
 ## Bar M-S2: the slope fine-tune (fixed 2026-11-19, before any fine-tune run and before M-S1 was scored)
 
 Fixed while the probe's folds 1-4 were running (fold 0 had been checked for its
