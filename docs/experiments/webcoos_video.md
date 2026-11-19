@@ -265,9 +265,13 @@ about half of M5's gain was recalibration. So the next gain should come from bet
 physics features, not a bigger encoder.
 
 **Discipline.** Everything below was fixed on the 18 development dates (previous section)
-and committed before any confirmation date had even been paired (the download had not
-reached the confirmation weeks). The bars are scored on the confirmation dates only.
-Every choice that used development labels is listed under "Development log".
+and committed (2026-11-19 12:45 EST) before any confirmation date's labels or v2 scores
+were opened. The desktop's background loop paired and cut the first confirmation dates at
+11:16 EST, while this was being fixed; their labels then sat in the clip table, but every
+development analysis took only the 992 interim clips (or the development dates) before
+touching a label, and none printed or plotted a confirmation label. The bars are scored
+on the confirmation dates only. Every choice that used development labels is listed
+under "Development log".
 
 **Spectrum recipe v2** (`wave_analysis.processing.pixel_spectrum.physics_v2`,
 `RECIPE_V2 = 2`; v1 unchanged, `RECIPE = 1`), from the same 4-fps, 4 x 4-px block series:
