@@ -20,6 +20,8 @@ from wave_analysis.datasets.buoycam import usable_view_mask
 from wave_analysis.models.baselines.kim2023 import Kim2023SnapshotCNN
 from wave_analysis.models.multimodal.yang2026 import Yang2026Fusion
 
+ARMS = ["choi", "choi-dinov3", "kim", "yang", "yang-no-attitude"]
+
 
 class Strips(Dataset):
     def __init__(self, pkg, frame, arm, attitude):
@@ -27,7 +29,7 @@ class Strips(Dataset):
         self.arm = arm
         hs = frame.Hs_label_m.to_numpy(float)
         good = usable_view_mask(frame, min_mean=20, min_std=4, n_views=6)
-        if arm == "choi":
+        if arm.startswith("choi"):
             means = frame[[f"view_mean_{i}" for i in range(6)]].to_numpy()
             good = (means >= 30) & (means <= 190)
             valid = (hs < 1.52) | (hs > 3.05)
@@ -68,7 +70,7 @@ class Strips(Dataset):
         with Image.open(self.pkg / self.frame.image.iloc[i]) as raw:
             im = raw.convert("L" if self.arm == "kim" else "RGB")
             width = im.width // 6
-            top = im.height // 2 if self.arm == "choi" else 0
+            top = im.height // 2 if self.arm.startswith("choi") else 0
             views = torch.stack(
                 [
                     self.transform(im.crop((j * width, top, (j + 1) * width, im.height)))
@@ -83,6 +85,13 @@ def model_for(arm):
         return Kim2023SnapshotCNN()
     if arm.startswith("yang"):
         return Yang2026Fusion(pretrained=True, use_attitude=arm == "yang")
+    if arm == "choi-dinov3":
+        # control: the project's backbone (DINOv3 ConvNeXt-Tiny, pooled) in Choi's
+        # pipeline, with Choi's views, filter, head, loss, averaging and recipe
+        import timm
+
+        trunk = timm.create_model("convnext_tiny.dinov3_lvd1689m", pretrained=True, num_classes=0)
+        return nn.Sequential(trunk, nn.Linear(trunk.num_features, 2))
     trunk = vgg16(weights=VGG16_Weights.IMAGENET1K_V1).features
     return nn.Sequential(trunk, nn.AdaptiveAvgPool2d(1), nn.Flatten(), nn.Linear(512, 2))
 
@@ -129,7 +138,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     for k in ("package", "config", "out"):
         p.add_argument("--" + k, type=Path, required=True)
-    p.add_argument("--arm", choices=["choi", "kim", "yang", "yang-no-attitude"], required=True)
+    p.add_argument("--arm", choices=ARMS, required=True)
     p.add_argument("--split", choices=["station", *[f"fold{i}" for i in range(5)]], required=True)
     p.add_argument("--seed", type=int, choices=[0, 1, 2], required=True)
     p.add_argument("--amp", choices=["bf16", "none"], default="bf16")
@@ -170,7 +179,11 @@ def main():
         for k, v in parts.items()
     }
     model = model_for(a.arm).cuda()
-    opt = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+    # AdamW (decoupled weight decay) unless the recipe names Adam (L2 in the gradient)
+    optimizer = {"adamw": torch.optim.AdamW, "adam": torch.optim.Adam}[
+        cfg.get("optimizer", "adamw")
+    ]
+    opt = optimizer(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
     best = np.inf
     for i in range(cfg["epochs"]):
         epoch(model, loaders["train"], a.arm, "cuda", a.amp, opt)

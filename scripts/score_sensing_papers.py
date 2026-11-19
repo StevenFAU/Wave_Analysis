@@ -1,7 +1,9 @@
 """Paired sealed-station comparison for three seeds of a paper arm and DINOv3.
 
-With ``--control`` instead of ``--reference``: Yang with attitude against Yang
-without attitude, on the same rows (RMSE with minus RMSE without).
+With ``--control`` instead of ``--reference``: two arms on the same strips, the
+first minus the second (Yang with minus without attitude, RMSE; the DINOv3
+backbone in Choi's pipeline minus VGG16, accuracy). ``--views`` adds, for
+classification arms, the accuracy of each view position on its own.
 """
 
 import argparse
@@ -40,8 +42,12 @@ def ensemble(paths, reference):
             cols = (
                 ["pred_hs_m"]
                 if arm.startswith("yang")
-                else sorted(data.filter(regex=r"^prob_\d+$").columns)
+                else sorted(data.filter(regex=r"^(view\d_)?prob_\d+$").columns)
             )
+            if frames and set(cols) != set(
+                frames[0].filter(regex=r"^(view\d_)?prob_\d+$|^pred_hs_m$")
+            ):
+                raise ValueError("seeds differ in their outputs")
         if run["split"] != "station" or run["seed"] in seeds:
             raise ValueError("expected independent sealed-station seeds")
         seeds.add(run["seed"])
@@ -86,7 +92,7 @@ def compare(paper, ref):
     )
     if d.empty or not d.station_id.eq(d.reference_station).all():
         raise ValueError("unmatched stations")
-    if arm == "choi":
+    if arm.startswith("choi"):
         yr = (d.true_hs_m > 3.05).astype(int)
         expected = (d.true_hs_m < 1.52) | (d.true_hs_m > 3.05)
         reference = (d.reference > 2.285).astype(int)
@@ -124,33 +130,73 @@ def compare(paper, ref):
     }
 
 
-def compare_attitude(with_attitude, without_attitude):
-    """Yang with minus without attitude: RMSE on identical strips, whole-buoy interval."""
-    arm_a, a = ensemble(with_attitude, False)
-    arm_b, b = ensemble(without_attitude, False)
-    if (arm_a, arm_b) != ("yang", "yang-no-attitude"):
-        raise ValueError("expected Yang with attitude, then Yang without")
+PAIRS = {("yang", "yang-no-attitude"), ("choi-dinov3", "choi")}
+
+
+def compare_arms(first, second, views=False):
+    """First minus second arm on identical strips (RMSE or accuracy), whole-buoy interval."""
+    arm_a, a = ensemble(first, False)
+    arm_b, b = ensemble(second, False)
+    if (arm_a, arm_b) not in PAIRS:
+        raise ValueError(f"registered pairs: {sorted(PAIRS)}")
     if a.attrs["labels_sha256"] != b.attrs["labels_sha256"]:
         raise ValueError("mixed packages")
     if not a.index.equals(b.index) or not a.station_id.equals(b.station_id):
         raise ValueError("the two arms cover different strips")
     if not np.allclose(a.target, b.target):
         raise ValueError("endpoint differs across arms")
-    d = a[["station_id"]].assign(
-        project_score=(a.pred_hs_m - a.target) ** 2,
-        paper_score=(b.pred_hs_m - b.target) ** 2,
-    )
-    values, ci, buoys = paired(d, True)
-    return {
-        "arm": "yang vs yang-no-attitude",
+    regression = arm_a.startswith("yang")
+
+    def score(frame, prefix=""):
+        if regression:
+            return (frame.pred_hs_m - frame.target) ** 2
+        probs = frame.filter(regex=rf"^{prefix}prob_\d+$").to_numpy()
+        return (probs.argmax(1) == frame.target).astype(float)
+
+    d = a[["station_id"]].assign(project_score=score(a), paper_score=score(b))
+    values, ci, buoys = paired(d, regression)
+    result = {
+        "arms": f"{arm_a} minus {arm_b}",
         "rows": len(d),
         "buoys": buoys,
-        "metric": "RMSE_m",
-        "with_attitude": values[0],
-        "without_attitude": values[1],
+        "metric": "RMSE_m" if regression else "accuracy",
+        arm_a: values[0],
+        arm_b: values[1],
         "delta": values[0] - values[1],
         "delta_ci": ci,
     }
+    if views:
+        result["views"] = view_positions(a, b, score, (arm_a, arm_b))
+    return result
+
+
+def view_positions(a, b, score, arms):
+    """Accuracy of each view position on its own, on strips where both arms have that view."""
+    out = []
+    for v in range(6):
+        cols = [f"view{v}_prob_0"]
+        if any(c not in f for f in (a, b) for c in cols):
+            raise ValueError("per-view outputs missing (predict_sensing_papers.py)")
+        ok = a[cols[0]].notna() & b[cols[0]].notna()
+        if not ok.equals(a[cols[0]].notna()) or not ok.equals(b[cols[0]].notna()):
+            raise ValueError("the arms use different views")
+        d = a.loc[ok, ["station_id"]].assign(
+            project_score=score(a.loc[ok], f"view{v}_"),
+            paper_score=score(b.loc[ok], f"view{v}_"),
+        )
+        values, ci, buoys = paired(d, False)
+        out.append(
+            {
+                "view": v,
+                "rows": len(d),
+                "buoys": buoys,
+                arms[0]: values[0],
+                arms[1]: values[1],
+                "delta": values[0] - values[1],
+                "delta_ci": ci,
+            }
+        )
+    return out
 
 
 if __name__ == "__main__":
@@ -158,11 +204,12 @@ if __name__ == "__main__":
     parser.add_argument("--paper", type=Path, nargs=3, required=True)
     other = parser.add_mutually_exclusive_group(required=True)
     other.add_argument("--reference", type=Path, nargs=3, help="DINOv3 runs, seeds 0-2")
-    other.add_argument("--control", type=Path, nargs=3, help="Yang without attitude, seeds 0-2")
+    other.add_argument("--control", type=Path, nargs=3, help="the second arm, seeds 0-2")
+    parser.add_argument("--views", action="store_true", help="also each view position (--control)")
     args = parser.parse_args()
     result = (
         compare(args.paper, args.reference)
         if args.reference
-        else compare_attitude(args.paper, args.control)
+        else compare_arms(args.paper, args.control, views=args.views)
     )
     print(json.dumps(result, indent=2))

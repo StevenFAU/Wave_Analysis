@@ -23,6 +23,14 @@ Use training splits for fitting and validation only for epoch selection. Use thr
 - *Yang with against without attitude.* RMSE(with attitude) − RMSE(without) on identical strips, three-seed means, 2,000 resamples of whole sealed buoys (seed 0). Attitude helps when the upper endpoint is below zero. `score_sensing_papers.py --paper <yang runs> --control <no-attitude runs>`.
 - Classification runs from here on also save each view's probabilities (`view<k>_prob_<class>`), for the per-view-position report.
 
+**Choi's two controls (fixed 2026-11-19, before their runs).**
+
+- *Geometry and protocol matched.* Arm `choi-dinov3` puts the project's backbone (DINOv3 ConvNeXt-Tiny, `convnext_tiny.dinov3_lvd1689m`, pooled, ImageNet normalisation) in place of VGG16 inside Choi's pipeline and changes nothing else: the same lower halves at 224 × 224, brightness window, calm or rough strips, two-class head, loss, view averaging and recipe; seeds 0, 1 and 2. Two paired differences on identical strips, whole-buoy intervals as above: accuracy(DINOv3 in Choi's pipeline) − accuracy(VGG16) is the backbone alone (`--paper <choi-dinov3> --control <choi>`); accuracy(six-view DINOv3-gentle) − accuracy(DINOv3 in Choi's pipeline) is what the project's input and design add beyond the backbone (`--paper <choi-dinov3> --reference <gentle>`).
+- *Single view.* Each view position on its own: the accuracy of that view's probabilities alone (three-seed mean) for VGG16 and for DINOv3 in Choi's pipeline, on the strips where that view passes the brightness window, beside the averaged six-view accuracy (`--views`). VGG16's per-view probabilities come from reloading each seed's chosen epoch (`scripts/predict_sensing_papers.py`); the reload must reproduce the run's test classes on at least 99.9 % of strips.
+- Both are descriptive controls without a pass mark: they say where the +4.55 points come from.
+
+**Kim with its own training options (sensitivity, fixed 2026-11-19 before any Kim test score).** Kim's network starts from random weights, and the shared recipe's AdamW at 0.0001 may train it less than its authors did. The first seed's validation error stayed at the majority-class level for three epochs. A second Kim triplet therefore uses the paper's Table 3: Adam (0.9, 0.999), 8 epochs, mini-batches of 5 snapshots (here one strip, 5.8 usable views on average); the learning rate 0.001 and L2 penalty 0.0001 are MATLAB's defaults, since the paper states neither (`configs/experiments/sensing_paper_strips_kim_recipe.yaml`, tag `paper-kim-recipe`). It is scored like the primary Kim triplet. The primary row stays the shared recipe; the sensitivity is reported beside it, and the bar counts as met only if both lower endpoints are positive.
+
 ### GPU queue
 
 The sealed strip order is Choi VGG16, Kim snapshot, Yang and its no-attitude control. Each arm uses seeds 0, 1 and 2. Submit one seed at a time and fetch its predictions and settings before aggregating. The deployment runner expects the existing heights package locally for checksum comparison. Set `GPU_HOST` to the authorized SSH alias. Use a current shared-server utilization check to select the device. Torchvision will require the official VGG16 and ResNet18 ImageNet weights in the server torch cache or network access during initialization. Use the same cloned weights for the three seeds.
@@ -43,6 +51,14 @@ REF=$(echo ../Wave_Analysis/runs/buoy-station-20261118t1655-seed{0,1,2}-heights-
 python scripts/score_sensing_papers.py --paper runs/buoy-station-*-paper-kim --reference $REF
 python scripts/score_sensing_papers.py --paper runs/buoy-station-*-paper-yang --reference $REF
 python scripts/score_sensing_papers.py --paper runs/buoy-station-*-paper-yang --control runs/buoy-station-*-paper-yang-no-attitude
+# Choi's controls: per-view reload of each VGG16 seed, then the DINOv3 backbone in Choi's pipeline
+TRAIN_SCRIPT=scripts/predict_sensing_papers.py TAG=paper-choi-views deploy/dgx/run.sh train station --seed 0 --run /data/runs/<seed-0 choi run>
+TAG=paper-choi-dinov3 deploy/dgx/run.sh train station --arm choi-dinov3 --seed 0 --num-workers 8
+python scripts/score_sensing_papers.py --paper runs/buoy-station-*-paper-choi-dinov3 --control runs/buoy-station-*-paper-choi-views --views
+python scripts/score_sensing_papers.py --paper runs/buoy-station-*-paper-choi-dinov3 --reference $REF
+# Kim with its own training options
+CONFIG=configs/experiments/sensing_paper_strips_kim_recipe.yaml TAG=paper-kim-recipe deploy/dgx/run.sh train station --arm kim --seed 0 --num-workers 8
+python scripts/score_sensing_papers.py --paper runs/buoy-station-*-paper-kim-recipe --reference $REF
 ```
 
 Use the matching seed's existing sealed DINOv3-gentle station predictions for the comparison. Scores for a completed triplet use the common test-strip intersection across all seeds and models. `predictions.csv` contains probabilities for classification and metres for height. A qualitative check of predictions on the test split during training would compromise the comparison.

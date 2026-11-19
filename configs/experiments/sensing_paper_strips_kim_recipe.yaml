@@ -1,0 +1,12 @@
+# Kim 2023's own training options (Table 3) for the Kim sensitivity (fixed
+# 2026-11-19 before any Kim test score): Adam with decay factors 0.9 and 0.999,
+# 8 epochs, mini-batches of 5 snapshots (here one strip, 5.8 usable views on
+# average). The paper trained in MATLAB (Beale et al. 2020) and states no learning
+# rate or L2 penalty; MATLAB's defaults are 0.001 and 0.0001 (L2 added to the
+# loss, not decoupled), and its default gradient threshold is infinite (none).
+epochs: 8
+batch_size: 1
+optimizer: adam
+lr: 0.001
+weight_decay: 0.0001
+seeds: [0, 1, 2]
