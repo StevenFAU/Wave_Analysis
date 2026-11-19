@@ -268,6 +268,31 @@ distil the continued ViT-B into ConvNeXt-Tiny with DINOv3's public distillation 
 and re-check under the grouped cross-validation (with pretraining that leaves each
 fold's test buoys out). That step gets its own bar, fixed when it is reached.
 
+### Result: P1 not met (2026-11-19)
+
+Both arms average three seeds by mean log height over the same 6,183 test strips at the
+12 test buoys. The continued arm uses the step-7,500 weights.
+
+| Test RMSE | Off the shelf (B3) | Continued | Continued minus off the shelf, 95 % interval |
+|---|---|---|---|
+| H_s | 0.560 m | 0.550 m | −0.010 m [−0.027, +0.002] |
+| Wind-wave height | 0.257 m | 0.246 m | −0.012 m [−0.018, −0.006] |
+
+- **P1 is not met.** The wind-wave gain is clear, but the H_s interval reaches above
+  zero. H_s error fell at 8 of the 12 buoys (most at 42057, 0.41 → 0.32 m) and rose at
+  4 (at most +0.025 m, at 51003).
+- The continued arm's seeds vary twice as much as B3's. Their single-seed H_s RMSEs
+  are 0.631, 0.562 and 0.506 m (standard deviation 0.063 m, against B3's 0.033 m),
+  and the chosen epochs are 1, 4 and 9. The 0.010 m gain is well inside that spread,
+  so the follow-up (distilling into ConvNeXt-Tiny) is not triggered.
+- The ridge probe's 0.06 m gain at the validation buoys (0.642 → 0.582 m) shrank to
+  0.01 m at the test buoys with B3's trained frozen head. The gap to arm A (0.450 m)
+  closes from 0.110 to 0.100 m.
+- The papers' measures give the same verdicts as for the off-the-shelf arm. Against
+  Kamagata 2026, RMSE is 0.550 m against their 0.586 m. Choi 2020 calm/rough accuracy
+  is 96.7 % against 84 %. Kim 2023 average-height accuracy is 63.2 % against 78.3 %, so
+  still below it. The off-the-shelf arm scores 0.560 m, 96.6 % and 64.4 %.
+
 ## Code
 
 - `src/wave_analysis/pretraining/buoy_views.py`: the unlabelled views as a dataset
