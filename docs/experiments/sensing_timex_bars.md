@@ -29,6 +29,12 @@ than a still from the same ten minutes, in a year the model never saw?**
 - **Label:** the still's ADR 0010 label (`Hs_label_m`: the mean of the good CDIP records
   centred within 30 min of the still), the same number for all three images of a triple.
   The buoys are 6-29 km from the cameras: the label is the incident sea.
+- **Unreadable images (data-quality exclusion, made before any label was read):** 5 of
+  the 92,808 source images (all `brt`, truncated files on disk) do not decode fully; their
+  5 triples leave the package and are listed in its `skipped_images.csv` (path, size,
+  SHA-256, error). The build stops if more than 1 % fail. The package then holds **30,931
+  triples**: train 7,941, validation 1,031, test 10,942, later 11,017 (the 72-h embargo
+  takes the rest of the 31,069 counted).
 - **Images:** each resized to 256 px high (aspect kept), JPEG quality 90; Currituck's
   "Hampton Inn" caption blacked out first in all three (the box the video work uses,
   560 x 170 px in the lower left of the 2,688 x 1,520 frame). The package holds only these
