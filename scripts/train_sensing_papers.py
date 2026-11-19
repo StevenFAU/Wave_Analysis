@@ -183,9 +183,24 @@ def main():
     optimizer = {"adamw": torch.optim.AdamW, "adam": torch.optim.Adam}[
         cfg.get("optimizer", "adamw")
     ]
-    opt = optimizer(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+    # optional gentle schedule (the project's DINOv3 recipe): the head alone for
+    # lp_epochs, then the trunk (model[0]) at backbone_lr_scale times the rate
+    lp, scale = cfg.get("lp_epochs", 0), cfg.get("backbone_lr_scale", 1.0)
+    if lp or scale != 1.0:
+        if not a.arm.startswith("choi"):
+            p.error("the gentle schedule is defined for Choi's pipeline only")
+        trunk = model[0]
+        groups = [
+            {"params": list(trunk.parameters()), "lr": cfg["lr"] * scale},
+            {"params": list(model[1:].parameters())},
+        ]
+    else:
+        trunk, groups = None, model.parameters()
+    opt = optimizer(groups, lr=cfg["lr"], weight_decay=cfg["weight_decay"])
     best = np.inf
     for i in range(cfg["epochs"]):
+        if trunk is not None:
+            trunk.requires_grad_(i >= lp)  # a frozen trunk has no gradient: AdamW skips it
         epoch(model, loaders["train"], a.arm, "cuda", a.amp, opt)
         pred, _ = epoch(model, loaders["val"], a.arm, "cuda", a.amp)
         y = parts["val"].target

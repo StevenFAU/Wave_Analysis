@@ -1,0 +1,12 @@
+# The shared paper recipe with the project's gentle schedule for a pretrained
+# DINOv3 trunk (`train_wave_heights.py --lp-epochs 2 --backbone-lr-scale 0.1`):
+# the head alone for 2 epochs, then the trunk at 0.1 x the learning rate. Used
+# for the DINOv3 backbone in Choi's pipeline after the shared recipe collapsed it
+# to one class (fixed 2026-11-19 before these runs).
+epochs: 10
+batch_size: 8
+lr: 0.0001
+weight_decay: 0.01
+lp_epochs: 2
+backbone_lr_scale: 0.1
+seeds: [0, 1, 2]
