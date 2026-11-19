@@ -104,6 +104,8 @@ def station_labels(raw, station, strips, depth):
                 }
             )
             row.update({col: e[mask].sum() for col, mask in zip(BANDS, bands, strict=True)})
+            # Each of the 46 bins' energy (m^2, window mean): the visibility curve of test 5.
+            row.update({f"bin_{k:02d}_m2": e[k] for k in range(len(CENTERS))})
             total = ew[sl].sum()
             measured = ew_good[sl].sum()
             coverage = measured / total if total else np.nan
@@ -209,6 +211,8 @@ def main():
                     "station_subset": args.station,
                     "depths_file": str(args.depths) if args.depths else None,
                     "edge_hz": EDGES.tolist(),
+                    "bin_centers_hz": CENTERS.round(4).tolist(),
+                    "bin_widths_hz": WIDTHS.tolist(),
                     "coverage_min": 0.95,
                     "window_min": 30,
                     "join_min": 15,

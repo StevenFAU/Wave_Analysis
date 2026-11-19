@@ -303,3 +303,14 @@ def test_probe_geometry_removes_camera_mounting(scripts, tmp_path):
     # Raw roll carries the 0-25 degree mounting tilts; de-mounted roll is the 1-degree motion.
     assert geo.roll.median() > 10
     assert 0.5 < geo.roll_dm.median() < 1.5
+
+
+def test_visibility_ridge_matches_the_probe_ridge(scripts):
+    probe = scripts("measurement_buoy_probe")
+    vis = scripts("measurement_visibility")
+    rng = np.random.default_rng(0)
+    x, xt = rng.normal(size=(200, 6)), rng.normal(size=(20, 6))
+    y = x @ rng.normal(size=(6, 3)) + rng.normal(size=(200, 3))
+    multi = vis.ridge_multi(x, y, xt)
+    for j in range(3):
+        np.testing.assert_allclose(multi[:, j], probe.ridge(x, y[:, j], xt), rtol=1e-8)

@@ -122,7 +122,10 @@ def test_invalid_dictionary_is_rejected(edit, message):
 def test_crosswalk_shorthand(dd):
     row = next(r for r in dd.crosswalk.rows if r.quantity == "Wind")
     assert row.cells["ndbc"].vars == ["WDIR", "WSPD", "GST"]
-    assert row.cells["era5"].vars == [] and row.cells["era5"].note == "not held"
+    assert row.cells["era5"].vars == ["u10", "v10", "i10fg"]
+    assert row.cells["era5"].note == "10 m; at the camera buoys only"
+    spectrum = next(r for r in dd.crosswalk.rows if r.quantity == "Spectrum S(f)")
+    assert spectrum.cells["era5"].vars == [] and spectrum.cells["era5"].note == "not held"
 
 
 def test_catalog_carries_the_dictionary_with_doc_urls():

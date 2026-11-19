@@ -566,11 +566,33 @@ collections:
         unit: "° true"
         role: model
         canonical: swell_from_direction
+      - name: u10
+        meaning: >-
+          Eastward wind 10 m above the surface. Atmospheric field on the native
+          0.25° grid, held only in a box over the camera buoys
+          (`data/raw/era5/buoys_wind*/`, `scripts/buoycam_era5_wind.py`).
+        unit: m/s
+        role: model
+      - name: v10
+        meaning: Northward wind 10 m above the surface (as `u10`).
+        unit: m/s
+        role: model
+      - name: i10fg
+        meaning: >-
+          Instantaneous 10-m wind gust: the largest gust of the hour before each
+          stamp, from ERA5's post-processing (as `u10`).
+        unit: m/s
+        role: model
     notes:
       - >-
         ERA5's swell and wind-sea split is by wind forcing, not NDBC's
         separation frequency, so ERA5 `shts` and NDBC `SwH` are different
         estimators of "swell height".
+      - >-
+        The wind (`u10`, `v10`, `i10fg`, added 2026-11-19 as the no-camera
+        baseline of the virtual anemometer) is 10 m above the sea; NDBC
+        anemometers sit about 4-5 m up and are not adjusted, so comparisons
+        correct ERA5 by a line fitted on training strips.
 
   - id: wis
     group: model
@@ -937,4 +959,4 @@ crosswalk:
     - quantity: Sea surface temperature
       cells: {ndbc: WTMP, cdip: sstSeaSurfaceTemperature}
     - quantity: Wind
-      cells: {ndbc: [WDIR, WSPD, GST], era5: {note: not held}, wis: [windDirection, windSpeed]}
+      cells: {ndbc: [WDIR, WSPD, GST], era5: {vars: [u10, v10, i10fg], note: "10 m; at the camera buoys only"}, wis: [windDirection, windSpeed]}

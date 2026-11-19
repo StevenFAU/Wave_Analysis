@@ -270,6 +270,71 @@ draws; `scripts/measurement_review.py finetune --config-name <candidate>`). Repo
 beside: against wind + geometry, the camera alone against the frozen camera alone, the
 epoch each fold chose, and whether any fold still diverged.
 
+**M-S3 pilot (2026-11-19, fold 1, validation buoys only).** Both candidates stayed stable
+through unfreezing (training loss 0.01-0.05 throughout, against M-S2's 0.42). A: best
+validation slope 0.741 % at epoch 6, below its heads-only best (0.757 %). B: best
+0.726 % at epoch 5, below its heads-only 0.751 %. Both qualify; **B
+(`buoy_slope_v2lr`) runs on the five folds.** Its fold-1 pilot is that recipe's fold-1
+run (same config, seed and data; its test lines unread), so folds 0, 2, 3 and 4 follow.
+
+## Bar T5: the visibility curve and the virtual anemometer (fixed 2026-11-19, before any T5 run)
+
+Test 5 of the wave-sensing report (`reports/Wave sensing landscape and multimodal
+options.md`, ranked list): does the camera's skill stop at the sea-swell separation, and
+can it read the buoy's wind at buoys it never saw? Checked against the report's table:
+targets, comparators and pass marks as there, with one change: the buoy's own wind is
+an input of the wind-conditioned band arm, never of the wind arm.
+
+**Inputs.** Frozen DINOv3-gentle features (the view mixer's pooled 256 numbers), from
+the seed-0, 1 and 2 checkpoints of each fold (15 runs of
+`measurement_buoy_probe.py --save-features`), the same five grouped folds. Every target
+gets its own ridge (penalty 10, standardised inputs), fitted on the fold's training
+strips; the three seeds' predictions are averaged. Intervals: bootstrap over the 43
+station groups, 2,000 draws. Scored by `scripts/measurement_visibility.py`.
+
+**Targets.** (1) The energy in each of NDBC's 46 bins (0.0325-0.485 Hz) and in the
+four fixed bands, as an equivalent height 4 sqrt(E) in metres (energy spans decades;
+the equivalent height is in metres and adds as energy does). `measurement_labels.py`
+now also writes each bin's window-mean energy (`bin_00_m2` .. `bin_45_m2`); rebuilt on
+2026-11-19, the bins sum to the bands to 1e-15 and every other column equals the
+package's. The 50 dropout spectra are left out. (2) The buoy's wind speed and gust, in
+m/s, as its anemometer reports them (about 4-5 m above the sea on most hulls).
+
+**Arms.** Bands and bins: the camera alone; the buoy's wind ("wind-conditioned": speed,
+gust, their squares and product); camera + wind; the training mean. Wind and gust: the
+camera alone against **ERA5's 10-m wind** (for gust, its instantaneous 10-m gust) at
+the buoy's nearest 0.25° grid point, interpolated to the strip and corrected by a line
+fitted on the fold's training strips (the line absorbs the anemometer's height).
+Downloaded by `scripts/buoycam_era5_wind.py` (ledger `data/manifests/raw/era5.csv`).
+
+**T5-V, the visibility curve: a result whichever way it falls.** R² per bin and band
+at unseen buoys, with its interval. Read-outs fixed now: the camera **sees** a bin when
+its camera-alone R² interval lies above zero; it **adds to wind** at a bin when the R²
+of camera + wind minus that of wind has its interval above zero. The **visibility
+edge** is the lowest frequency from which every higher bin passes "adds to wind". The
+report's hypothesis (camera skill confined above the sea-swell separation) holds if the
+edge lies at or above 0.135 Hz, the lower quartile of NDBC's separation frequency on
+these strips (median 0.173 Hz); it fails if any bin below 0.10 Hz (swell longer than
+10 s) adds to wind.
+
+**T5-W, the virtual anemometer: the bar.** Met when the camera alone lowers the RMSE
+of the buoy's wind speed against line-corrected ERA5, with the 95 % interval of the
+difference below zero. Beside it: the same for gust; camera + ERA5 against ERA5, and
+the same with the camera's features permuted within buoy and ERA5-wind decile on the
+test strips (a camera share that survives the permutation is about the buoy, not the
+strip); the seed spread.
+
+**Wind-wave height (no worse than 0.260 m).** Frozen probes leave the checkpoints and
+their wind-wave output untouched, so this binds only a fine-tune.
+
+**Fine-tune, only if a probe shows skill** (T5-W met, or bins that add to wind), with
+the recipe that trains the backbone: M-S3's choice (`buoy_slope_v2lr`: the backbone's
+learning rate re-warms over one epoch at unfreezing, gradient norm clipped to 1.0,
+lr 1e-4). M-S2 showed every fold keeping a heads-only epoch under the old recipe; on
+fold 1 this one chose epoch 5, after unfreezing. Its heads sit beside a wind-wave head,
+its out-of-fold wind-wave RMSE must stay at or below 0.260 m, and its bar is fixed here
+before it runs.
+
 ## Review of the prepared experiments (2026-11-19)
 
 Codex's diff against `8f225d5c8` (26 files, about 3,400 lines) was read before any run.

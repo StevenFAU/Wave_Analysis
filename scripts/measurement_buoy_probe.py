@@ -221,6 +221,11 @@ def main():
     )
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--workers", type=int, default=0, help="image-decoding processes")
+    ap.add_argument(
+        "--save-features",
+        action="store_true",
+        help="also write the frozen features of every strip (float16) for CPU-side probes",
+    )
     ap.add_argument("--device", default="cpu")
     ap.add_argument(
         "--smoke", action="store_true", help="up to 12 rows per partition; plumbing only"
@@ -330,6 +335,11 @@ def main():
         dest = Path(temp) / "probe"
         dest.mkdir()
         results.to_parquet(dest / "predictions.parquet", index=False)
+        if args.save_features and args.checkpoint_run:
+            np.save(dest / "features.npy", features["image"].astype(np.float16))
+            table[["sample_id", split]].rename(columns={split: "role"}).to_csv(
+                dest / "feature_rows.csv", index=False
+            )
         (dest / "run.json").write_text(
             json.dumps(
                 {
@@ -341,6 +351,7 @@ def main():
                         (args.package / "labels.csv").read_bytes()
                     ).hexdigest(),
                     "smoke": args.smoke,
+                    "saved_features": bool(args.save_features and args.checkpoint_run),
                     "water_only": args.water_only,
                     "prior_bands": str(args.prior_bands) if args.prior_bands else None,
                     "prior_sha256": hashlib.sha256(args.prior_bands.read_bytes()).hexdigest()
