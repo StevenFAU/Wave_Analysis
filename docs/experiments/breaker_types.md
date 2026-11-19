@@ -244,3 +244,93 @@ detector must first find the event. And within a site the label is mostly the da
 
 Not done: a video encoder (V-JEPA 2 is cached on the server), a spatial temporal head,
 and a fine-tuned encoder. Each needs a bar of its own.
+
+## Bar Y-B3: does a frozen video encoder use the breaking motion? (fixed 2026-11-19, before any run)
+
+Y-B2 left open whether motion helps once the encoder itself sees it: DINOv3 looks at one
+frame at a time, so its features hold no motion and only the head could have used the
+frames' order. **V-JEPA 2** encodes 64 frames at once, in space-time patches, and was
+trained to predict masked parts of videos, so its tokens can carry motion. Y-B3 asks
+whether they do, at unseen beaches, by feeding the same encoder the same clip in order and
+with its frames shuffled. Branch `claude/yin-breakers-vjepa`.
+
+**Features (`scripts/breaker_features.py --encoders vjepa2`).** Each Set A clip is decoded
+once (all 150 frames at 5 fps, as in Y-B1). Three versions of the clip are built from the
+decoded frames:
+
+- `video`: the 150 frames in order;
+- `shuffled`: the same 150 frames in a fixed random order (one permutation per clip,
+  seeded by its file name): the same pixels, no coherent motion;
+- `still`: in each window below, the window's middle frame repeated 64 times: no motion at
+  all, and the appearance of three frames only.
+
+Each version goes through frozen **V-JEPA 2 ViT-L** (`facebook/vjepa2-vitl-fpc64-256`,
+24 blocks, 1,024 numbers per token, from the server's Hugging Face cache) in **three
+windows of 64 frames** (12.8 s each, the model's clip length) starting at frames 0, 42 and
+86, which together cover all 150 frames. Frames are resized from 224 to 256 pixels (the
+model's input size; the whole crop is kept) and normalised with ImageNet's mean and
+standard deviation, as V-JEPA 2's own preprocessing does. The model cuts each window into
+tubelets of 2 frames x 16 x 16 pixels, so it returns 32 x 16 x 16 tokens per window. The
+cache keeps the encoder's output (`last_hidden_state`, after its final norm: the tokens
+V-JEPA 2's own frozen classifiers read), **averaged over the 16 x 16 spatial positions**:
+one token per tubelet, that is per 0.4 s. The three windows overlap, so each of the clip's
+75 tubelets is taken from the window whose centre is nearest (ties to the earlier window):
+tubelets 1-27 from the first window, 28-48 from the second, 49-75 from the third. Each
+clip and version is then a sequence of 75 tokens of 1,024 numbers that covers its 30 s
+once (about 1.4 GB per version for the 9,000 clips).
+
+**Arms.** Every V-JEPA 2 arm uses Y-B1's head and training loop unchanged (standardised
+features, Linear 256, three residual temporal convolutions, mean and max over time,
+Linear 3; AdamW, weight decay 0.05, learning rate 0.001, batch 50, at most 50 epochs, the
+same early stopping and epoch choice; seeds 0, 1 and 2; the six official folds). On tokens
+0.4 s apart, kernel 5 spans 2 s, and the three layers see 29 tokens (11.6 s).
+
+| Arm | Frames into the encoder | Head |
+|---|---|---|
+| `vjepa2_video` (**candidate**) | the clip in order | temporal (kernel 5) |
+| `vjepa2_shuffled` (**comparator**) | the same frames, shuffled | temporal (kernel 5) |
+| `vjepa2_still` | each window's middle frame, repeated | temporal (kernel 5) |
+| `vjepa2_video_orderfree` | the clip in order | order-free (kernel 1) |
+| `vjepa2_shuffled_orderfree` | the same frames, shuffled | order-free (kernel 1) |
+
+With the order-free head the order of the 75 tokens cannot be used, so any gap between the
+two order-free arms comes from inside the encoder's windows.
+
+**Metric and interval.** As for Y-B1 and Y-B2: pooled out-of-site macro-F1 over present
+classes (each clip predicted by the model of the fold that held its site out; F1 of each
+breaker type averaged over the types present), the mean over seeds 0-2, and the 95 %
+interval of a difference from the paired bootstrap over site-days stratified by site
+(2,000 draws, seed 0). The Y-B1 run's predictions (`video-breakers-20261119t2254-heads-v1`,
+unchanged) are scored on the same draws, so every V-JEPA 2 arm is also compared with
+DINOv3 and with Yin et al.'s CRNN.
+
+**Bar Y-B3 (motion in a video encoder).** `vjepa2_video` must raise the pooled
+out-of-site macro-F1 over `vjepa2_shuffled`, with the 95 % interval of the difference
+(in order minus shuffled) above zero.
+
+Reported beside, not part of the bar: the equal-site difference and each seed's
+difference; `vjepa2_video` against `vjepa2_still`; `vjepa2_video_orderfree` against
+`vjepa2_shuffled_orderfree`; `vjepa2_video` against Y-B1's `dinov3_temporal` (0.840
+pooled), `dinov3_orderfree` (0.850) and `yin_crnn_b2hz` (0.653); per-site macro-F1 and
+the site-by-class confusion of each arm.
+
+**How it will be read, fixed in advance.** Shuffling keeps every pixel but makes each
+window an abrupt flicker that V-JEPA 2 never saw in training, so it can lower the score
+for that reason alone. The still version has no such flicker but shows only three frames.
+So: if Y-B3 is met **and** `vjepa2_video` also beats `vjepa2_still`, the encoder uses the
+clip's motion. If Y-B3 is met but `vjepa2_still` scores about as well as `vjepa2_video`,
+the shuffled arm's loss is more likely damage from scrambled input than lost motion. If
+Y-B3 is not met, these frozen, spatially averaged V-JEPA 2 tokens do not use the motion at
+unseen beaches; that still does not show that motion carries no information (an attentive
+probe over all tokens, V-JEPA 2's usual read-out, keeps where things move, and fine-tuning
+could do more).
+
+**Expected in advance.** A small gain of order over shuffle (V-JEPA 2's frozen tokens are
+known to carry motion, Something-Something v2) but no large one, because Y-B2 found the
+order unneeded at these crops and averaging over the crop blurs where the lip overturns.
+V-JEPA 2 is weaker than DINOv3 at still-image recognition, so `vjepa2_video` may well
+score below DINOv3's 0.84.
+
+**Runs.** A 24-clip smoke test of the feature pass first (not scored), then the feature
+pass over the 9,000 clips and the heads, each one container on one GPU with at least 40 GB
+free, launched inside the project's shared launch lock.
