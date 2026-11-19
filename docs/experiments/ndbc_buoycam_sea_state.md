@@ -965,6 +965,43 @@ against the mean training shape; and the heights.
 direction at these buoys and the camera has no compass but the sun. The camera's best
 chance is the wind sea: its own period and the shape, which are reported beside the bar.
 
+**Result (2026-11-19): P1-P3 not met, as expected; the camera beats ERA5 on the wind
+sea's period, and the joint model harms H_s.** DINOv3-gentle, five folds x three seeds
+(15 runs at `8f225d5`, `runs/buoycam-cv-spectral-20261119`). Periods are scored by RMSE
+in seconds; directions by the mean absolute angle between predicted and true direction,
+in degrees (a random guess gives 90°).
+
+| Out of fold, 79 buoys | Camera | ERA5 | Camera minus ERA5 |
+|---|---|---|---|
+| **P1** peak period T_p (`pp1d`) | 3.44 s | 1.70 s | +1.75 [+1.41, +2.07] |
+| **P2** energy period Tm-1,0 (`mwp`) | 2.40 s | 0.67 s | +1.73 [+1.49, +1.97] |
+| **P3** mean direction (`mwd`) | 75.8° | 13.8° | +62.0 [+58.5, +65.6] |
+| APD (`mp2`) | 1.50 s | 0.58 s | +0.93 [+0.79, +1.06] |
+| Swell peak period SwP (`mpts`, 77 buoys) | 2.92 s | 1.88 s | +1.04 [+0.85, +1.26] |
+| **Wind-wave peak period WWP** (`mpww`, 77 buoys) | **0.69 s** | 0.93 s | **−0.24 [−0.27, −0.21]** |
+| **Wind-sea Tm-1,0** (`mpww`, 77 buoys) | **0.55 s** | 0.75 s | **−0.21 [−0.24, −0.17]** |
+| Wind-sea Tm-1,0 from the predicted shape | 0.54 s | 0.75 s | −0.21 [−0.24, −0.17] |
+
+- **Bar S3: not met** on all three lines, as expected in advance. Swell sets the total
+  period and direction at these buoys, and the camera reads swell poorly.
+- **The wind sea's period: the camera beats ERA5** by about a quarter (WWP −0.24 s,
+  wind-sea Tm-1,0 −0.21 s, both intervals below zero), the same pattern as the heights.
+  It was reported beside the bar, not tested by it, so it counts as found, not
+  confirmed.
+- **Shape:** the predicted wind-sea spectrum is far closer to the buoy's than the mean
+  training shape is. The Hellinger distance (0 for identical spectra, 1 for no overlap)
+  is 0.30 against 0.48; the KL divergence is 0.33 against 0.78. The period computed
+  from the shape matches the direct output (0.54 s).
+- **Direction:** 76° from the true direction. A random guess gives 90°, and one fixed
+  direction from the training strips gives 104-111° (compass or sun-relative; not part
+  of the bar). So the sun gives the camera a little, nothing usable. It is worse with the
+  sun at most 10° high (83°) than above (74°). ERA5 is within 14°.
+- **H_s is harmed:** the joint model's H_s RMSE is 0.618 m, against stage 1's 0.532 m on
+  the same strips (+0.086 m [+0.068, +0.110]); wind-wave +0.020 m [+0.013, +0.026].
+  Nine scalar targets, the shape and the direction share one network with the heights.
+  Heights stay with stage 1's model; periods would need their own head on it, or a model
+  of their own.
+
 ## The camera as a motion sensor: the horizon follows the buoy's slope (2026-11-18)
 
 Exploratory, nothing trained (`scripts/buoycam_horizon.py`, questions fixed in its
@@ -1041,6 +1078,8 @@ without it).
       swap lowers ERA5 + wind's H_s RMSE from 0.288 to 0.267 m (−0.021 m [−0.031, −0.012])
       and its wind-wave RMSE from 0.293 to 0.240 m.
 - [ ] Stage 2 confirmation on strips archived after the package, from about 2026-11-26.
-- [ ] Stage 3, periods, spectrum and direction (2026-11-18): the caption carries no
-      heading (a fixed "90°"); labels from each buoy's spectra; bar S3 fixed before any run.
+- [x] Stage 3, periods, spectrum and direction (2026-11-19): bar S3 not met (ERA5 wins
+      peak period, energy period and direction). The camera beats ERA5 on the wind sea's
+      period (0.55 against 0.75 s) and harms H_s when trained jointly (+0.086 m). The
+      caption carries no heading (a fixed "90°").
 - [ ] Relabel from NDBC's quality-controlled annual files when they appear.

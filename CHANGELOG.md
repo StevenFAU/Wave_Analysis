@@ -208,6 +208,10 @@ separately (`docs/REPRODUCIBILITY.md`).
   fixed "90°") from each buoy's own spectral records.
   `wave_analysis.models.wave_spectral` and `scripts/train_wave_spectral.py` train
   these outputs.
+- **Bar S3 not met**, as expected: ERA5 wins peak period (1.70 against 3.44 s), energy period
+  (0.67 against 2.40 s) and mean direction (14° against 76°). The camera beats ERA5 on the wind
+  sea's period (Tm-1,0 0.55 against 0.75 s, −0.21 s [−0.24, −0.17]); trained jointly, the
+  extra outputs raise H_s RMSE by 0.086 m, so heights stay with stage 1's model.
 - `deploy/dgx/run.sh`: split names may contain digits (`fold0`).
 
 ### Fixed (2026-11-14)
