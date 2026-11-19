@@ -1,4 +1,9 @@
-"""Site-held-out breaker classification and day-held-out lidar-target regression."""
+"""Day-held-out lidar-target regression (Duck) and the superseded Yin breaker task.
+
+The ``yin`` task here was rejected in review (it re-decodes every clip every epoch and
+samples one frame per 1.9 s); breaker types are run by ``scripts/breaker_features.py`` and
+``scripts/train_breaker_heads.py`` (``docs/experiments/breaker_types.md``).
+"""
 
 import argparse
 import json

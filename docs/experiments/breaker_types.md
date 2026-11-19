@@ -159,3 +159,88 @@ waves drive both the label and ξ₀.
 `deploy/dgx/breakers.sh` (fetch, push, decoder, features, heads, results) on the lab GPU
 server, one container at a time on one GPU, each launch inside the project's shared launch
 lock. A feature smoke test on 24 clips comes first and is not scored.
+
+## Result (2026-11-19): Y-B1 met, Y-B2 not met
+
+Three runs on the lab server, all on commit `0cedfefee`: the feature pass over the 9,000
+clips (`video-breakers-20261119t2216-features-v1`, 11 minutes, one GPU), the heads
+(`video-breakers-20261119t2254-heads-v1`, 30 minutes for 72 neural fits, both physics arms
+and the score) and a 24-clip smoke test before them, which was not scored. 8,998 clips
+decoded to 150 frames at 5 fps. Two Huangcuo clips have 148 frames (4.93 fps), and their
+last frame is repeated twice. Those are the same two clips whose Set B folders hold a 61st
+frame. Every clip is scored once per arm and seed, by the model of the fold that held its
+site out (393 site-days).
+
+| Arm | Pooled macro-F1 | Equal-site macro-F1 | Accuracy |
+|---|---|---|---|
+| DINOv3, order-free head | **0.850** | 0.828 | 0.849 |
+| DINOv3, temporal head (candidate) | 0.840 | 0.818 | 0.840 |
+| Yin et al.'s CRNN, 5 fps | 0.658 | 0.554 | 0.657 |
+| Yin et al.'s CRNN, their 2 Hz frames (comparator) | 0.653 | 0.564 | 0.651 |
+| Battjes' thresholds on ERA5 ξ₀ | 0.344 | 0.248 | 0.432 |
+| Logistic regression on ERA5 waves, wind and slope | 0.337 | 0.268 | 0.339 |
+
+Chance is about 0.33: three balanced classes guessed at random. Each neural row is the
+mean of seeds 0-2.
+
+- **Bar Y-B1 is met:** DINOv3 temporal minus Yin et al.'s CRNN is **+0.187 [+0.162,
+  +0.214]** (95 % interval over site-days). Equal-site: +0.254 [+0.198, +0.285]. It holds at
+  every seed (+0.16 to +0.20) and every site.
+- **Bar Y-B2 is not met:** temporal minus order-free is **−0.010 [−0.018, −0.002]**, so the
+  head that cannot see frame order is slightly *better*. Each seed agrees (−0.003 to
+  −0.014). Equal-site: −0.009 [−0.027, +0.004].
+- **The frame rate does not help Yin et al.'s model either:** their CRNN at 5 fps minus at
+  their 2 Hz is +0.005 [−0.006, +0.015].
+- **Their protocol, re-run as a check:** under a random 5-fold split our CRNN reaches 94.0 %
+  accuracy, against the 96.1 % they report, so the re-implementation is close. DINOv3
+  reaches 97.8 %. Holding the site out takes Yin et al.'s model from 94 % to 65 % and
+  DINOv3's from 98 % to 84 %.
+- **Offshore physics is at chance at a new beach.** Both ERA5 arms score about 0.34.
+  Battjes' thresholds never predict surging (no clip has ξ₀ above 3.3), and the fitted
+  regression does not transfer between beaches. The camera beats it by +0.50 [+0.44, +0.57].
+- Validation accuracy (training sites, sharing days with training) was 0.90 for both DINOv3
+  heads and 0.86 for the CRNN, against 0.84 and 0.65 at the held-out site.
+
+Per site (macro-F1 over the types present there, mean of the seeds):
+
+| Site | DINOv3 temporal | DINOv3 order-free | Yin CRNN 2 Hz | ERA5 regression |
+|---|---|---|---|---|
+| A, Outer Banks | 0.82 | 0.82 | 0.67 | 0.22 |
+| B, Oak Island | 0.74 | 0.76 | 0.61 | 0.30 |
+| C, Port Aransas (588 spilling, 43 plunging, 11 surging) | 0.71 | 0.73 | 0.24 | 0.04 |
+| D, Point Reyes (6 spilling, 460 surging) | 0.90 | 0.90 | 0.45 | 0.19 |
+| E, Huangcuo | 0.85 | 0.84 | 0.65 | 0.46 |
+| F, Xisha Bay | 0.90 | 0.91 | 0.74 | 0.39 |
+
+Site-by-class recall of the candidate (share of each true type it labels correctly):
+
+| Site | Spilling | Plunging | Surging |
+|---|---|---|---|
+| A | 0.91 | 0.74 | 0.82 |
+| B | 0.95 | 0.73 | 0.62 |
+| C | 0.95 | 0.76 | 0.48 (11 clips) |
+| D | 0.94 (6 clips) | none | 0.94 |
+| E | 0.78 | 0.91 | 0.82 |
+| F | 0.84 | 0.88 | 0.97 |
+
+Pooled over all sites, most errors are between plunging and surging: per seed, about 430
+surging clips are called plunging and 350 plunging clips are called surging. Spilling is
+rarely confused with surging (about 30 and 90 clips). Yin et al.'s CRNN fails most at the
+two beaches unlike any training site. At dissipative Port Aransas it calls most spilling
+clips plunging or surging (spilling recall 0.27); at reflective Point Reyes it finds only
+54 % of the surging clips.
+
+**What it means.** At a beach it was never trained on, a frozen DINOv3 encoder classifies
+breaker type at macro-F1 0.84, against 0.65 for the published CRNN re-run the same way.
+The gain comes from the encoder, not from motion: neither the frames' order (Y-B2) nor
+the frame rate (2 Hz against 5 fps, for the CRNN) improves the score. What the frames show
+(foam, the wave face, run-up) is enough at these crops. This does not show that motion
+carries no information. The per-frame features are global summaries (class token and mean
+patch), which may not keep the movement of an overturning lip, and a video encoder or a
+spatial temporal head could still use it. Two limits apply to every number here. The clips
+are curated crops around a visible event with unanimous labels, so on continuous video a
+detector must first find the event. And within a site the label is mostly the day, so the
+357 single-type site-days carry most of the evidence.
+
+Not done: a video encoder (V-JEPA 2 is cached on the server), a spatial temporal head,
+and a fine-tuned encoder. Each needs a bar of its own.

@@ -7,6 +7,21 @@ separately (`docs/REPRODUCIBILITY.md`).
 
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
+### Added (2026-11-19, breaker type at unseen beaches)
+- Breaker-type classification on Yin et al.'s VWBT_9000 (9,000 clips, six beaches) on the
+  official leave-one-site-out split, with bars Y-B1 and Y-B2 fixed before any run
+  (`docs/experiments/breaker_types.md`). It replaces the rejected breaker trainer: each clip
+  is decoded once into frozen ResNet-18 and DINOv3 features at the clips' full 5 fps
+  (`scripts/breaker_features.py`), and the heads train on that cache
+  (`scripts/train_breaker_heads.py`, `deploy/dgx/breakers.sh`). Yin et al. publish only a
+  random 5-fold accuracy, so the comparator is their own CRNN re-run (94.0 % under their
+  protocol, against their 96.1 %).
+- **Bar Y-B1 met:** frozen DINOv3 frames reach pooled macro-F1 0.840 at the held-out beach,
+  against 0.653 for Yin et al.'s CRNN, +0.187 [+0.162, +0.214], at every site and seed.
+- **Bar Y-B2 not met:** the temporal head is no better than the same features with frame
+  order removed (−0.010 [−0.018, −0.002]); 5 fps does not help the CRNN either. Offshore
+  ERA5 waves and beach slope are at chance (0.34).
+
 ### Added (2026-11-19, wave measurements beyond height)
 - Review of Codex's prepared measurement experiments and bars M-S1 and M-S2, fixed before
   their runs, in `docs/experiments/wave_measurements.md`. Fixed before any run: the slope
