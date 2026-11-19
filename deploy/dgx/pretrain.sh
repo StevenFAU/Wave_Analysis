@@ -15,7 +15,10 @@
 #   deploy/dgx/pretrain.sh status | logs <run> [-f] | stop <run> | fetch <run>
 #
 # GPU=<index> is required (the server is shared; check run.sh check first). CPUS sets
-# the container's CPUs (default 32; DINOv3's ten crops per view are made on the CPU).
+# the container's CPUs (default 32; DINOv3's ten crops per view are made on the CPU),
+# MEM the pretraining container's memory limit (default 160g; the first full run was
+# killed at it after 10,120 steps, so the restart has more and glibc's malloc arenas
+# capped, a usual cause of data-loader workers that grow).
 # The image is the full python:3.12.16 (not run.sh's slim one): torch.compile's Triton
 # kernels need a C compiler, and the Python is the same, so the uv.lock environment
 # built by run.sh setup runs in it. Only this project's containers (label
@@ -32,6 +35,7 @@ PKG="${PKG:-ndbc_buoycam_sea_state_v0}"          # pretraining images (labels ar
 PROBE_PKG="${PROBE_PKG:-ndbc_buoycam_heights_v2}" # the same images with height labels, for the probe
 PROBE_CONFIG=configs/experiments/ndbc_buoycam_heights_v2.yaml
 CPUS="${CPUS:-32}"
+MEM="${MEM:-160g}"
 COMMIT="$(git rev-parse HEAD)"
 LOCK="$(sha256sum uv.lock | cut -c1-12)"
 EXTRA_ID="$(sha256sum deploy/dgx/dinov3-requirements.txt | cut -c1-12)"
@@ -95,6 +99,7 @@ start)
     need_code
     need_gpu
     [[ "$extra" =~ ^[A-Za-z0-9\ ._=/:-]*$ ]] || { echo "overrides may hold only letters, digits, spaces and ._=/:-" >&2; exit 1; }
+    [[ "$MEM" =~ ^[0-9]+g$ ]] || { echo "MEM is a size in GB, e.g. 160g" >&2; exit 1; }
     case "$mode" in
     smoke)
         # Both stages, the unfreezing and two teacher checkpoints in about 700 steps.
@@ -112,9 +117,9 @@ schedules.lr.backbone_warmup_after_freeze=50 evaluation.eval_period_iterations=3
     r bash -s <<EOF
 set -e
 docker run -d --rm --name wave-$run --label app=wave-analysis --label run=$run \
-    --gpus device=$GPU --cpus $CPUS --memory 160g --shm-size 64g \
+    --gpus device=$GPU --cpus $CPUS --memory $MEM --shm-size 64g \
     --mount type=tmpfs,destination=/scratch,tmpfs-size=12g \
-    $(common) -e RUN=$run -e MODE=pretrain -e PKG=$PKG -e CONFIG=$CONFIG -e INIT=$INIT \
+    $(common) -e MALLOC_ARENA_MAX=2 -e RUN=$run -e MODE=pretrain -e PKG=$PKG -e CONFIG=$CONFIG -e INIT=$INIT \
     -e NUM_WORKERS=$((CPUS - 4)) -e "EXTRA_ARGS=$extra" \
     $IMAGE bash -c 'bash /data/repo/$COMMIT/deploy/container/pretrain.sh >>/data/logs/$run.log 2>&1; s=\$?;
         echo "finished with exit code \$s at \$(date -u +%FT%TZ)" >>/data/logs/$run.log; exit \$s' >/dev/null

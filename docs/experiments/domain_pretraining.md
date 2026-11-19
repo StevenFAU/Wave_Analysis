@@ -155,6 +155,17 @@ config above unchanged.
 
   The feature spread rose rather than fell, so there is no collapse. The probe shared
   the GPU with the training run and took 41 minutes, against 12 alone.
+- **Killed at step 10,120 and resumed (2026-11-19, written before the restart).** At
+  02:28 UTC the training process got SIGKILL: the container reached its 160 GB memory
+  limit while the server still had over 1 TB free. Nothing in the run diverged; its
+  last full checkpoint is step 10,000 (saved 2 minutes earlier). It is restarted under
+  the same name and resumes there: weights, optimiser, step and schedules (the backbone
+  stays unfrozen; the freeze is set by the step number). Two changes, both outside the
+  recipe: the container gets 256 GB, and glibc's malloc arenas are capped at two
+  (`MALLOC_ARENA_MAX=2`), a usual cause of data-loader workers that grow. Its memory is
+  logged every 5 minutes. The resumed loader shuffles with a new seed (DINOv3 seeds it
+  with the start step), so the order of views after step 10,000 differs from an
+  unbroken run's. The recipe and the data are unchanged.
 
 ## Choosing the checkpoint (validation buoys only)
 
