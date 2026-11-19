@@ -14,6 +14,15 @@ Use training splits for fitting and validation only for epoch selection. Use thr
 
 **First sealed run settings.** Use ten AdamW epochs, learning rate 0.0001, weight decay 0.01, eight strips per batch and validation accuracy (classification) or validation RMSE (height) to select one epoch. VGG16 uses ImageNet initialization and global average pooling. Kim uses the published convolution widths and grayscale, with the project's view-quality mask. For Yang the package provides roll in degrees and a relative horizon row fraction. Use atan(pitch_frac) as a normalized pinhole proxy (one image height focal length), fix missing yaw at zero, and report the assumption with any result. Require all six valid viewpoints for the ordered Yang/control pair to avoid supplying missing entries to the temporal transformer. Crop/resize to 224 square; use full views for Kim/Yang. These are project-side adaptations to the available images and labels.
 
+**Review before the Kim and Yang runs (2026-11-19, fixed before any Kim or Yang run).**
+
+- *Choi reproduced.* The registered scorer on the three local Choi runs gives the recorded result exactly (3,185 strips, 12 buoys, 99.22 % against 94.66 %, +4.55 points [2.08, 8.61]). The paper package (`ndbc_buoycam_heights_v2cv`) has the same 41,091 strips, labels, images and station partitions as the package the DINOv3 runs used (`ndbc_buoycam_heights_v2`): the same 6,183 test and 6,311 validation strips. Both arms choose their epoch on the same validation buoys and see no test label in training. Choi covers 3,185 of the 3,190 calm or rough test strips; the other 5 have no view inside its brightness window.
+- *What DINOv3 has that VGG16 does not.* Whole views at 270 × 480 with a transformer across the six views; training on all heights (28,597 strips against 15,896) with wind-wave and swell heights as extra targets; colour jitter. VGG16 sees lower halves at 224 × 224. The input-geometry and single-view controls above remain the way to separate these. DINOv3-gentle was itself chosen among recipes with these 12 buoys among the evidence, so its sealed numbers are not independent of them; the five grouped folds give the clean comparison.
+- *Kim, corrected to the paper.* The paper's Fig. 5 and Table 3: four blocks of 3 × 3 convolution (16, 32, 64, 64 filters), batch normalisation and ReLU; 4 × 4 max pooling with stride 4 after blocks 1–3 and none after block 4; the last feature map flattened into one fully connected layer and softmax. The repository's class had 2 × 2 pooling after all four blocks, global average pooling and an extra 64-unit layer; `Kim2023SnapshotCNN` now follows the paper. The paper does not state its input size; at 224 × 224 the layer reads 64 maps of 3 × 3. The training recipe stays the registered one for every arm. The paper's own (Adam, 8 epochs, mini-batches of 5, learning rate not stated) is recorded, not adopted.
+- *Yang, as specified.* The repository's model follows every part the paper states: ResNet-18 with global pooling per frame; sine and cosine of roll, pitch and yaw through a two-layer MLP ending in a sigmoid; sinusoidal positions; multi-head self-attention; mean over time; a two-layer regression head; MSE. The paper does not state the width, heads, depth, fusion operator or initialisation; they are fixed here at 256, 8 heads, 2 layers, dropout 0.1, concatenation followed by a linear projection, and ImageNet weights. Roll and pitch are each view's horizon angle and row with that camera's median removed (no labels involved), so they come from the same pixels: this tests the paper's architecture with motion measured in the image, not by an IMU.
+- *Yang with against without attitude.* RMSE(with attitude) − RMSE(without) on identical strips, three-seed means, 2,000 resamples of whole sealed buoys (seed 0). Attitude helps when the upper endpoint is below zero. `score_sensing_papers.py --paper <yang runs> --control <no-attitude runs>`.
+- Classification runs from here on also save each view's probabilities (`view<k>_prob_<class>`), for the per-view-position report.
+
 ### GPU queue
 
 The sealed strip order is Choi VGG16, Kim snapshot, Yang and its no-attitude control. Each arm uses seeds 0, 1 and 2. Submit one seed at a time and fetch its predictions and settings before aggregating. The deployment runner expects the existing heights package locally for checksum comparison. Set `GPU_HOST` to the authorized SSH alias. Use a current shared-server utilization check to select the device. Torchvision will require the official VGG16 and ResNet18 ImageNet weights in the server torch cache or network access during initialization. Use the same cloned weights for the three seeds.
@@ -26,6 +35,14 @@ deploy/dgx/run.sh push
 deploy/dgx/run.sh setup
 # First run once GPU is selected at check-in
 GPU="$SLOT" TAG=paper-choi deploy/dgx/run.sh train station --arm choi --seed 0
+# Kim and Yang (seeds 0, 1, 2 each), then the scores
+TAG=paper-kim deploy/dgx/run.sh train station --arm kim --seed 0 --num-workers 8
+TAG=paper-yang deploy/dgx/run.sh train station --arm yang --seed 0 --num-workers 8
+TAG=paper-yang-no-attitude deploy/dgx/run.sh train station --arm yang-no-attitude --seed 0 --num-workers 8
+REF=$(echo ../Wave_Analysis/runs/buoy-station-20261118t1655-seed{0,1,2}-heights-dinov3-gentle)
+python scripts/score_sensing_papers.py --paper runs/buoy-station-*-paper-kim --reference $REF
+python scripts/score_sensing_papers.py --paper runs/buoy-station-*-paper-yang --reference $REF
+python scripts/score_sensing_papers.py --paper runs/buoy-station-*-paper-yang --control runs/buoy-station-*-paper-yang-no-attitude
 ```
 
 Use the matching seed's existing sealed DINOv3-gentle station predictions for the comparison. Scores for a completed triplet use the common test-strip intersection across all seeds and models. `predictions.csv` contains probabilities for classification and metres for height. A qualitative check of predictions on the test split during training would compromise the comparison.

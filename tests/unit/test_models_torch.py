@@ -30,7 +30,11 @@ def test_choi2020_forward():
 def test_kim2023_models():
     from wave_analysis.models.baselines.kim2023 import Kim2023CNNBiLSTM, Kim2023SnapshotCNN
 
-    assert Kim2023SnapshotCNN()(torch.randn(3, 1, 64, 64)).shape == (3, 5)
+    assert Kim2023SnapshotCNN()(torch.randn(3, 1, 224, 224)).shape == (3, 5)
+    published = Kim2023SnapshotCNN()
+    assert published.fc.in_features == 64 * 3 * 3  # 224 -> 56 -> 14 -> 3, no 4th pooling
+    assert sum(isinstance(m, torch.nn.MaxPool2d) for m in published.modules()) == 3
+    assert Kim2023SnapshotCNN(input_hw=(64, 64))(torch.randn(3, 1, 64, 64)).shape == (3, 5)
     seq = Kim2023CNNBiLSTM(backbone="tiny", hidden_size=16)
     assert seq(torch.randn(2, 6, 3, 32, 32)).shape == (2, 5)
 

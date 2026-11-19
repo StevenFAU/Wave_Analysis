@@ -46,3 +46,25 @@ def test_three_seed_comparison(tmp_path, monkeypatch):
     assert result["rows"] == 2 and result["delta"] == 0.5
     with pytest.raises(ValueError):
         score.compare([pp[0]] * 3, rr)
+
+
+def test_attitude_contrast_needs_identical_strips(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / "scripts"))
+    score = importlib.import_module("score_sensing_papers")
+    runs = {"yang": [], "yang-no-attitude": []}
+    for arm, preds in (("yang", [1.0, 3.0]), ("yang-no-attitude", [2.0, 3.0])):
+        for seed in range(3):
+            p = tmp_path / f"{arm}{seed}"
+            p.mkdir()
+            (p / "settings.json").write_text(
+                json.dumps({"seed": seed, "split": "station", "arm": arm, "labels_sha256": "x"})
+            )
+            pd.DataFrame(
+                {"sample_id": ["a", "b"], "station_id": ["101", "201"], "target": [1.0, 3.0]}
+            ).assign(pred_hs_m=preds).to_csv(p / "predictions.csv", index=False)
+            runs[arm].append(p)
+    result = score.compare_attitude(runs["yang"], runs["yang-no-attitude"])
+    assert result["rows"] == 2 and result["with_attitude"] == 0.0
+    assert abs(result["without_attitude"] - 0.5**0.5) < 1e-12
+    with pytest.raises(ValueError):
+        score.compare_attitude(runs["yang-no-attitude"], runs["yang"])

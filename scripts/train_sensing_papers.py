@@ -88,8 +88,9 @@ def model_for(arm):
 
 
 def epoch(model, loader, arm, device, amp, opt=None):
+    """One pass; without ``opt``, returns strip predictions and (classification) per-view ones."""
     model.train(opt is not None)
-    preds = []
+    preds, view_preds = [], []
     with torch.set_grad_enabled(opt is not None):
         for images, mask, angles, y in loader:
             images, mask, angles, y = [a.to(device) for a in (images, mask, angles, y)]
@@ -105,18 +106,23 @@ def epoch(model, loader, arm, device, amp, opt=None):
                         logits.float(), y[ids].long(), reduction="none"
                     )
                     loss = (ce / weights[ids]).sum() / len(y)
-                    pred = torch.zeros((len(y), logits.shape[1]), device=device)
-                    pred.index_add_(0, ids, logits.float().softmax(1))
+                    probs = logits.float().softmax(1)
+                    pred = torch.zeros((len(y), probs.shape[1]), device=device)
+                    pred.index_add_(0, ids, probs)
                     pred = pred / weights[:, None]
+                    per_view = torch.full((*mask.shape, probs.shape[1]), np.nan, device=device)
+                    per_view[mask] = probs
             if opt is not None:
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
             else:
                 preds.append(pred.detach().float().cpu().numpy())
-    if preds:
-        return np.concatenate(preds)
-    return None
+                if not arm.startswith("yang"):
+                    view_preds.append(per_view.cpu().numpy())
+    if not preds:
+        return None, None
+    return np.concatenate(preds), np.concatenate(view_preds) if view_preds else None
 
 
 def main():
@@ -168,7 +174,7 @@ def main():
     best = np.inf
     for i in range(cfg["epochs"]):
         epoch(model, loaders["train"], a.arm, "cuda", a.amp, opt)
-        pred = epoch(model, loaders["val"], a.arm, "cuda", a.amp)
+        pred, _ = epoch(model, loaders["val"], a.arm, "cuda", a.amp)
         y = parts["val"].target
         metric = (
             np.sqrt(np.mean((pred - y) ** 2)) if pred.ndim == 1 else np.mean(pred.argmax(1) != y)
@@ -178,7 +184,7 @@ def main():
             best = metric
             torch.save(model.state_dict(), a.out / "best.pt")
     model.load_state_dict(torch.load(a.out / "best.pt", weights_only=True))
-    pred = epoch(model, loaders["test"], a.arm, "cuda", a.amp)
+    pred, per_view = epoch(model, loaders["test"], a.arm, "cuda", a.amp)
     out = parts["test"].frame[["sample_id", "station_group", "station_id"]].copy()
     out["target"] = parts["test"].target
     if pred.ndim == 1:
@@ -186,6 +192,11 @@ def main():
     else:
         for j, pr in enumerate(pred.T):
             out[f"prob_{j}"] = pr
+        # each view's own probabilities (empty where the view was not usable), for
+        # the per-view-position report
+        for v in range(per_view.shape[1]):
+            for j in range(per_view.shape[2]):
+                out[f"view{v}_prob_{j}"] = per_view[:, v, j]
     out.to_csv(a.out / "predictions.csv", index=False)
 
 
