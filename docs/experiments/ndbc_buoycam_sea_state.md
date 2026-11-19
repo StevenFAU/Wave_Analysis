@@ -872,7 +872,9 @@ Nothing in it is fitted.
   float32 (stage 1 ran in bfloat16 on GPUs). On 200 package strips (40 per fold) the
   merged heights differ from the out-of-fold table by 0.4 % on average for H_s (largest
   3.5 %) and 0.3 % for the wind-wave height, with no bias; their RMSE on those strips
-  changes by 0.001 m. About 0.45 s per strip and model.
+  changes by 0.001 m. About 0.45 s per strip and model. Each model's predictions are
+  kept per strip (keyed by the image's checksum), so strips archived before the run
+  can be predicted ahead of it; reused and fresh predictions agree to 3 × 10⁻⁷.
 - *ERA5 and combiners:* each fold's ERA5 line and fitted combiners are reused, and
   reproduce the out-of-fold tables on the package's strips to the rounding of the files
   (largest difference 0.00005 m). Fed the package's own out-of-fold strips as if they
@@ -882,7 +884,7 @@ Nothing in it is fitted.
   every input up to ERA5's end on the day of the run are scored. The size estimate is
   reported, not used as a gate: since the package, cameras have archived strips at 70
   of the 79 buoys (none at 41002, 44007, 45002, 46006, 46053, 46061, 46071, 46082 and
-  46084), and 46085 has sent no wave record since 11-01, so about 69 buoys are
+  46084; 46085 sent no wave record from 11-01 to 11-18), so about 70 buoys are
   expected. A dry run checks and counts but scores nothing. ERA5 runs about 5 days
   behind, so it should reach 11-21 16:00 UTC by 2026-11-27.
 

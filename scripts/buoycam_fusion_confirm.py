@@ -57,7 +57,9 @@ Nothing is fitted here.
 
 Writes: ``build`` -> ``data/processed/packages/ndbc_buoycam_fresh_v2cv/`` (``images/``,
 ``labels.csv``, ``exclusions.csv``, ``summary.json``, ``provenance.yaml``); ``predict``
--> ``<out>/camera/fold<k>-seed<s>/predictions.csv`` (each model; reused on a rerun),
+-> ``<out>/camera/fold<k>-seed<s>/predictions.csv`` (each model; strips already in
+``runs/buoycam-cv-fusion-confirm-camera-cache/<run>.csv`` are taken from there, keyed by
+id and image checksum, so strips can be predicted ahead of the run),
 ``<out>/camera.csv`` (seeds merged) and ``check_camera.json``; ``score`` ->
 ``<out>/fusion.json``, ``report.md``, ``fusion_fresh.csv`` (``--dry-run``:
 ``dry_run.json``). ``<out>`` defaults to ``runs/buoycam-cv-fusion-confirm``.
@@ -323,32 +325,72 @@ def predict_run(run: Path, table: pd.DataFrame, root: Path, cfg: dict[str, Any],
 
 
 def predict_folds(table: pd.DataFrame, root: Path, by_fold: dict[str, list[Path]],
-                  cfg: dict[str, Any], dest: Path, args: argparse.Namespace) -> pd.DataFrame:  # fmt: skip
-    """Every strip of ``table`` by its fold's seeds (one directory per model in ``dest``), merged."""
+                  cfg: dict[str, Any], dest: Path, args: argparse.Namespace,
+                  cache: Path | None = None) -> pd.DataFrame:  # fmt: skip
+    """Every strip of ``table`` by its fold's seeds (one directory per model in ``dest``), merged.
+
+    ``cache``: one file per model (``<run name>.csv``) of every strip it has predicted,
+    keyed by the strip's id and the checksum of its packaged image; a strip found there
+    is not predicted again. Labels always come from ``table``.
+    """
+    targets, names = list(cfg["model"]["targets"]), list(cfg["model"]["target_names"])
     parts = []
     for fold, runs in by_fold.items():
         k = fold.removeprefix("fold")
         t = table[table["cv_fold"] == k].sort_values("sample_id").reset_index(drop=True)
         if t.empty:
             continue
+        want = dict(zip(t["sample_id"], t["sha256_package"], strict=True))
         dirs = []
         for i, run in enumerate(runs):
-            d = dest / f"{fold}-seed{i}"
-            f = d / "predictions.csv"
-            if f.exists() and set(pd.read_csv(f, usecols=["sample_id"])["sample_id"]) == set(
-                t["sample_id"]
-            ):
-                log(f"{fold} seed {i}: reusing {f}")
-            else:
+            cf = cache / f"{run.name}.csv" if cache is not None else None
+            have = (
+                pd.read_csv(cf, dtype={"station_id": str})
+                if cf is not None and cf.exists()
+                else None
+            )
+            keep = (
+                have[
+                    [
+                        want.get(a) == b
+                        for a, b in zip(have["sample_id"], have["sha256_package"], strict=True)
+                    ]
+                ]
+                if have is not None
+                else t.iloc[:0]
+            )
+            todo = t[~t["sample_id"].isin(keep["sample_id"])].reset_index(drop=True)
+            frames = [keep] if len(keep) else []
+            if len(todo):
                 t0 = time.time()
-                fr = predict_run(run, t, root, cfg, args)
-                d.mkdir(parents=True, exist_ok=True)
-                fr.to_csv(f, index=False, float_format="%.6f")
-                (d / "run.txt").write_text(f"{run}\n", encoding="utf-8")
+                new = predict_run(run, todo, root, cfg, args)
+                new["sha256_package"] = todo["sha256_package"].to_numpy()
+                frames.append(new)
                 dt = time.time() - t0
                 log(
-                    f"{fold} seed {i}: {len(t):,} strips in {dt / 60:.1f} min ({dt / len(t):.2f} s each) <- {run.name}"
+                    f"{fold} seed {i}: {len(todo):,} strips in {dt / 60:.1f} min ({dt / len(todo):.2f} s each) <- {run.name}"
                 )
+                if cf is not None:
+                    cf.parent.mkdir(parents=True, exist_ok=True)
+                    allc = pd.concat([x for x in (have, new) if x is not None], ignore_index=True)
+                    allc = allc.drop_duplicates("sample_id", keep="last").sort_values("sample_id")
+                    tmp = cf.with_suffix(".csv.part")
+                    allc.to_csv(tmp, index=False, float_format="%.6f")
+                    tmp.replace(cf)
+            log(f"{fold} seed {i}: {len(keep):,} strips from the cache, {len(todo):,} predicted")
+            fr = (
+                pd.concat(frames, ignore_index=True).sort_values("sample_id").reset_index(drop=True)
+            )
+            if not fr["sample_id"].equals(t["sample_id"]):
+                raise SystemExit(f"{fold} seed {i}: predictions do not cover the fold's strips")
+            fr = fr.drop(columns=["sha256_package"])
+            fr["partition"] = "fresh"
+            for col, nm in zip(targets, names, strict=True):
+                fr[f"true_{nm}_m"] = t[col].to_numpy(dtype=float)
+            d = dest / f"{fold}-seed{i}"
+            d.mkdir(parents=True, exist_ok=True)
+            fr.to_csv(d / "predictions.csv", index=False, float_format="%.6f")
+            (d / "run.txt").write_text(f"{run}\n", encoding="utf-8")
             dirs.append(d)
         merged = merge_fold(dirs)
         merged["cv_fold"] = k
@@ -412,7 +454,8 @@ def predict(args: argparse.Namespace) -> int:
     # 2. The fresh strips.
     fresh = read_labels(args.fresh / "labels.csv")
     log(f"fresh: {len(fresh):,} strips at {fresh['station_id'].nunique()} buoys x 3 seeds")
-    cam = predict_folds(fresh, args.fresh, by_fold, cfg, args.out / "camera", args)
+    cache = None if args.no_cache else args.cache
+    cam = predict_folds(fresh, args.fresh, by_fold, cfg, args.out / "camera", args, cache)
     if len(cam) != len(fresh):
         raise SystemExit(f"{len(cam):,} merged strips, {len(fresh):,} fresh")
     cam.to_csv(args.out / "camera.csv", index=False, float_format="%.5f")
@@ -720,6 +763,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--batch-size", type=int, default=8)
     p.add_argument("--loader-workers", type=int, default=4)
     p.add_argument("--check-per-fold", type=int, default=40)
+    p.add_argument(
+        "--cache",
+        type=Path,
+        default=repo_root() / "runs/buoycam-cv-fusion-confirm-camera-cache",
+        help="per-model predictions of every fresh strip predicted so far (reused)",
+    )
+    p.add_argument("--no-cache", action="store_true", help="predict every strip again")
     p.add_argument(
         "--check-tolerance",
         type=float,
