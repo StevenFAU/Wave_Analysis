@@ -5,7 +5,7 @@
     python scripts/webcoos_video_clips.py frames   [--workers 6]  # 64 frames at 4 fps per clip, 256 px high JPEG
     python scripts/webcoos_video_clips.py windows  [--workers 4]  # every 16-s window of each clip + its pixel spectrum
     python scripts/webcoos_video_clips.py pack                    # data/processed/packages/<name>/ (clips + frames + SHA256SUMS)
-    GPU_HOST=<lab-host> python scripts/webcoos_video_clips.py ship      # the windows to the GPU server, through Cloudflare R2
+    GPU_HOST=<ssh-alias> python scripts/webcoos_video_clips.py ship  # the windows to the GPU server, through Cloudflare R2
 
 **Pair.** Every clip under ``data/raw/webcoos_video/<camera>/`` (downloaded by
 ``scripts/webcoos_video_sample.sh``) gets its start (file name), length (``ffprobe``,
