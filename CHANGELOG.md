@@ -68,6 +68,30 @@ separately (`docs/REPRODUCIBILITY.md`).
   its calls follow wind-wave height more than swell height; over 24 held-out
   buoys, swell share predicts the under-call (Spearman −0.89).
 
+### Added (2026-11-19, shore per-wave labels: tests 2 and 3, video half)
+- CDIP per-wave labels for the shore clips on the 18 development dates
+  (`scripts/sensing_cdip_waves.py`, Codex's, checked): mean individual height,
+  H_1/3, H_1/10, T_z and wave count from the buoy record holding each clip's midpoint.
+  1,444 clips, 1,145 records, 17 dates (2026-09-24 is past CDIP 433's archive). The
+  provider evaluated every wave (no flag 2), so the flag sensitivity is empty. Counts:
+  `scripts/sensing_cdip_inventory.py`; write-up `docs/experiments/sensing_per_wave_bars.md`.
+- Measured mean height is 0.58 H_s at these buoys, not Kim's 0.631; the interim run's
+  proxy overstated it by about 8 %.
+- Bars T2 (per-wave targets) and T3-V (Kim's CNN-BiLSTM and Kamagata's SlowFast head with
+  its physics loss, on the interim run's 992 clips and date folds) fixed before any run;
+  Kim's training options corrected to the paper's Table 6 before any Kim run. Scorer
+  `scripts/sensing_shore_test2.py`, trainer `scripts/sensing_shore_test3.py`, config
+  `configs/experiments/sensing_shore_v1.yaml`.
+
+### Results (2026-11-19, test 2 on the development dates)
+- Kim's classes are unassessable on these dates (186 clips in range, 6 dates, mostly one
+  storm); every arm names the lowest class for every clip (64.0 %, the majority's), since
+  no estimate reaches 1.25 m. They are decided on the confirmation dates.
+- T2-C not met: the pixel spectrum's T_z error is 1.29 s against climatology's 1.37 s,
+  -0.08 s [-0.20, +0.08].
+- Test 3's video arms are queued behind the paper strip runs; Kim's network is not
+  trained on the development dates.
+
 ### Added (2026-11-19, shore video: physics features v2 and bars M6-M7)
 - The 18 interim dates are now development data (`configs/experiments/webcoos_video_dev_dates.txt`,
   committed with its SHA-256 before any development); every date the final run adds is a

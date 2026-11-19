@@ -1,9 +1,10 @@
 # Tests 2 and 3 (video half): per-wave shore labels and the papers' video networks
 
 Status: **labels built and counted 2026-11-19 (development dates only); bars T2 and T3-V
-fixed 2026-11-19, before any arm was scored on these labels.** Test 2 needs no training
-and is scored right after this commit. Test 3's two networks need the GPU server and
-wait their turn in the queue (see "Order and compute").
+fixed 2026-11-19, before any arm was scored on these labels; test 2 scored on the
+development dates: class endpoints unassessable (coverage), T2-C not met; test 3 queued
+behind the paper strip runs** (Results). Test 2 needs no training. Test 3's networks need
+the GPU server (see "Order and compute").
 
 Code: `scripts/sensing_cdip_waves.py` (labels), `scripts/sensing_cdip_inventory.py`
 (counts), `scripts/sensing_shore_test2.py` (test 2), `scripts/sensing_shore_test3.py`
@@ -216,7 +217,7 @@ held-out 0.586 m.
 ## Order and compute
 
 Test 2 runs on the desktop CPU (seconds), after this commit. T3-S needs one GPU for
-under an hour (one read of the last layer of the 74 GB feature cache, which is not
+about an hour (one read of the last layer of the 74 GB feature cache, which is not
 modified, then 50 small heads: five folds, five seeds, with and without the physics
 loss), plus a Kim smoke test of minutes. Both come after the paper strip runs (Kim
 snapshot, Yang with and without attitude) in the GPU queue, one GPU, at most five of the
@@ -253,3 +254,70 @@ endpoints are reported as unassessable for this sample.
 - **Flag sensitivity:** kept in the scorer, but empty on these dates (no flag 2).
 - **Labels verified** (convention, flags, ratios to the bulk records), and the inventory
   counted; Codex's label script itself is unchanged.
+
+## Results
+
+### Test 2, development dates (2026-11-19)
+
+Scored with commit 25a23ac1f (`runs/sensing-test2-dev-20261119b`, report re-rendered by
+3d72a2a4f with identical scores). 922 clips on 17 dates; the `incl_unevaluated` tier
+gives the same numbers, since no wave carries flag 2.
+
+How to read: RMSE is the typical error (m for heights, s for periods; lower is better).
+A difference is the first arm's score minus the second's on the same clips, with the 95 %
+range when whole dates are resampled 2,000 times.
+
+| Bar | Compared | Difference [95 %] | Verdict |
+|---|---|---|---|
+| T2-A | class accuracy: `clip` 64.0 % vs `majority` 64.0 % (186 clips, 6 dates) | 0.0 points | unassessable (coverage) |
+| T2-B | class accuracy: `clip` 64.0 % vs `snapshot` 64.0 % | 0.0 points | unassessable (coverage) |
+| T2-C | T_z RMSE: `spectrum` 1.29 s vs `climatology` 1.37 s | -0.08 s [-0.20, +0.08] | not met |
+
+What it means:
+
+- **Every arm names the lowest class for every clip in Kim's range.** No estimate reaches
+  1.25 m of mean height (the highest `clip` estimate on an in-range clip is 1.23 m); on
+  the clips measured at 1.25-1.75 m (median 1.52 m) the `clip` estimate's median is
+  0.77 m. The models pull storms toward the average, so Kim's classes cannot separate
+  them, and accuracy equals the majority class's by construction. This repeats the
+  interim run's finding (58.4 % against 58.8 %) with measured labels; it is not a
+  verdict, because the class endpoints are decided on the confirmation dates.
+- **Heights:** the `clip` estimate's error is about a quarter below climatology's for
+  mean height (0.267 against 0.351 m), H_1/3 (0.421 against 0.558 m) and H_1/10
+  (0.525 against 0.697 m), but over 17 dates the intervals reach past zero (mean height
+  -0.085 m [-0.140, +0.016]). Reading the whole clip beats its midpoint window slightly
+  and clearly (mean height -0.006 m [-0.011, -0.001]), as bar M3 found for H_s; whole
+  clip against one frame is not resolved (-0.009 m [-0.029, +0.007]).
+- **Period:** the pixel spectrum is 6 % better than climatology on T_z, not resolved;
+  the V-JEPA 2 `clip` estimate is no better than climatology (1.38 against 1.37 s).
+- **Wave count** times T_z is 1,594 s at the median, the record's 1,600 s: N carries
+  nothing beyond T_z, as stated above.
+
+### Test 3, video half: queued (2026-11-19)
+
+- **T3-S (Kamagata) is queued, not run.** The GPU queue puts the paper strip runs first:
+  at 15:42 EST Kim's snapshot seeds 0 and 1 were running on the server, with Kim's
+  recipe triplet, Yang and its control still to come, and the project held five
+  containers, the cap. The run starts when those runs are done and a container slot is
+  free.
+- **T3-K (Kim)** is not trained on the development dates (coverage rule); a smoke test
+  goes with T3-S, and the full run waits for the confirmation dates. The frame reader
+  was checked on real clips of all four cameras (360 frames of 224 px each, under a
+  second per clip on one CPU core).
+
+Launch, from this worktree at the commit that records this section (container paths;
+`GPU_HOST` is the server's name in the SSH config):
+
+```bash
+GPU_HOST=$GPU_HOST PKG=sensing_shore_v1 deploy/dgx/run.sh push
+GPU_HOST=$GPU_HOST KIND=video TAG=t3-kamagata PKG=sensing_shore_v1 \
+  CONFIG=configs/experiments/sensing_shore_v1.yaml TRAIN_SCRIPT=scripts/sensing_shore_test3.py \
+  deploy/dgx/run.sh train days --windows /data/video_windows/webcoos_video_v1 \
+  --window-cache /data/cache/video_window_features/878d1c2078a6 \
+  --kim-cache /data/cache/kim_googlenet_v1 --arms kamagata
+```
+
+The Kim smoke test is the same command with `TAG=t3-kim` and `--arms kim --limit 40
+--epochs 2`. It downloads torchvision's GoogLeNet weights into the server's torch cache
+on first use; record that file's row (URL, size, SHA-256) in the cache's
+`wave-sensing-weights.csv`, as the strip track did for VGG16 and ResNet-18.
