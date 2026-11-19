@@ -1,7 +1,8 @@
 # Tests 2 and 3 (video half): per-wave shore labels and the papers' video networks
 
 Status: **labels built and counted 2026-11-19 (development dates only); bars T2 and T3-V
-fixed 2026-11-19, before any arm was scored on these labels; test 2 scored on the
+fixed 2026-11-19, before any arm was scored on these labels; the class endpoints moved to
+the sealed storm set before any storm label was opened; test 2 scored on the
 development dates: class endpoints unassessable (coverage), T2-C not met; test 3 queued
 behind the paper strip runs** (Results). Test 2 needs no training. Test 3's networks need
 the GPU server (see "Order and compute").
@@ -134,8 +135,8 @@ dates and at least two classes each appear on at least 3 dates; otherwise it is 
 as unassessable, not as a miss. Fewer dates make a date-bootstrap interval unreliable,
 and a class seen on one or two dates is one sea state. On the development cohort (6
 dates; the second class on 2) the class endpoints are **unassessable**: they are
-computed and reported as development numbers, and decided only on the confirmation
-dates. T2-C (922 clips, 17 dates) is decided on the development dates.
+computed and reported as development numbers, and decided only on the storm set (see
+"Storm set"). T2-C (922 clips, 17 dates) is decided on the development dates.
 
 **Reported beside them, not bars:** RMSE of mean height, H_1/3 and H_1/10 for `clip`,
 `window`, `snapshot` and `climatology` with paired differences; within-one-class
@@ -173,7 +174,7 @@ identical clips with the project's `clip` read-out from the interim run.
 **Bar T3-K:** accuracy of the project's `clip` classes (test 2's arm) minus Kim's, on the
 same eligible clips. Project ahead if the interval's lower end is above zero; Kim ahead
 if its upper end is below zero; otherwise no difference resolved. T3-K counts only under
-the coverage rule above, so it is decided on the confirmation dates. On the development
+the coverage rule above, so it is decided on the storm set (see "Storm set"). On the development
 cohort Kim's network would learn one storm from 4-5 training dates per fold, so it is
 **not trained there**; it runs only as a smoke test (a few clips, two epochs) to prove the
 pipeline. Reported beside T3-K: Kim minus `majority`, within-one accuracy, per camera.
@@ -208,8 +209,8 @@ pipeline. Reported beside T3-K: Kim minus `majority`, within-one accuracy, per c
 Kamagata's `clip`, on the same 992 clips. Project ahead if the upper end is below zero;
 Kamagata ahead if the lower end is above zero; otherwise no difference resolved. Decided
 on the development cohort (both recipes are fixed and neither is tuned there), repeated
-on the confirmation dates. Reported beside it: Kamagata read from the midpoint window only (input-duration
-ablation), the same network with physics weight 0 (does the loss help?), its T_p RMSE
+on the storm set and the confirmation dates. Reported beside it: Kamagata read from the
+midpoint window only (input-duration ablation), the same network with physics weight 0 (does the loss help?), its T_p RMSE
 beside the project's and its T_z RMSE beside the pixel spectrum's and climatology's,
 and the paper's own measures (RMSE, R², Pearson) on the Oak Island clips beside its
 held-out 0.586 m.
@@ -224,16 +225,52 @@ snapshot, Yang with and without attitude) in the GPU queue, one GPU, at most fiv
 project's containers. Outputs go to the run's own folder and a separate GoogLeNet cache;
 the video session's windows, cache and pixel-spectrum code are read, never written.
 
+## Storm set: where the class endpoints are decided (fixed 2026-11-19, before any storm label)
+
+The development dates hold one storm, so the video session is downloading a sealed set
+of storm days for Kim's upper classes. The dates are chosen from CDIP H_s alone (at
+least 15 dates with daylight H_s of 2.0 m or more, at least 3 of them 2.8 m or more); the
+rule and the list are committed on `claude/video-whole-clip-491c90` before the download.
+Measured mean height is about 0.58 H_s here, so those dates should reach the 1.25-1.75 m
+and 1.75-2.25 m classes (H_s about 2.2-3.9 m). This section replaces the confirmation
+dates as the place where T2-A, T2-B and T3-K are decided; nothing else above changes.
+
+- **Sealed until scored.** No per-clip label or score of a storm date is opened before
+  this section is committed; then the per-wave labels of the storm dates are built (the
+  label script with a `--dates` option; dates past CDIP's historic archive from the
+  realtime zero-crossing file with the same rules, or excluded and counted) and scored
+  once.
+- **Estimates.** The project's arms are the registered ones, unchanged: the V-JEPA 2
+  whole-clip read-out (`clip`), its midpoint window (`window`) and the DINOv3 one-frame
+  probe (`snapshot`), out of fold over whole local dates, from the video session's final
+  run, whose folds cover every final date including the storm dates. If that run does not
+  include the storm dates, the same code and recipe are run with five folds of the storm
+  dates (`folds_by_date`, seed 0), every non-storm date in every training fold. Heights
+  are carried to mean height by the training folds' label ratio, as on the development
+  dates.
+- **Kim's network** (`Kim2023CNNBiLSTM`, settings above) is trained in the same folds on
+  the in-range clips of the training dates, storm and non-storm alike, five seeds, and
+  scored on the storm-set clips.
+- **Bars, on the storm-set clips in Kim's range (tier `good`):** T2-A `clip` minus
+  `majority` and T2-B `clip` minus `snapshot` (lower end above zero to be met), T3-K
+  `clip` minus Kim (project ahead, Kim ahead, or no difference resolved). The coverage
+  rule applies unchanged (at least 8 dates in range, two classes on at least 3 dates
+  each). Reported beside them: the ordinary confirmation dates, and all non-development
+  dates pooled.
+- **Not decided here:** T2-C stays decided on the development dates and T3-S on the
+  interim cohort; both are reported again on the storm set.
+
 ## Confirmation
 
-The class endpoints (T2-A, T2-B, T3-K) are decided on the confirmation dates: every
-packaged date outside the development list, in the video session's final run. Once
+The class endpoints (T2-A, T2-B, T3-K) are decided on the storm set (previous section);
+on the ordinary confirmation dates (every packaged date outside the development list
+and the storm set, in the video session's final run) they are reported beside it. Once
 that run's out-of-fold estimates exist, the label script is pointed at those dates (a
 `--dates` option added then; no label of theirs is fetched before), test 2 is scored on
 the final run's estimates with this commit's scorer, and Kim's network is trained in the
-final run's folds and scored on the confirmation dates' clips, once. T2-C and T3-S are
-repeated there. If the confirmation dates also fail the coverage rule, the class
-endpoints are reported as unassessable for this sample.
+final run's folds and scored on those clips, once. T2-C and T3-S are repeated there. If
+the storm set also fails the coverage rule, the class endpoints are reported as
+unassessable for this sample.
 
 ## What changed from the first draft (Codex, 0d331c01f) and why
 
@@ -249,8 +286,8 @@ endpoints are reported as unassessable for this sample.
   and the hypothesis (beat a snapshot) can fail separately.
 - **Seeds:** five for each paper network, matching the project read-out's ensemble.
 - **Coverage rule** stated as numbers (8 dates, two classes on 3 dates each), set from
-  the label counts above before any arm was scored; it moves the class endpoints to the
-  confirmation dates.
+  the label counts above before any arm was scored; it moves the class endpoints off the
+  development dates (to the storm set, as fixed in "Storm set").
 - **Flag sensitivity:** kept in the scorer, but empty on these dates (no flag 2).
 - **Labels verified** (convention, flags, ratios to the bulk records), and the inventory
   counted; Codex's label script itself is unchanged.
@@ -281,7 +318,7 @@ What it means:
   0.77 m. The models pull storms toward the average, so Kim's classes cannot separate
   them, and accuracy equals the majority class's by construction. This repeats the
   interim run's finding (58.4 % against 58.8 %) with measured labels; it is not a
-  verdict, because the class endpoints are decided on the confirmation dates.
+  verdict, because the class endpoints are decided on the storm set.
 - **Heights:** the `clip` estimate's error is about a quarter below climatology's for
   mean height (0.267 against 0.351 m), H_1/3 (0.421 against 0.558 m) and H_1/10
   (0.525 against 0.697 m), but over 17 dates the intervals reach past zero (mean height
@@ -301,7 +338,7 @@ What it means:
   containers, the cap. The run starts when those runs are done and a container slot is
   free.
 - **T3-K (Kim)** is not trained on the development dates (coverage rule); a smoke test
-  goes with T3-S, and the full run waits for the confirmation dates. The frame reader
+  goes with T3-S, and the full run waits for the storm set. The frame reader
   was checked on real clips of all four cameras (360 frames of 224 px each, under a
   second per clip on one CPU core).
 
