@@ -4,6 +4,10 @@ With ``--control`` instead of ``--reference``: two arms on the same strips, the
 first minus the second (Yang with minus without attitude, RMSE; the DINOv3
 backbone in Choi's pipeline minus VGG16, accuracy). ``--views`` adds, for
 classification arms, the accuracy of each view position on its own.
+
+Given 15 runs per arm (folds 0-4, seeds 0-2) instead of 3 sealed-station runs,
+each fold's three-seed mean on its own test groups is put together out of fold,
+and the interval resamples whole station groups instead of whole buoys.
 """
 
 import argparse
@@ -14,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 
-def ensemble(paths, reference):
+def ensemble(paths, reference, split="station"):
     frames = []
     seeds = set()
     arm = None
@@ -26,7 +30,7 @@ def ensemble(paths, reference):
             if (
                 run["settings"]["backbone"] != "timm:convnext_tiny.dinov3_lvd1689m"
                 or run["aux"] != "none"
-                or run["config"] != "ndbc_buoycam_heights_v2"
+                or run["config"] not in ("ndbc_buoycam_heights_v2", "ndbc_buoycam_heights_v2cv")
                 or run.get("limit_per_partition")
             ):
                 raise ValueError("expected a full images-only DINOv3 height run")
@@ -48,8 +52,8 @@ def ensemble(paths, reference):
                 frames[0].filter(regex=r"^(view\d_)?prob_\d+$|^pred_hs_m$")
             ):
                 raise ValueError("seeds differ in their outputs")
-        if run["split"] != "station" or run["seed"] in seeds:
-            raise ValueError("expected independent sealed-station seeds")
+        if run["split"] != split or run["seed"] in seeds:
+            raise ValueError(f"expected independent seeds of split {split}")
         seeds.add(run["seed"])
         if not data.sample_id.is_unique:
             raise ValueError("duplicate sample IDs")
@@ -67,9 +71,40 @@ def ensemble(paths, reference):
     return arm, merged
 
 
-def paired(d, regression):
-    """Pooled metric of ``project_score`` and ``paper_score`` and a whole-buoy bootstrap of their difference."""
-    groups = d.groupby("station_id")[["project_score", "paper_score"]]
+FOLDS = [f"fold{k}" for k in range(5)]
+
+
+def run_split(path):
+    meta = path / "settings.json"
+    if meta.exists():
+        return json.loads(meta.read_text())["split"]
+    return json.loads((path / "metrics.json").read_text())["run"]["split"]
+
+
+def load(paths, reference):
+    """Sealed station (3 runs) or out of fold (15 runs): arm, predictions, bootstrap unit."""
+    by_split = {}
+    for path in paths:
+        by_split.setdefault(run_split(path), []).append(path)
+    if set(by_split) == {"station"}:
+        arm, merged = ensemble(paths, reference)
+        return arm, merged, "station_id"
+    if set(by_split) != set(FOLDS):
+        raise ValueError("expected the sealed station split or all five folds")
+    parts = [ensemble(by_split[f], reference, f) for f in FOLDS]
+    arms = {arm for arm, _ in parts}
+    if len(arms) != 1 or len({m.attrs["labels_sha256"] for _, m in parts}) != 1:
+        raise ValueError("mixed arms or packages across folds")
+    merged = pd.concat([m for _, m in parts])
+    if not merged.index.is_unique:
+        raise ValueError("a strip is in two folds' test groups")
+    merged.attrs["labels_sha256"] = parts[0][1].attrs["labels_sha256"]
+    return arms.pop(), merged.sort_index(), "station_group"
+
+
+def paired(d, regression, unit="station_id"):
+    """Pooled metric of ``project_score`` and ``paper_score``; bootstrap of whole buoys or groups."""
+    groups = d.groupby(unit)[["project_score", "paper_score"]]
     n = groups.size().to_numpy()
     sums = groups.sum().to_numpy()
     values = sums.sum(0) / n.sum()
@@ -82,8 +117,10 @@ def paired(d, regression):
 
 
 def compare(paper, ref):
-    arm, p = ensemble(paper, False)
-    _, r = ensemble(ref, True)
+    arm, p, unit = load(paper, False)
+    _, r, ref_unit = load(ref, True)
+    if unit != ref_unit:
+        raise ValueError("the paper and reference runs use different splits")
     d = p.join(
         r[["true_hs_m", "pred_hs_m", "station_id"]].rename(
             columns={"pred_hs_m": "reference", "station_id": "reference_station"}
@@ -115,13 +152,13 @@ def compare(paper, ref):
     else:
         d["project_score"] = (reference == yr).astype(float)
         d["paper_score"] = (d.filter(regex=r"^prob_\d+$").to_numpy().argmax(1) == yr).astype(float)
-    values, ci, buoys = paired(d, regression)
+    values, ci, units = paired(d, regression, unit)
     return {
         "arm": arm,
         "rows": len(d),
         "paper_eligible": len(p),
         "reference_eligible": len(r),
-        "buoys": buoys,
+        "buoys" if unit == "station_id" else "station_groups": units,
         "metric": "RMSE_m" if regression else "accuracy",
         "project": values[0],
         "paper": values[1],
@@ -135,8 +172,10 @@ PAIRS = {("yang", "yang-no-attitude"), ("choi-dinov3", "choi")}
 
 def compare_arms(first, second, views=False):
     """First minus second arm on identical strips (RMSE or accuracy), whole-buoy interval."""
-    arm_a, a = ensemble(first, False)
-    arm_b, b = ensemble(second, False)
+    arm_a, a, unit = load(first, False)
+    arm_b, b, unit_b = load(second, False)
+    if unit != unit_b:
+        raise ValueError("the two arms use different splits")
     if (arm_a, arm_b) not in PAIRS:
         raise ValueError(f"registered pairs: {sorted(PAIRS)}")
     if a.attrs["labels_sha256"] != b.attrs["labels_sha256"]:
@@ -153,12 +192,12 @@ def compare_arms(first, second, views=False):
         probs = frame.filter(regex=rf"^{prefix}prob_\d+$").to_numpy()
         return (probs.argmax(1) == frame.target).astype(float)
 
-    d = a[["station_id"]].assign(project_score=score(a), paper_score=score(b))
-    values, ci, buoys = paired(d, regression)
+    d = a[[unit]].assign(project_score=score(a), paper_score=score(b))
+    values, ci, units = paired(d, regression, unit)
     result = {
         "arms": f"{arm_a} minus {arm_b}",
         "rows": len(d),
-        "buoys": buoys,
+        "buoys" if unit == "station_id" else "station_groups": units,
         "metric": "RMSE_m" if regression else "accuracy",
         arm_a: values[0],
         arm_b: values[1],
@@ -201,10 +240,10 @@ def view_positions(a, b, score, arms):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--paper", type=Path, nargs=3, required=True)
+    parser.add_argument("--paper", type=Path, nargs="+", required=True, help="3 or 15 runs")
     other = parser.add_mutually_exclusive_group(required=True)
-    other.add_argument("--reference", type=Path, nargs=3, help="DINOv3 runs, seeds 0-2")
-    other.add_argument("--control", type=Path, nargs=3, help="the second arm, seeds 0-2")
+    other.add_argument("--reference", type=Path, nargs="+", help="DINOv3 runs, same split")
+    other.add_argument("--control", type=Path, nargs="+", help="the second arm, same split")
     parser.add_argument("--views", action="store_true", help="also each view position (--control)")
     args = parser.parse_args()
     result = (

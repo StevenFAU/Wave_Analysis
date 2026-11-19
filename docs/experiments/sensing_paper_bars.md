@@ -31,6 +31,8 @@ Use training splits for fitting and validation only for epoch selection. Use thr
 
 **Kim with its own training options (sensitivity, fixed 2026-11-19 before any Kim test score).** Kim's network starts from random weights, and the shared recipe's AdamW at 0.0001 may train it less than its authors did. The first seed's validation error stayed at the majority-class level for three epochs. A second Kim triplet therefore uses the paper's Table 3: Adam (0.9, 0.999), 8 epochs, mini-batches of 5 snapshots (here one strip, 5.8 usable views on average); the learning rate 0.001 and L2 penalty 0.0001 are MATLAB's defaults, since the paper states neither (`configs/experiments/sensing_paper_strips_kim_recipe.yaml`, tag `paper-kim-recipe`). It is scored like the primary Kim triplet. The primary row stays the shared recipe; the sensitivity is reported beside it, and the bar counts as met only if both lower endpoints are positive.
 
+**Five grouped folds (fixed 2026-11-19, before any fold run).** Arms `choi`, `kim`, `kim` with its own options, `yang` and `yang-no-attitude`, each on folds 0–4 of `ndbc_buoycam_heights_v2cv` with seeds 0, 1 and 2 and the recipes above (75 runs). Each fold trains on its training groups, chooses its epoch on its validation groups and predicts its test groups once; the five test sets together cover all 79 buoys in 43 station groups. The reference is DINOv3-gentle's own fold runs on the same folds and seeds (`buoy-fold<k>-…-seed<s>-cv-dinov3-gentle`). Each fold's three-seed mean is scored on its own test groups and the folds are pooled out of fold; the paired differences and pass marks are those of the sealed rows, with 95 % intervals from 2,000 resamples of whole station groups (seed 0). Fold 0's test set is a single group of 18 West Coast buoys, so the group count, not the buoy count, sets the interval width. `score_sensing_papers.py` takes the 15 runs per arm.
+
 ### GPU queue
 
 The sealed strip order is Choi VGG16, Kim snapshot, Yang and its no-attitude control. Each arm uses seeds 0, 1 and 2. Submit one seed at a time and fetch its predictions and settings before aggregating. The deployment runner expects the existing heights package locally for checksum comparison. Set `GPU_HOST` to the authorized SSH alias. Use a current shared-server utilization check to select the device. Torchvision will require the official VGG16 and ResNet18 ImageNet weights in the server torch cache or network access during initialization. Use the same cloned weights for the three seeds.
@@ -59,6 +61,9 @@ python scripts/score_sensing_papers.py --paper runs/buoy-station-*-paper-choi-di
 # Kim with its own training options
 CONFIG=configs/experiments/sensing_paper_strips_kim_recipe.yaml TAG=paper-kim-recipe deploy/dgx/run.sh train station --arm kim --seed 0 --num-workers 8
 python scripts/score_sensing_papers.py --paper runs/buoy-station-*-paper-kim-recipe --reference $REF
+# Five grouped folds: the same commands with the fold as the split, 15 runs per arm
+TAG=paper-kim deploy/dgx/run.sh train fold0 --arm kim --seed 0 --num-workers 8
+python scripts/score_sensing_papers.py --paper runs/buoy-fold?-*-paper-kim --reference ../Wave_Analysis/runs/buoy-fold?-*-cv-dinov3-gentle
 ```
 
 Use the matching seed's existing sealed DINOv3-gentle station predictions for the comparison. Scores for a completed triplet use the common test-strip intersection across all seeds and models. `predictions.csv` contains probabilities for classification and metres for height. A qualitative check of predictions on the test split during training would compromise the comparison.

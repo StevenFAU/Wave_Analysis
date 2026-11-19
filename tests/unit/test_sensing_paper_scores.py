@@ -97,3 +97,50 @@ def test_backbone_control_and_view_positions(tmp_path, monkeypatch):
     assert [v["rows"] for v in result["views"]] == [2, 1, 2, 2, 2, 2]
     with pytest.raises(ValueError):
         score.compare_arms(runs["choi"], runs["choi-dinov3"])
+
+
+def test_out_of_fold_comparison_resamples_station_groups(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / "scripts"))
+    score = importlib.import_module("score_sensing_papers")
+    paper, ref = [], []
+    for fold in range(5):
+        rows = pd.DataFrame(
+            {
+                "sample_id": [f"s{fold}a", f"s{fold}b"],
+                "station_id": [f"{fold}01", f"{fold}02"],
+                "station_group": [f"g{fold}", f"g{fold}"],
+            }
+        )
+        for seed in range(3):
+            p, r = tmp_path / f"p{fold}{seed}", tmp_path / f"r{fold}{seed}"
+            p.mkdir()
+            r.mkdir()
+            meta = {"seed": seed, "split": f"fold{fold}"}
+            (p / "settings.json").write_text(
+                json.dumps({**meta, "arm": "yang", "labels_sha256": "x"})
+            )
+            (r / "metrics.json").write_text(
+                json.dumps(
+                    {
+                        "run": {
+                            **meta,
+                            "aux": "none",
+                            "config": "ndbc_buoycam_heights_v2cv",
+                            "settings": {"backbone": "timm:convnext_tiny.dinov3_lvd1689m"},
+                        }
+                    }
+                )
+            )
+            rows.assign(target=[1.0, 2.0], pred_hs_m=[2.0, 2.0]).to_csv(
+                p / "predictions.csv", index=False
+            )
+            rows.drop(columns="station_group").assign(
+                partition="test", true_hs_m=[1.0, 2.0], pred_hs_m=[1.0, 2.0]
+            ).to_csv(r / "predictions.csv", index=False)
+            paper.append(p)
+            ref.append(r)
+    result = score.compare(paper, ref)
+    assert result["rows"] == 10 and result["station_groups"] == 5
+    assert result["project"] == 0.0 and abs(result["paper"] - 0.5**0.5) < 1e-12
+    with pytest.raises(ValueError):
+        score.compare(paper[:12], ref)
