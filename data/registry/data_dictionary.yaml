@@ -489,6 +489,16 @@ collections:
       - Same columns as the standard (`.txt`) file above, except PTDY, which only realtime files carry.
 
   # ------------------------------------------------------------------ model
+  - id: noaa_gfs_wave
+    group: model
+    name: GFS-Wave point bulletins
+    subtitle: Forecast total and ranked wave systems at station points
+    provider: NOAA NCEP
+    datasets: [noaa_gfs_wave]
+    doc: docs/datasets/gfs_wave.md
+    roles: [model]
+    where: "data/raw/gfs_wave/"
+    cadence: "00, 06, 12 and 18 UTC"
   - id: era5_waves
     group: model
     name: ERA5 wave reanalysis

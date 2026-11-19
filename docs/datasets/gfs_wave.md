@@ -1,0 +1,5 @@
+# GFS-Wave station bulletins
+
+The public GFS archive exposes one WW3 station bulletin tar per issue cycle. `scripts/gfs_wave_archive.py FIRST LAST` inventories dates using HTTP HEAD with one request at a time. Add `--fetch` to download via the project Downloader and record URL, bytes and SHA-256 in the per-source ledger. Pass one or more issue hours using `--hours`. [NOAA archive description](https://registry.opendata.aws/noaa-gfs-bdp-pds/)
+
+`scripts/gfs_wave_points.py --labels LABELS --out POINTS TARS...` reads the numeric station IDs from the package and extracts forecast hours 0 through 6 into Parquet. Dates come from the bulletin cycle, including month rollovers. Hst is significant wave height in metres. Each reported system has height, peak period and mean direction; an asterisk marks probable local wind generation. Keep explicitly empty fields and the overflow count. On September 23 at 00 UTC, the tar was 49,356,800 bytes with 918 bulletin members and matched 74 of 79 requested station identifiers. A shared ID does not guarantee a model value; report finite-case and geographic coverage when assembling the evaluation table.

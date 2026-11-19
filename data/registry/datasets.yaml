@@ -1038,3 +1038,23 @@ datasets:
         says. The datenum variable is wrong (7 April, and start times that disagree with the file names); use
         the file name. mask_Z is undocumented and marks from 1 to 10,510 points. Rough 4-sigma Hs over points
         valid in every 10th frame: 6.5, 5.2, 5.6, 4.6, 4.5, 4.5 m (our estimate, not the paper's).
+
+  - dataset_id: noaa_gfs_wave
+    name: GFS-Wave point bulletins
+    provider: NOAA NCEP
+    modalities: [numerical_model]
+    intended_roles: [input]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints: ["https://registry.opendata.aws/noaa-gfs-bdp-pds/"]
+    data_types: [total_height, wave_systems]
+    formats: [tar, ascii]
+    license: {status: "See provider and network terms for redistribution"}
+    phase: archive_forecasts
+    doc: docs/datasets/gfs_wave.md
+    verification:
+      status: verified
+      date: 2026-11-19
+      evidence: ["https://registry.opendata.aws/noaa-gfs-bdp-pds/"]
