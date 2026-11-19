@@ -178,6 +178,42 @@ wind + geometry, and the fine-tuned camera alone against the frozen camera alone
 which makes its validation predictions slightly better than a new buoy's; the stacking
 ridge then trusts it a little too much, which can only hurt it at the test buoys.
 
+### M-S2 result (2026-11-19): not met
+
+Five fine-tunes on the lab server (`deploy/dgx/run.sh train`, commits `a7a3fcc` and
+`93cd540`, one per fold, two at a time; about 45-50 minutes each), scored by
+`scripts/measurement_review.py finetune` on the same 38,387 strips as M-S1. Both stacks
+are fitted on the validation buoys, so the frozen side here is M-S1's validation-fit
+arm (0.0084), not its primary (0.0089).
+
+| Arm (stacked with wind + geometry on the validation buoys) | Slope RMSE |
+|---|---|
+| Frozen probe (all inputs) | **0.0084** |
+| Fine-tuned camera (all inputs) | 0.0086 |
+| Wind + geometry | 0.0101 |
+
+- **Bar M-S2 is not met:** fine-tuned minus frozen is **+0.0002 [+0.0001, +0.0004]**:
+  the fine-tune is slightly worse, and the interval lies above zero.
+- The fine-tuned camera alone is level with the frozen camera alone: 0.0090 against
+  0.0088, +0.0002 [−0.0001, +0.0005].
+- The fine-tuned stack still beats wind + geometry, −0.0015 [−0.0017, −0.0011], as the
+  frozen one does.
+
+**Why: the recipe never trained the backbone usefully.** Every fold chose a heads-only
+epoch (epoch 1 or 2 of the two before the backbone unfreezes). After unfreezing, folds
+1-4 diverged within one or two epochs: the training loss rose from about 0.05 to 0.41
+and stayed there, and the validation slope error went to 1.8-2.1 % (the spread of the
+slope itself, as if predicting the mean). Fold 0 did not diverge, but never improved on
+its epoch 2 (0.79 %; later epochs 0.80-1.18 %). So the "fine-tune" scored here is a small nonlinear head on the frozen height model,
+and it does no better than the ridge on the same features. Two things follow:
+
+- The frozen height model already carries the slope: training new heads for it adds
+  nothing beyond a ridge on its pooled features.
+- Whether end-to-end training on slope helps is **not answered**: this recipe (stage 1's
+  gentle recipe, restarted from a fine-tuned encoder, bf16) is unstable here. A test
+  needs a stable recipe (for example a lower learning rate, gradient clipping or fp32
+  after unfreezing), checked on one fold first, under a bar of its own.
+
 ## Review of the prepared experiments (2026-11-19)
 
 Codex's diff against `8f225d5c8` (26 files, about 3,400 lines) was read before any run.

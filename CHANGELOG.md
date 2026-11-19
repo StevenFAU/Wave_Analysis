@@ -19,6 +19,10 @@ separately (`docs/REPRODUCIBILITY.md`).
   the buoy's RMS slope is predicted with RMSE 0.0089 from camera + wind + horizon
   geometry against 0.0102 from wind + geometry, −0.0013 [−0.0017, −0.0008]; the camera
   alone (0.0093) also beats wind + geometry.
+- **Bar M-S2 not met:** the ten-epoch slope fine-tune is no better than the frozen probe
+  (0.0086 against 0.0084, +0.0002 [+0.0001, +0.0004]). Every fold kept a heads-only
+  epoch: four of five runs diverged once the backbone unfroze, so end-to-end slope
+  training is still untested.
 
 ### Added (2026-11-14)
 - NDBC buoy-camera sea-state dataset (`ndbc_buoycam_sea_state_v0`): every archived
