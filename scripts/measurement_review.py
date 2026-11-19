@@ -247,7 +247,7 @@ def finetune_bar(args):
         if m["smoke"] or m.get("water_only"):
             raise ValueError(f"{r}: a full probe on whole views is required")
         probes[m["fold"]] = (m, pd.read_parquet(r / "predictions.parquet"))
-    rows = []
+    rows, folds = [], []
     for run in args.finetunes:
         info = json.loads((run / "metrics.json").read_text())["run"]
         k = int(info["split"].removeprefix("fold"))
@@ -270,9 +270,9 @@ def finetune_bar(args):
         out = t.loc[take, ["sample_id"]].copy()
         out["finetune_all_inputs"] = np.maximum(0, ridge(x[fit], t.loc[fit, y].to_numpy(), x[take]))
         out["finetune_camera"] = camera[take]
-        out["fold"] = k
-        rows.append(probe.merge(out, on="sample_id", how="left", validate="1:1"))
-    if sorted(r.fold.iloc[0] for r in rows) != list(range(5)):
+        folds.append(k)
+        rows.append(probe.merge(out, on="sample_id", how="left", validate="1:1").assign(fold=k))
+    if sorted(folds) != list(range(5)):
         raise ValueError("one fine-tune per fold")
     data = pd.concat(rows, ignore_index=True)
     data = data[data.eligible_inputs & data[y].notna()]

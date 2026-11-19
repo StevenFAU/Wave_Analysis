@@ -131,6 +131,8 @@ def extract(pkg, table, run, device, batch, water_only, workers=0):
         ):
             if water_only:
                 views, mask = inputs
+                views = views.to(device)  # crop and resize on the GPU, not the main process
+                inputs = (views, mask)
                 for i, fracs in enumerate(h[start : start + len(views)]):
                     for j, frac in enumerate(fracs):
                         # Resize a below-horizon patch to eliminate the viewing angle cue from the sky boundary.
