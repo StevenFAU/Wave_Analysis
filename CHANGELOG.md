@@ -175,6 +175,41 @@ separately (`docs/REPRODUCIBILITY.md`).
   earlier package's identical images and sends only the other files; a package's content
   is named by the SHA-256 of its `SHA256SUMS`.
 
+### Added (2026-11-19, grouped cross-validation, partition fusion and spectral targets)
+- `scripts/buoycam_cv_folds.py` and package `ndbc_buoycam_heights_v2cv`: v2's strips in
+  five folds over the 43 station groups, balanced by strips, each with validation groups
+  drawn from its own training folds to match their swell share. Every buoy is predicted
+  once, out of fold.
+- A distribution head beside the point head (`model.distribution`, beta-NLL with
+  beta = 0.5, Seitzer 2022); `predictions.csv` gains each height's log mean and spread.
+- `wave_analysis.evaluation.uncertainty`: log-normal CRPS, merging seeds' Gaussians, and
+  buoy-level split-conformal thresholds (Lee, Barber & Willett 2023).
+- `scripts/buoycam_oof.py`: out-of-fold scores of a model's five folds x seeds, with
+  conformal 90 % intervals (coverage per buoy and per sea state), CRPS, every paper's
+  measure and a paired bar between two arms.
+- **Bar B2-CV not met:** DINOv3-gentle lowers out-of-fold H_s RMSE against ImageNet arm A
+  by 0.019 m [−0.028, −0.011] at all 79 buoys (0.532 against 0.550 m), but the wind sea
+  only by 0.002 m [−0.008, +0.004]. Conformal intervals cover 0.90 on average; 11 buoys
+  fall below 0.80.
+- `scripts/buoycam_partition_check.py`: WVHT² = SwH² + WWH² holds within rounding on all
+  295,547 records at the camera buoys. `scripts/buoycam_partition_fusion.py`: a gated
+  swap of ERA5 + wind's wind sea for the camera's, beside ridge, gradient boosting and
+  the raw partition rule, fitted fold by fold.
+- **Bar S2 met out of fold:** the gated swap lowers H_s RMSE from 0.288 to 0.267 m
+  (−0.021 m [−0.031, −0.012]) and wind-wave RMSE from 0.293 to 0.240 m against
+  ERA5 + wind at 77 buoys. To be confirmed on strips archived after the package
+  (about 2026-11-26).
+- `buoycam_era5.py`: ERA5 periods and directions (`pp1d`, `mwp`, `mp2`, `mwd`, `mpww`,
+  `mdww`, `mpts`) at each buoy's wave grid point. The parquet is now written whole
+  before it replaces the old one.
+- `scripts/buoycam_spectral_labels.py` and package `ndbc_buoycam_spectral_v3cv`: peak,
+  mean (Tm-1,0), average and wind-sea periods, the wind-sea part of the 1-D spectrum
+  and the mean direction (relative to the sun's azimuth: the caption's heading is a
+  fixed "90°") from each buoy's own spectral records.
+  `wave_analysis.models.wave_spectral` and `scripts/train_wave_spectral.py` train
+  these outputs.
+- `deploy/dgx/run.sh`: split names may contain digits (`fold0`).
+
 ### Fixed (2026-11-14)
 - `sources.ndbc.buoycam.caption_band_rows`: the caption is a fixed 30-row band in
   both strip formats (measured); it was scaled to 25 rows for 2304 × 246 strips.
