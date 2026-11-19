@@ -14,10 +14,13 @@ kim:                              # Kim2023CNNBiLSTM
   backbone: googlenet             # torchvision IMAGENET1K_V1, frozen, 1024-d
   hidden: 2000
   dropout: 0.5
-  lr: 1.0e-4                      # Adam
-  batch_size: 16
-  grad_clip: 2.0
-  epochs: 60                      # the inner validation date picks the epoch (cross-entropy)
+  # training options of the paper's Table 6 (Kim et al. 2023)
+  lr: 1.0e-4                      # Adam (0.9, 0.999), epsilon 1e-8
+  lr_drop_factor: 0.1
+  lr_drop_period: 10              # epochs
+  l2: 1.0e-4
+  batch_size: 4                   # shuffled every epoch
+  epochs: 200                     # at most; the inner validation date picks the epoch (cross-entropy)
   min_windows: 12                 # K >= 12 (192 s) holds the 180-s span
 kamagata:                         # SlowFastWaveHead + kamagata_physics_loss
   layer_index: 3                  # the cache's fourth layer = V-JEPA 2 block 23 (last)

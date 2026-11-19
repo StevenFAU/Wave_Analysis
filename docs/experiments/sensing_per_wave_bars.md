@@ -156,11 +156,16 @@ identical clips with the project's `clip` read-out from the interim run.
 - **Network:** torchvision GoogLeNet with ImageNet weights, frozen, 1,024-d per frame
   (cached once); bidirectional LSTM, 2,000 hidden units; dropout 0.5; a linear layer to
   the five classes, read from the last time step (the repository's class, unchanged).
-- **Training:** cross-entropy on the in-range training clips; Adam, learning rate 1e-4,
-  batch 16, gradient norm clipped at 2, at most 60 epochs; the inner validation date
-  (drawn among training dates that hold in-range clips) picks the epoch by validation
-  cross-entropy. The paper does not state these settings; they are fixed here. No
-  augmentation (the paper's screen splitting is not reproduced).
+- **Training:** the paper's Table 6: Adam (0.9, 0.999, epsilon 1e-8), learning rate 1e-4
+  dropped tenfold every 10 epochs, L2 penalty 1e-4, mini-batch 4, shuffled every epoch,
+  at most 200 epochs, dropout 0.5; its "L2 norm" gradient threshold gives no value
+  (MATLAB's default is none), so gradients are not clipped. Cross-entropy on the in-range
+  training clips. The paper trains to the last epoch; here, as for every arm, the inner
+  validation date (drawn among training dates that hold in-range clips) picks the epoch
+  by validation cross-entropy. No augmentation (the paper's screen splitting is not
+  reproduced). The paper does not say how frames meet GoogLeNet's 224-px input; the
+  centre square is fixed here. (Corrected 2026-11-19 before any Kim run: the first
+  version of this bar said the paper gave no training options.)
 - **Score:** five-class accuracy on the eligible in-range clips; class probabilities
   averaged over the five seeds.
 
@@ -192,8 +197,8 @@ pipeline. Reported beside T3-K: Kim minus `majority`, within-one accuracy, per c
   label drops out of the loss.
 - **Loss and training:** mean squared error over the available targets plus 0.1 x
   |log(T_p^2 + eps) - log(6 H_s + eps)| on the unscaled H_s (m) and T_p (s); AdamW,
-  learning rate 1e-4, weight decay 0.05, batch 128 windows (the paper states none), at
-  most 50 epochs (the paper's), every window of a training clip carrying its clip's
+  learning rate 1e-4, weight decay 0.05, batch 128 windows (the paper states neither
+  rate nor batch), at most 50 epochs (the paper's), every window of a training clip carrying its clip's
   labels; the inner validation date picks the epoch by its loss.
 - **Read-out:** as the project's: a clip's H_s is the energy mean over its K windows,
   periods the geometric mean; seeds averaged in log space.

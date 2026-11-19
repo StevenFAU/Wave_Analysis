@@ -216,7 +216,11 @@ def kim_arm(
                                  hidden_size=int(k["hidden"]), dropout=float(k["dropout"]))  # fmt: skip
             m.encoder = nn.Identity()  # frozen GoogLeNet features are cached
             m = m.to(dev)
-            opt = torch.optim.Adam(m.parameters(), lr=float(k["lr"]))
+            opt = torch.optim.Adam(m.parameters(), lr=float(k["lr"]), betas=(0.9, 0.999), eps=1e-8,
+                                   weight_decay=float(k["l2"]))  # fmt: skip
+            sched = torch.optim.lr_scheduler.StepLR(
+                opt, step_size=int(k["lr_drop_period"]), gamma=float(k["lr_drop_factor"])
+            )
             rng = np.random.default_rng(int(seed))
             best, state = np.inf, None
             for _ in range(int(args.epochs or k["epochs"])):
@@ -227,8 +231,8 @@ def kim_arm(
                     loss = nn.functional.cross_entropy(kim_logits(m, x[b]), y[b])
                     opt.zero_grad(set_to_none=True)
                     loss.backward()
-                    nn.utils.clip_grad_norm_(m.parameters(), float(k["grad_clip"]))
                     opt.step()
+                sched.step()
                 m.eval()
                 with torch.no_grad():
                     v = float(nn.functional.cross_entropy(kim_logits(m, x[torch.as_tensor(va, device=dev)]),
