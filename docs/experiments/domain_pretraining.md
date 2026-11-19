@@ -202,6 +202,41 @@ at the 11 other validation buoys goes to P1**; the RMSE at all 12, at 44008 alon
 of the log heights are reported beside it. P1 itself is unchanged (its heads are
 trained, and it is scored at the test buoys, none of which has that format).
 
+### Result: step 7,500 (2026-11-19, before any P1 run)
+
+The run finished all 30,000 steps (08:35 UTC; about 9.1 GPU-hours of training in the
+two segments). Ridge probe at the validation buoys, every teacher checkpoint (RMSE in
+metres; the selection column is the 11 buoys of the training format):
+
+| Weights | H_s, 11 buoys | Wind-wave, 11 buoys | H_s, all 12 | H_s, 44008 alone | Feature spread |
+|---|---|---|---|---|---|
+| Public (off the shelf) | 0.642 | 0.371 | 1.412 | 4.27 | 0.091 |
+| 2,500 (backbone frozen) | 0.685 | 0.378 | 2.262 | 7.27 | 0.092 |
+| 5,000 (backbone frozen) | 0.700 | 0.370 | 2.194 | 7.02 | 0.094 |
+| **7,500** | **0.582** | 0.344 | 0.722 | 1.55 | 0.150 |
+| 10,000 | 0.586 | 0.339 | 0.685 | 1.32 | 0.190 |
+| 12,500 | 0.584 | 0.340 | 0.669 | 1.24 | 0.202 |
+| 15,000 | 0.597 | 0.336 | 0.712 | 1.43 | 0.202 |
+| 17,500 | 0.612 | 0.335 | 0.714 | 1.38 | 0.198 |
+| 20,000 | 0.605 | 0.333 | 0.698 | 1.32 | 0.196 |
+| 22,500 | 0.607 | 0.332 | 0.682 | 1.21 | 0.193 |
+| 25,000 | 0.610 | 0.331 | 0.682 | 1.19 | 0.191 |
+| 27,500 | 0.611 | 0.329 | 0.678 | 1.16 | 0.190 |
+| 30,000 | 0.611 | 0.329 | 0.676 | 1.15 | 0.189 |
+
+- **Chosen by the rule: step 7,500**, 2,500 steps after the backbone unfroze (H_s
+  0.582 m against 0.642 m for the public weights). It was saved before the kill, so the
+  restart does not touch it. Steps 10,000 and 12,500 are within 0.004 m of it.
+- Every checkpoint after the unfreezing probes better than the public weights on both
+  heights at the 11 buoys. H_s is best early (7,500-12,500) and drifts up 0.03 m by the
+  end; wind-wave keeps improving slowly. No collapse: the feature spread doubled and
+  then held.
+- The two frozen-backbone checkpoints are worse than the public weights. In that stage
+  only the patch embedding (and the new heads) train, and the patch embedding moved
+  alone.
+- The training loss levelled off near 10.6 from about step 25,000 (DINO's starting
+  value is 11.09).
+
 ## Bar P1: does the continued ViT-B give better frozen features? (fixed before pretraining)
 
 - **Continued arm:** B3's frozen recipe unchanged (`scripts/train_wave_heights.py`,
@@ -258,6 +293,7 @@ it). The continued weights inherit it.
       pretraining.
 - [x] Smoke runs and timing (2026-11-18): about 12 GPU-hours projected; activation
       checkpointing on, batch 256.
-- [ ] Full pretraining run.
-- [ ] Checkpoint choice on the validation buoys.
+- [x] Full pretraining run (2026-11-19): 30,000 steps, killed once at its memory limit
+      and resumed; no divergence.
+- [x] Checkpoint choice on the validation buoys: step 7,500.
 - [ ] P1 and the gentle comparison.
