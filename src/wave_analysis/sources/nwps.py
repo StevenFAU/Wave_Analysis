@@ -3,15 +3,16 @@
 import argparse
 import fcntl
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from wave_analysis.config import data_dir, load_yaml, repo_root
 from wave_analysis.ingest.downloader import Downloader
-from wave_analysis.ingest.manifest import read_manifest, write_manifest
+from wave_analysis.ingest.manifest import EntryStatus, read_manifest, write_manifest
 
 
-def links(client, url, pattern):
+def links(client: Downloader, url: str, pattern: str) -> list[str]:
     """Return safe matching basenames from an office or grid listing."""
     response = client.get(url)
     if response.status_code == 404:
@@ -22,12 +23,12 @@ def links(client, url, pattern):
     )
 
 
-def collect(config, end, days, grids=False):
+def collect(config: dict[str, Any], end: date, days: int, grids: bool = False) -> None:
     """Discover and archive the configured cycles, serialized with a filesystem lock."""
     root = data_dir("raw") / "nwps"
     root.mkdir(parents=True, exist_ok=True)
     ledger = root / "_manifests/nwps.csv"
-    failures = []
+    failures: list[tuple[str, EntryStatus]] = []
     with (
         (root / ".collect.lock").open("a") as lock,
         Downloader(min_interval_s=1, min_gap_s=0.4) as client,
@@ -60,7 +61,7 @@ def collect(config, end, days, grids=False):
                                 old = seen.get(relative)
                                 if old and dest.is_file() and dest.stat().st_size == old.size_bytes:
                                     n += 1
-                                    size += old.size_bytes
+                                    size += old.size_bytes or 0
                                     continue
                                 entry = client.fetch(
                                     folder + name,
@@ -75,7 +76,7 @@ def collect(config, end, days, grids=False):
                                 write_manifest([entry], ledger)
                                 if entry.sha256:
                                     n += 1
-                                    size += entry.size_bytes
+                                    size += entry.size_bytes or 0
                                 else:
                                     failures.append((folder + name, entry.status))
             print(day, n, "files", size, "bytes on disk", flush=True)
@@ -83,7 +84,7 @@ def collect(config, end, days, grids=False):
         raise RuntimeError(f"{len(failures)} unsuccessful downloads: {failures[:3]}")
 
 
-def main():
+def main() -> None:
     """Run the configured NWPS backfill."""
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--end", type=datetime.fromisoformat, default=datetime.now(UTC))

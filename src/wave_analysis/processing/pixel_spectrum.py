@@ -136,8 +136,9 @@ BREAKING_FEATURES = ("foam_frac", "foam_separability", "onset_rate_per_min", "fo
 
 def _welch(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
     nper = min(NPERSEG, x.shape[0])
-    return welch(x, fs=fs, window="hann", nperseg=nper, noverlap=nper // 2,
+    f, p = welch(x, fs=fs, window="hann", nperseg=nper, noverlap=nper // 2,
                  detrend="linear", scaling="density", axis=0)  # fmt: skip
+    return np.asarray(f), np.asarray(p)
 
 
 def _water(f: np.ndarray, p: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

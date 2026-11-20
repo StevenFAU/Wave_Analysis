@@ -170,7 +170,7 @@ warn_unreachable = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["scipy.*", "torch.*", "torchvision.*", "cv2.*", "PIL.*", "xarray.*", "pyarrow.*", "cdsapi.*"]
+module = ["scipy.*", "torch.*", "torchvision.*", "timm.*", "cv2.*", "PIL.*", "xarray.*", "pyarrow.*", "cdsapi.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

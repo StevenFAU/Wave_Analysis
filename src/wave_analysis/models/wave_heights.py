@@ -32,7 +32,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -132,13 +132,13 @@ class MultiViewRegressor(nn.Module):
             import timm
 
             name = backbone.removeprefix("timm:")
-            kw = (
+            kw: dict[str, Any] = (
                 {"dynamic_img_size": True, "dynamic_img_pad": True}
                 if name.startswith(("vit", "eva"))
                 else {}
             )
             net = timm.create_model(name, pretrained=pretrained, num_classes=0, **kw)
-            feat = int(net.num_features)
+            feat = int(cast(int, net.num_features))
         else:
             net = build_model(backbone, 1, pretrained=pretrained)
         if backbone.startswith("timm:"):

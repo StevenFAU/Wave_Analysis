@@ -2,18 +2,20 @@
 
 import re
 import tarfile
+from collections.abc import Collection
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 
-def short_leads(text):
+def short_leads(text: str) -> list[dict[str, Any]]:
     """Parse valid forecast hours 0 through 6 for one issue and station."""
     issue = re.search(r"Cycle\s*:\s*(\d{8})\s+(\d+) UTC", text)
     station = re.search(r"Location\s*:\s*(\S+)", text)
     if not issue or not station:
         raise ValueError("missing issue or location in station bulletin")
     start = datetime.strptime(issue[1], "%Y%m%d").replace(tzinfo=UTC, hour=int(issue[2]))
-    rows = []
+    rows: list[dict[str, Any]] = []
     for line in text.splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cells) != 8 or not re.fullmatch(r"\d+\s+\d+", cells[0]):
@@ -26,7 +28,7 @@ def short_leads(text):
         if total is None:
             raise ValueError(f"invalid WW3 total/count: {cells[1]}")
 
-        row = {
+        row: dict[str, Any] = {
             "station_id": station[1],
             "issue_utc": start,
             "valid_utc": valid,
@@ -53,9 +55,9 @@ def short_leads(text):
     return rows
 
 
-def read_cycle(path, stations):
+def read_cycle(path: str | Path, stations: Collection[str]) -> list[dict[str, Any]]:
     """Read selected archive members in memory without extracting external paths."""
-    rows = []
+    rows: list[dict[str, Any]] = []
     with tarfile.open(path) as tar:
         for member in tar:
             name = Path(member.name).name.split(".")

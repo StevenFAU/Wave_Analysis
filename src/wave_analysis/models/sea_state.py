@@ -29,7 +29,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 import numpy as np
 import pandas as pd
@@ -243,7 +243,8 @@ class MultiViewNet(nn.Module):
         return out
 
 
-Batch = torch.Tensor | tuple[torch.Tensor, ...]
+# An explicit alias: without it mypy rejects the union when torch is not installed (CI).
+Batch: TypeAlias = torch.Tensor | tuple[torch.Tensor, ...]
 
 
 def _to_device(x: Batch, device: torch.device) -> Batch:

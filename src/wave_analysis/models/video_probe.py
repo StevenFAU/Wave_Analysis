@@ -214,7 +214,9 @@ class StackedProbes:
             self._sched.append((dummy, torch.optim.lr_scheduler.OneCycleLR(
                 dummy, max_lr=lr, total_steps=int(tot), pct_start=pct_start)))  # fmt: skip
 
-    def _f(self, p: dict, b: dict, *x: torch.Tensor) -> torch.Tensor:
+    def _f(
+        self, p: dict[str, torch.Tensor], b: dict[str, torch.Tensor], *x: torch.Tensor
+    ) -> torch.Tensor:
         from torch.nn.attention import SDPBackend, sdpa_kernel
 
         fast = torch.backends.mha.get_fastpath_enabled()
@@ -225,7 +227,7 @@ class StackedProbes:
         finally:
             torch.backends.mha.set_fastpath_enabled(fast)
 
-    def _sub(self, idx: torch.Tensor) -> tuple[dict, dict]:
+    def _sub(self, idx: torch.Tensor) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         return {k: v[idx] for k, v in self.params.items()}, {
             k: v[idx] for k, v in self.buffers.items()
         }

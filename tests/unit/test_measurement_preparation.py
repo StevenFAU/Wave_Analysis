@@ -11,6 +11,9 @@ import pytest
 
 @pytest.fixture
 def scripts(monkeypatch):
+    # The measurement scripts read camera images through Pillow, which, like torch,
+    # stays outside the locked environment (CI does not install it).
+    pytest.importorskip("PIL")
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / "scripts"))
     return importlib.import_module
 
