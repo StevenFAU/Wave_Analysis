@@ -1,0 +1,9 @@
+[Unit]
+Description=Revisit the available NWPS forecast cycles daily
+
+[Timer]
+OnCalendar=*-*-* 13:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

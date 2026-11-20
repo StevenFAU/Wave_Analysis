@@ -1,0 +1,14 @@
+# Wave sensing · November 19 afternoon update
+
+Prioritize the stricter held-geography camera and forecast comparison. The provisional wind-wave improvement survived the addition of measured wind; the two-day thermal-mask and held-year seismic pilots both missed their criteria.
+
+| Track | Outcome | Next decision |
+|---|---|---|
+| Buoy cameras and models | The forecast and local wind predict wind-wave height to 0.2258 m RMSE. Adding the camera gives 0.2095 m under the historical fusion procedure, on 34,723 strips at 71 buoys. Total height improves from 0.2670 to 0.2635 m on the same rows. | Require inner geographic cross-fitting for the formal result. The existing fresh-strip confirmation is a separate evaluation. Full analysis on `codex/sensing-model` in `docs/experiments/sensing_forecast_results.md`. |
+| Thermal imagery at Duck | The IR breaking mask improves individual height and period on November 8, but worsens both on November 7. Each date was tested with the other day held for training. The HDF5 example includes the lidar time vector; an independent frame-to-scan time map for the raw movie still needs verification. | Close the mask-only pilot as a miss. Keep independent crest timing separate. The local data sufficed for this pilot. Full results on `codex/sensing-shore` in `docs/experiments/sensing_duck_pilot.md`. |
+| Earthquake-station ground motion at Waimea | The full 1,734-day archive is local. At 91 held-out 2013 dates the seismic ridge lost to monthly climatology on wave height. Its peak-period gain was 0.006 s and the interval crossed zero. | Stop before adding a camera or repeating at Oak Island. [Numbers and pass criteria](sensing_seismic_bar.md) |
+| Published buoy model comparisons | The first Choi seed finished in 24 minutes. Its settings, checkpoint and predictions were fetched. Seed 1 launched on one H200 and seed 2 is queued to follow a successful seed 1. The three matching DINOv3 reference runs exist. | Compare common held-buoy predictions after the three seeds finish. Kim and Yang remain later in the queue. |
+| Shore labels and archives | The CDIP development build restarted from cached subsets after a provider timeout. NWPS daily collection is active. The five supplied full texts have been reviewed for sensor, target and split. | Verify complete eligible shore windows by class and date before training. [Paper findings](sensing_paper_findings.md) |
+| Related branches | The measurement branch reported that imagery improved frozen surface-slope estimates over wind and geometry. The pretraining branch reported a wind-wave gain, while the joint height and wind-wave criterion missed. | Treat the slope pass and the pretraining miss as separate decisions. |
+
+All work is local to the sensing branches. The project can continue with the archives already in hand.

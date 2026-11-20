@@ -1058,3 +1058,43 @@ datasets:
       status: verified
       date: 2026-11-19
       evidence: ["https://registry.opendata.aws/noaa-gfs-bdp-pds/"]
+
+  - dataset_id: noaa_nwps
+    name: NOAA Nearshore Wave Prediction System
+    provider: NOAA NCEP
+    modalities: [numerical_model]
+    intended_roles: [input]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints: ["https://nomads.ncep.noaa.gov/pub/data/nccf/com/nwps/prod/"]
+    data_types: [swan_spectra, system_tracking, wave_grid]
+    formats: [text, grib2]
+    license: {status: "See provider and network terms for redistribution"}
+    phase: archive_forecasts
+    doc: docs/datasets/nwps.md
+    verification:
+      status: verified
+      date: 2026-11-19
+      evidence: ["https://nomads.ncep.noaa.gov/pub/data/nccf/com/nwps/prod/"]
+
+  - dataset_id: earthscope_fdsn
+    name: EarthScope vertical seismograms
+    provider: EarthScope NSF National Geophysical Facility
+    modalities: [seismic]
+    intended_roles: [input]
+    access:
+      public: true
+      authentication_required: false
+      protocols: [HTTPS]
+      endpoints: ["https://service.earthscope.org/fdsnws/dataselect/1/"]
+    data_types: [vertical_ground_motion]
+    formats: [miniseed]
+    license: {status: "See provider and network terms for redistribution"}
+    phase: seismic_windows
+    doc: docs/datasets/earthscope.md
+    verification:
+      status: verified
+      date: 2026-11-19
+      evidence: ["https://service.earthscope.org/fdsnws/dataselect/1/"]

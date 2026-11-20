@@ -27,6 +27,8 @@ PATH = ROOT / "data/registry/data_dictionary.yaml"
 #: dashboard/collections.py). The dictionary must describe each of them.
 LIVE_IDS = {
     "noaa_gfs_wave",
+    "earthscope_fdsn",
+    "noaa_nwps",
     "ndbc_buoycam",
     "ndbc_realtime",
     "pacioos_waimea",
