@@ -150,7 +150,12 @@ evaluation:
   # generalizes) or whole buoy-days (time split).
   bootstrap:
     group_col: {station: station_id, time: station_day, fold0: station_id, fold1: station_id,
-                fold2: station_id, fold3: station_id, fold4: station_id}
+                fold2: station_id, fold3: station_id, fold4: station_id,
+                # test 1's nested inner models (package ndbc_buoycam_heights_v2cvn, added
+                # 2026-11-19 by scripts/sensing_nested_splits.py; training unchanged)
+                pair01: station_id, pair02: station_id, pair03: station_id, pair04: station_id,
+                pair12: station_id, pair13: station_id, pair14: station_id, pair23: station_id,
+                pair24: station_id, pair34: station_id}
     n_boot: 1000
     alpha: 0.05
     seed: 0

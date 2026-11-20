@@ -223,6 +223,37 @@ separately (`docs/REPRODUCIBILITY.md`).
   out-of-fold tables on the package's strips; a dry run counts strips but scores none.
   `scripts/buoycam_pairs.py --start` pairs only strips taken from a given time on.
 
+### Added (2026-11-20, test 1 with nested calibration)
+- **Test 1 met** (camera added to a GFS-Wave + ERA5 forecast with the buoy's measured
+  wind; bar and amendment in `docs/experiments/sensing_model_bar.md`). The gate was refitted
+  per outer fold on inner predictions only. On 34,723 strips at 71 buoys in 41 groups:
+  - wind-wave height RMSE 0.2258 → 0.2079 m (−0.0179 [−0.0253, −0.0088], station groups);
+  - total height RMSE 0.2670 → 0.2623 m (−0.0047 [−0.0083, −0.0007]).
+- **Supporting results.**
+  - Permuting the camera within buoy and forecast-height quartile makes the fusion worse
+    than the forecast alone, so the gain comes from the individual images.
+  - The secondary variance-weighted arm does better still: 0.2578 m total and 0.2020 m
+    wind-wave.
+  - With the anemometer withheld, the swap's total-height gain does not clear zero; its
+    wind-wave gain does.
+- **The historical diagnostic is superseded** (0.2635 / 0.2095 m; its calibration
+  predictions came from models that trained or validated on the outer test groups, per the
+  inventory in the bar doc).
+- **S2 check.** The same nested calibration applied to bar S2's stage-2 fusion gives
+  0.2667 against 0.2883 m total and 0.2407 against 0.2928 m wind-wave. S2 and its
+  2026-11-27 confirmation are unchanged.
+- **New scripts.**
+  - `scripts/sensing_nested_splits.py`: leave-two-folds-out pair splits, package
+    `ndbc_buoycam_heights_v2cvn`. They drove 30 inner DINOv3-gentle runs
+    (10 pairs × seeds 0–2, 21.1 GPU-hours on the shared server).
+  - `scripts/sensing_nested_inventory.py`: which groups each cached model saw.
+  - `scripts/sensing_nested_fusion.py`: the nested scorer and the S2 check; fed the outer
+    predictions, it reproduces the historical numbers exactly.
+- **Changed scripts and config.**
+  - `scripts/sensing_forecast_corrector.py --splits`.
+  - Pair-split bootstrap keys in `configs/experiments/ndbc_buoycam_heights_v2cv.yaml`.
+  - Results in `docs/experiments/sensing_forecast_results.md`.
+
 ### Fixed (2026-11-14)
 - `sources.ndbc.buoycam.caption_band_rows`: the caption is a fixed 30-row band in
   both strip formats (measured); it was scaled to 25 rows for 2304 × 246 strips.

@@ -26,6 +26,7 @@ PATH = ROOT / "data/registry/data_dictionary.yaml"
 #: Every collection id the live status can publish (dashboard/status.py and
 #: dashboard/collections.py). The dictionary must describe each of them.
 LIVE_IDS = {
+    "noaa_gfs_wave",
     "ndbc_buoycam",
     "ndbc_realtime",
     "pacioos_waimea",
