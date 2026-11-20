@@ -77,3 +77,9 @@ The intact-minus-degraded delta is reported with the same interval.
 **S2 check, not a new bar.** The same inner camera predictions calibrate the stage-2 combiners of `scripts/buoycam_partition_fusion.py` (`fit_fold`) for each outer fold, applied once to fold k. Report the gated swap against ERA5 + wind beside S2's scored 0.267 vs 0.288 m. Intervals use S2's own unit (whole buoys) and station groups, with 1,000 resamples and seed 0, as S2's script does. Bar S2, its scored result and its fresh-strip confirmation on 2026-11-27 are unchanged.
 
 **Fresh strips.** The separate fresh-strip confirmation keeps its date, 2026-11-27, and its hypotheses.
+
+**Result, 2026-11-20: met on both co-primary endpoints.** With the nested gate, adding the camera lowered forecast + measured wind RMSE:
+- wind-wave height from 0.2258 to 0.2079 m, interval −0.0253 to −0.0088;
+- total height from 0.2670 to 0.2623 m, interval −0.0083 to −0.0007.
+
+The S2 check holds at 0.2667 against 0.2883 m. Details are in [the results](sensing_forecast_results.md#test-1-result-with-nested-calibration-november-20).
