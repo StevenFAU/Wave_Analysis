@@ -68,3 +68,24 @@ To test whether conditional weighting survives a shift in dates, use one fixed h
 Use the same wind-wave endpoint, three-input rule, penalty and paired group-bootstrap intervals as above. Refit the constant blend, the variance-weighted energy blend (including its forecast-total quartiles), and the two-input control on the same early rows. Report the raw forecast and camera as references. The primary comparisons are the three-input rule against the constant and variance-weighted blends. Require the strip-weighted 95% upper endpoints for both differences to fall below zero. Report group counts, fold scores, equal-group sensitivity, and calibration and test date ranges.
 
 This cutoff applies to blend calibration. The archived base models were fitted geographically and can draw on later dates at other stations. ERA5 is reanalysis. This tests calendar transfer of the weights within an already inspected archive. An end-to-end prospective claim requires a separate window and base predictions available at issue time.
+
+### Results on October 31 through November 13
+
+The conditional rule scored **21.56 cm RMSE** on 7,855 later strips from 67 buoys in 39 geographic groups. Each fold used 19,692–20,826 calibration strips from September 23 through October 28. The camera alone scored 27.85 cm.
+
+| Earlier-fit comparator | Later RMSE (cm) | Conditional minus comparator (cm, paired 95% interval) | Groups improved |
+|---|---:|---:|---:|
+| Forecast | 24.26 | −2.69 [−4.08, −1.84] | 34/39 |
+| Variance-weighted energy blend | 21.83 | −0.27 [−0.43, −0.03] | 27/39 |
+| Constant camera weight | 21.77 | −0.20 [−0.41, −0.04] | 25/39 |
+| Conditional rule without disagreement | 21.65 | −0.08 [−0.28, +0.09] | 24/39 |
+
+Both pooled comparisons met the specified criterion. Giving each group equal weight widened the uncertainty about a typical group's gain. The difference was −0.12 cm [−0.38, +0.18] against the variance blend and −0.22 cm [−0.45, +0.02] against the constant blend. The conditional rule beat the variance blend in four of five folds and the constant blend in three. The later data also leave open whether the disagreement input itself adds value. These results support testing the frozen three-input rule and the simple constant blend on a separate future window.
+
+The cutoff and decision criterion are in commit `2fae15151`. To reproduce this comparison, use the same verified archive:
+
+```bash
+uv run --locked --group forecast python scripts/wind_wave_reliability.py --forward --out runs/wind-wave-reliability-forward-reproduction
+```
+
+The per-fold fits and dates, scores and contrasts are tracked in `reports/wind-wave-reliability/forward/`.

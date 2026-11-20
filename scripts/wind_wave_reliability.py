@@ -25,7 +25,10 @@ TRANSFER_ARMS = [
     "reliability",
 ]
 LOCAL_ARMS = [*TRANSFER_ARMS, "local_constant", "local_reliability"]
+FORWARD_ARMS = ["forecast", "camera", "varweight", "constant", "two_inputs", "reliability"]
 WIND = "true_wind_wave_m"
+EARLY_END = pd.Timestamp("2026-10-29", tz="UTC")
+LATER_START = pd.Timestamp("2026-10-31", tz="UTC")
 
 
 def inputs(root):
@@ -48,24 +51,27 @@ def inputs(root):
         )
     ).rename(columns={"cmp_ww": "forecast", "cam_ww": "camera", WIND: "observed"})
     path = runs / "forecast-fusion-nested-v1/rows.parquet"
-    outer = pd.read_parquet(
+    paired = [("baseline", "==", "model_wind"), ("arrangement", "==", "nested")]
+    outer = pd.read_parquet(path, filters=[*paired, ("target", "==", WIND)])
+    total = pd.read_parquet(
         path,
-        filters=[
-            ("baseline", "==", "model_wind"),
-            ("arrangement", "==", "nested"),
-            ("target", "==", WIND),
-        ],
+        filters=[*paired, ("target", "==", "true_hs_m")],
+        columns=["sample_id", "forecast"],
+    ).rename(columns={"forecast": "cmp_hs"})
+    outer = (
+        outer.merge(total, on="sample_id", how="left", validate="1:1")
+        .merge(
+            labels[["sample_id", "station_id", "wind_speed_mps", "time_utc", "wind_wave_label_m"]],
+            on=["sample_id", "station_id"],
+            how="left",
+            validate="1:1",
+        )
+        .rename(columns={"wind_speed_mps": "wind"})
     )
-    outer = outer.merge(
-        labels[["sample_id", "station_id", "wind_speed_mps", "time_utc", "wind_wave_label_m"]],
-        on=["sample_id", "station_id"],
-        how="left",
-        validate="1:1",
-    ).rename(columns={"wind_speed_mps": "wind"})
     for frame in (inner, outer):
         frame["cv_fold"] = frame.cv_fold.astype(str)
         frame["disagreement"] = frame.camera - frame.forecast
-        if not np.isfinite(frame[[*INPUTS, "observed"]].to_numpy()).all():
+        if not np.isfinite(frame[[*INPUTS, "observed", "cmp_hs"]].to_numpy()).all():
             raise ValueError("missing forecast, camera, wind or observed height")
     outer["time_utc"] = pd.to_datetime(outer.time_utc, utc=True, errors="raise")
     if (len(outer), outer.station_group.nunique(), outer.station_id.nunique()) != (34723, 41, 71):
@@ -109,8 +115,22 @@ def fit_weights(cal, features):
     }
 
 
-def transfer(inner, outer):
+def fit_early_variance(cal, test):
+    """Refit the archived energy blend and its bin edges on this fold's early rows."""
+    cols = {"observed": WIND, "forecast": "cmp_ww", "camera": "cam_ww"}
+    cuts = np.quantile(cal.cmp_hs, [0.25, 0.5, 0.75])
+    model = nested.VarWeight().fit(cal.rename(columns=cols), cuts)
+    return model.predict(test.rename(columns=cols))[1], {
+        "cuts": cuts.tolist(),
+        "squared_energy_residuals": model.v,
+    }
+
+
+def transfer(inner, outer, *, forward=False):
     frames, fits = [], {}
+    if forward:
+        # The package timestamps give both inner and outer predictions the same strip clock.
+        early_ids = outer.loc[outer.time_utc < EARLY_END, "sample_id"]
     for k, holdout in outer.groupby("cv_fold"):
         test = holdout.copy()
         cal = nested.calibration(inner, k)
@@ -122,6 +142,23 @@ def transfer(inner, outer):
         ):
             raise ValueError(f"invalid calibration population for fold {k}")
         fits[k] = {}
+        if forward:
+            cal = cal[cal.sample_id.isin(early_ids)]
+            test = test[test.time_utc >= LATER_START].copy()
+            if cal.empty or test.empty:
+                raise ValueError(f"empty early calibration or later test for fold {k}")
+            dates = outer.loc[outer.sample_id.isin(cal.sample_id), "time_utc"]
+            fits[k]["window"] = {
+                "calibration_rows": len(cal),
+                "calibration_groups": cal.station_group.nunique(),
+                "calibration_first": dates.min().isoformat(),
+                "calibration_last": dates.max().isoformat(),
+                "test_rows": len(test),
+                "test_groups": test.station_group.nunique(),
+                "test_first": test.time_utc.min().isoformat(),
+                "test_last": test.time_utc.max().isoformat(),
+            }
+            test["varweight"], fits[k]["varweight"] = fit_early_variance(cal, test)
         for arm, cols in (("two_inputs", INPUTS[:2]), ("reliability", INPUTS)):
             fit = fit_weights(cal, cols)
             fits[k][arm] = fit
@@ -231,40 +268,59 @@ def score(population, df, arms, candidate, comparators):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     root = repo_root()
-    parser.add_argument("--out", type=Path, default=root / "runs/wind-wave-reliability-v1")
-    out = parser.parse_args().out
+    parser.add_argument(
+        "--forward", action="store_true", help="calibrate before the fixed time gap"
+    )
+    parser.add_argument("--out", type=Path)
+    args = parser.parse_args()
+    name = "wind-wave-reliability-forward-v1" if args.forward else "wind-wave-reliability-v1"
+    out = args.out or root / "runs" / name
     if out.exists():
         raise FileExistsError(out)
     inner, outer, digest = inputs(root)
-    rows, fits = transfer(inner, outer)
-    later, coverage = local_calibration(rows)
-    fit_scores, fit_contrasts = score(
-        "unseen",
-        rows,
-        TRANSFER_ARMS,
-        "reliability",
-        ["forecast", "fusion", "varweight", "constant", "two_inputs"],
-    )
-    local_scores, local_contrasts = score(
-        "later",
-        later,
-        LOCAL_ARMS,
-        "local_reliability",
-        ["reliability", "local_constant", "forecast", "fusion", "varweight"],
-    )
-    scores = pd.concat([fit_scores, local_scores], ignore_index=True)
-    contrasts = pd.concat([fit_contrasts, local_contrasts], ignore_index=True)
+    rows, fits = transfer(inner, outer, forward=args.forward)
+    coverage = None
+    if args.forward:
+        scores, contrasts = score(
+            "forward",
+            rows,
+            FORWARD_ARMS,
+            "reliability",
+            ["forecast", "varweight", "constant", "two_inputs"],
+        )
+        # The archived gate and permutation predictions used full-calendar calibration.
+        rows = rows.drop(columns=["fusion", "degraded"])
+    else:
+        later, coverage = local_calibration(rows)
+        fit_scores, fit_contrasts = score(
+            "unseen",
+            rows,
+            TRANSFER_ARMS,
+            "reliability",
+            ["forecast", "fusion", "varweight", "constant", "two_inputs"],
+        )
+        local_scores, local_contrasts = score(
+            "later",
+            later,
+            LOCAL_ARMS,
+            "local_reliability",
+            ["reliability", "local_constant", "forecast", "fusion", "varweight"],
+        )
+        scores = pd.concat([fit_scores, local_scores], ignore_index=True)
+        contrasts = pd.concat([fit_contrasts, local_contrasts], ignore_index=True)
+        later_preds = later[["sample_id", "local_constant", "local_reliability"]]
+        rows = rows.drop(columns="cmp_hs").merge(
+            later_preds, on="sample_id", how="left", validate="1:1"
+        )
     out.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(dir=out.parent) as directory:
         stage = Path(directory) / "result"
         stage.mkdir()
         scores.to_csv(stage / "scores.csv", index=False)
         contrasts.to_csv(stage / "contrasts.csv", index=False)
-        coverage.to_csv(stage / "station-calibration.csv", index=False)
-        later_preds = later[["sample_id", "local_constant", "local_reliability"]]
-        rows.merge(later_preds, on="sample_id", how="left", validate="1:1").to_parquet(
-            stage / "rows.parquet", index=False
-        )
+        if coverage is not None:
+            coverage.to_csv(stage / "station-calibration.csv", index=False)
+        rows.to_parquet(stage / "rows.parquet", index=False)
         (stage / "fits.json").write_text(
             json.dumps({"historical_rows_sha256": digest, "folds": fits}, indent=2) + "\n"
         )

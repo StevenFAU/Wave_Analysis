@@ -83,3 +83,39 @@ def test_local_offset_uses_only_the_first_week():
     assert set(later2.station_id) == {"A"}
     assert list(counts2.eligible) == [True, False]
     np.testing.assert_array_equal(later.local_reliability, later2.local_reliability)
+
+
+def test_forward_fits_exclude_cutoff_gap_and_scoring_labels():
+    times = [wr.EARLY_END - pd.Timedelta(seconds=1), wr.EARLY_END, wr.LATER_START]
+    outer = pd.DataFrame(
+        [
+            {
+                "cv_fold": fold,
+                "station_group": fold,
+                "sample_id": f"{fold}-{i}",
+                "time_utc": stamp,
+                "cmp_hs": 2.0,
+                "forecast": 1.0,
+                "camera": 1.4,
+                "disagreement": 0.4,
+                "wind": 5.0,
+                "observed": 1.1,
+            }
+            for fold in "012"
+            for i, stamp in enumerate(times)
+        ]
+    )
+    inner = pd.concat(
+        [
+            outer[outer.cv_fold.isin([a, b])].assign(pair=f"pair{a}{b}")
+            for a, b in combinations("012", 2)
+        ],
+        ignore_index=True,
+    )
+    rows, fits = wr.transfer(inner, outer, forward=True)
+    assert set(rows.sample_id) == {"0-2", "1-2", "2-2"}
+    assert all(f["reliability"]["rows"] == 2 for f in fits.values())
+    inner.loc[inner.time_utc >= wr.EARLY_END, "observed"] = 50.0
+    changed, new_fits = wr.transfer(inner, outer.assign(observed=20.0), forward=True)
+    assert fits == new_fits
+    pd.testing.assert_frame_equal(rows[wr.FORWARD_ARMS], changed[wr.FORWARD_ARMS])
