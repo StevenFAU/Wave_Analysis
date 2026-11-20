@@ -335,6 +335,65 @@ fold 1 this one chose epoch 5, after unfreezing. Its heads sit beside a wind-wav
 its out-of-fold wind-wave RMSE must stay at or below 0.260 m, and its bar is fixed here
 before it runs.
 
+### T5 result (2026-11-20): T5-W met; the camera's skill reaches into the swell
+
+Fifteen probe runs on the lab server (`deploy/dgx/measure.sh`, commit `2bb64ae`; seeds
+0, 1, 2 x five folds, 7-10 minutes each; checkpoint hashes and test strips checked per
+run), scored by `scripts/measurement_visibility.py` (output
+`runs/measurement-t5/dinov3-s012/`). R² is the share of the variation of a quantity
+across unseen buoys and times that a prediction explains (1 is perfect, 0 is no better
+than one constant).
+
+**T5-W, the virtual anemometer: met.** The buoy's wind speed from one camera strip,
+over 40,605 strips at all 43 groups:
+
+| Wind speed | RMSE |
+|---|---|
+| Camera alone (three seeds averaged) | **0.96 m/s** |
+| ERA5 10-m wind, corrected by a line on the training strips | 1.27 m/s |
+| Camera + ERA5 (beside) | 0.86 m/s |
+| Camera + ERA5, camera features permuted within buoy and ERA5 decile | 1.35 m/s |
+
+- Camera minus ERA5: **−0.31 m/s [−0.44, −0.10]**, a quarter less error. A single
+  seed's camera scores 1.02-1.03 m/s, still below ERA5.
+- Gust: the camera 1.14 m/s against ERA5's gust 1.57 m/s, −0.43 [−0.55, −0.26].
+- With its features permuted within buoy and ERA5-wind decile the camera adds nothing
+  (1.35 m/s, worse than ERA5 alone): its share is about the strip, not the buoy.
+
+**T5-V, the visibility curve** (40,555 strips with wind and a spectrum):
+
+| Frequency band (period) | Camera alone R² | Wind alone R² | Camera adds to wind |
+|---|---|---|---|
+| 0.030-0.095 Hz (swell, 10.5-33 s) | 0.47 [0.33, 0.61] | 0.13 | +0.34 [+0.31, +0.42] |
+| 0.095-0.155 Hz (6.5-10.5 s) | 0.78 [0.72, 0.83] | 0.38 | +0.40 [+0.35, +0.46] |
+| 0.155-0.255 Hz (3.9-6.5 s) | 0.86 [0.84, 0.88] | 0.58 | +0.28 [+0.22, +0.33] |
+| 0.255-0.495 Hz (2-3.9 s) | 0.68 [0.62, 0.73] | 0.52 | +0.17 [+0.15, +0.22] |
+
+- Per bin, the camera **sees** every bin from 0.0625 Hz (16 s) up, and **adds to wind**
+  at every bin from 0.0525 Hz (19 s) up: the visibility edge is 0.0525 Hz. Below it
+  (0.0325-0.0475 Hz, 21-31 s) neither sees anything. Its best bins are 0.17-0.19 Hz
+  (R² 0.77, periods 5-6 s); at the top bin, 0.485 Hz, it still has R² 0.29 where wind
+  has none.
+- **The report's hypothesis fails:** the camera's skill is not confined above the
+  sea-swell separation. Every bin from 0.0525 to 0.0925 Hz (11-19 s) adds to wind
+  (+0.08 to +0.36 of R²).
+
+Beside the bar (found, not confirmed):
+
+- In light wind (under 5 m/s, 13,911 strips at all 43 groups, where NDBC's separation
+  frequency is 0.25 Hz and energy below 0.1 Hz can only be swell) the camera still
+  explains the swell band: R² 0.36 [0.18, 0.51], against 0.01 for wind.
+- Within each buoy (each buoy's own mean removed from truth and predictions), the camera
+  follows the swell band over time: R² 0.44 [0.36, 0.51], +0.27 [+0.24, +0.30] over
+  wind; in light wind 0.35 [−0.04, 0.43].
+- Not separated: the encoder was trained on total, wind-wave and swell height (stage 1),
+  so it was taught to estimate swell. Whether it reads swell from the water's long
+  undulations, from the horizon's motion (swell pitches the hull) or from the sea state
+  that tends to come with swell, this test does not say. The water-only crop (as for
+  M-S1) would be the next control.
+
+**Wind-wave height:** untouched (frozen probes).
+
 ## Review of the prepared experiments (2026-11-19)
 
 Codex's diff against `8f225d5c8` (26 files, about 3,400 lines) was read before any run.
