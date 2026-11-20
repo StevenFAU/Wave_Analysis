@@ -23,3 +23,38 @@ Fit one additive offset to the primary camera weight per buoy, using its early s
 ### Scoring and interpretation
 
 Use 2,000 paired whole-station-group bootstrap draws, NumPy RNG seed 0, to estimate percentile intervals for differences in metres. For equal-group sensitivity average each group's MSE equally before taking the square root. For each evaluated population, compute each arm on the same rows. The chronological comparison simulates the order of local label availability within this archive. Base models and reanalysis remain historical. Interpret both tests in light of prior inspection of this archive and reserve a future independent window for any new claim.
+
+## Results
+
+### Transfer to unseen groups
+
+The conditional rule achieved **19.92 cm RMSE** on 34,723 historical strips from 71 buoys. The forecast alone scored 22.58 cm and the camera alone scored 25.44 cm. Both comparisons specified for success favored the rule. Negative differences below indicate lower RMSE for the conditional rule.
+
+| Comparator | RMSE (cm) | Difference (cm, paired 95% interval) | Groups improved |
+|---|---:|---:|---:|
+| Forecast | 22.58 | −2.66 [−3.18, −2.03] | 37/41 |
+| Registered gate | 20.79 | −0.87 [−1.21, −0.58] | 34/41 |
+| Variance-weighted energy blend | 20.20 | −0.28 [−0.38, −0.14] | 33/41 |
+| Constant camera weight | 20.10 | −0.18 [−0.26, −0.09] | 30/41 |
+| Conditional rule without disagreement | 20.05 | −0.13 [−0.19, −0.05] | 23/41 |
+
+The rule improved on both the registered gate and variance blend in each of the five outer folds. Giving each geographic group equal weight yielded differences of −0.98 cm [−1.37, −0.56] against the gate and −0.20 cm [−0.31, −0.07] against the variance blend. Removing g41040 yielded strip-weighted differences of −0.82 cm [−1.13, −0.52] and −0.27 cm [−0.37, −0.13] respectively. The fitted constant camera weights ranged from 0.367 to 0.423. Conditioning on the three inputs contributed a modest additional gain.
+
+At buoy 41040, the conditional rule reduced RMSE from the gate's 16.18 cm to 10.85 cm across 631 strips. The forecast alone still did best at 7.49 cm.
+
+### One week of local measurements
+
+Of the 71 buoys, 68 met the calibration and evaluation requirements. They supplied 5,548 first-week strips, 1,544 strips in the two-day gap, and 27,046 later strips across 39 groups. The local offset scored **19.84 cm** on later strips, versus **19.74 cm** for the unchanged conditional rule. The paired difference was +0.11 cm [−0.20, +0.52], with 20 of 39 groups improving. Although the local rule beat the locally fitted constant control by 0.12 cm [0.04, 0.20], these results give no evidence that a week of local labels improves the transferred rule overall.
+
+Buoy 41040 was an exception. On its 518 later strips the offset reduced RMSE from 10.70 to 8.46 cm. The forecast alone scored 7.63 cm. Its improvement illustrates why checking the pooled result matters after selecting a station for its large errors.
+
+### Reproduction
+
+The protocol was committed in `c82d9cdbd` before fitting. From the repository root, with the nested historical run archive available, use a new output directory:
+
+```bash
+sha256sum --quiet -c data/manifests/ml/forecast-fusion-nested-v1.sha256
+uv run --locked --group forecast python scripts/wind_wave_reliability.py --out runs/wind-wave-reliability-reproduction
+```
+
+The output includes row-level predictions, per-fold weights and cuts, calibration counts, fold and geographic scores, and paired intervals. The small result files are tracked in `reports/wind-wave-reliability/`. The SHA-256 in `fits.json` identifies the archived outer predictions used for scoring.

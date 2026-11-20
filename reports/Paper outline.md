@@ -354,6 +354,8 @@ Across the full station sample, the 63 largest underestimates had a median obser
 
 **Hypothesis for a later test.** The camera gets too much weight where the local forecast is unusually accurate and the camera reads low. Estimate each arm's reliability from training groups using forecast height, measured wind and camera–forecast disagreement. Select any weighting change inside the training folds and test on independent stations or dates. Keep the registered confirmation fixed. [Figure and image-selection script](../scripts/buoycam_fusion_review.py)
 
+**Historical follow-up.** Fitting that rule on geographically separate calibration strips reduced pooled RMSE to 19.92 cm. A constant camera weight scored 20.10 cm, the variance blend 20.20 cm and the registered gate 20.79 cm. Adding a week of local wave measurements produced no overall improvement. This historical comparison was motivated by a station already inspected. [Protocol, intervals and buoy 41040 results](../docs/experiments/wind_wave_reliability.md) · [Fold and group scores](wind-wave-reliability/scores.csv)
+
 ## Still to land before submission
 
 | Item | Date | State on 2026-11-20 | What it decides |

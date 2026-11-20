@@ -142,3 +142,5 @@ For the nested result:
 3. Fit the inner correctors: `scripts/sensing_forecast_corrector.py` with `--splits pair01 … pair34`, written to `runs/forecast-baseline-inner-v1.parquet`.
 4. Score with `scripts/sensing_nested_fusion.py`. Its inputs are the v2cvn labels, the existing `oof_dinov3-gentle.csv`, both forecast tables and the inner runs. It writes `runs/forecast-fusion-nested-v1/` (`rows.parquet`, `summary.json`, `report.md`).
 5. `scripts/sensing_nested_inventory.py` regenerates the inventory. [Registered protocol](sensing_model_bar.md)
+
+A subsequent historical experiment tested whether forecast height, measured wind and camera disagreement predict how much weight to give the camera. It also evaluated what a week of wave measurements at a new buoy adds. [Wind-wave reliability protocol and results](wind_wave_reliability.md)
