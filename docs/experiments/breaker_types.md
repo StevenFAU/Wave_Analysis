@@ -334,3 +334,87 @@ score below DINOv3's 0.84.
 **Runs.** A 24-clip smoke test of the feature pass first (not scored), then the feature
 pass over the 9,000 clips and the heads, each one container on one GPU with at least 40 GB
 free, launched inside the project's shared launch lock.
+
+## Result of Y-B3 (2026-11-20 UTC): met, and the still-frame control agrees
+
+Three runs on the lab server, all on code commit `19bda86e8` (the bar was committed before
+them, in `8551d83a8`). First a 24-clip smoke test (`video-breakers-20261119t2349-features-vj-smoke`,
+not scored). Then the V-JEPA 2 pass over the 9,000 clips in three versions
+(`video-breakers-20261120t0005-features-vj-v1`, 97 minutes on one shared GPU, 4.1 GB of
+features). Then the heads (`video-breakers-20261120t0143-heads-vj-v1`, 15 minutes for 90
+fits, scored together with the Y-B1 run's predictions on the same 2,000 draws). The Y-B1 and
+Y-B2 numbers come out exactly as before. As in Y-B1, 8,998 clips decoded to 150 frames, and
+the two Huangcuo clips with 148 frames have their last frame repeated. One detail of the
+implementation matters: the Hugging Face V-JEPA 2 code computes its rotary positions for a
+16 x 16 patch grid (crop size 256 / patch 16), so 224-pixel input would get wrong positions.
+The 224 -> 256 resize in the design is needed, not optional.
+
+| Arm | Pooled macro-F1 | Equal-site macro-F1 | Accuracy |
+|---|---|---|---|
+| DINOv3, order-free head (Y-B2) | **0.850** | 0.828 | 0.849 |
+| V-JEPA 2, clip in order, order-free head | 0.848 | 0.828 | 0.847 |
+| DINOv3, temporal head (Y-B1) | 0.840 | 0.818 | 0.840 |
+| V-JEPA 2, clip in order, temporal head (**candidate**) | 0.833 | 0.804 | 0.833 |
+| V-JEPA 2, frames shuffled, order-free head | 0.813 | 0.783 | 0.813 |
+| V-JEPA 2, frames shuffled, temporal head (**comparator**) | 0.795 | 0.764 | 0.794 |
+| V-JEPA 2, each window's middle frame repeated, temporal head | 0.752 | 0.705 | 0.749 |
+| Yin et al.'s CRNN, their 2 Hz frames | 0.653 | 0.564 | 0.651 |
+
+Pooled macro-F1: the F1 of each breaker type over all 9,000 clips, each predicted by the
+model of the fold that held its beach out, averaged over the three types (chance is about
+0.33). Equal-site macro-F1: the mean of the six beaches' own macro-F1. Each row is the mean
+of seeds 0-2. Intervals are 95 % over site-days.
+
+- **Bar Y-B3 is met.** In order minus shuffled is **+0.038 [+0.024, +0.052]** pooled and
+  +0.040 [+0.017, +0.067] equal-site. Every seed agrees (+0.026, +0.045, +0.043). The clip in
+  order scores higher at five beaches and the same at Point Reyes.
+- **The still-frame control agrees, so the reading fixed in advance applies: the encoder
+  uses the clip's motion.** In order minus still is +0.081 [+0.066, +0.098] (seeds +0.063
+  to +0.103), and in order is higher at all six beaches. The still version has none of the
+  shuffled version's flicker, so the shuffled arm's loss is not only damage from scrambled
+  input.
+- **The gain comes from inside the encoder's windows, not from the head.** With heads that
+  cannot use the tokens' order, in order minus shuffled is still +0.035 [+0.021, +0.048].
+- **Motion lifts V-JEPA 2 only to where DINOv3 already is.** V-JEPA 2 in order minus DINOv3
+  temporal is −0.007 [−0.026, +0.012], and minus DINOv3 order-free it is −0.017 [−0.032,
+  −0.001]. Against Yin et al.'s CRNN it is +0.180 [+0.153, +0.208].
+- **Seeing all 150 frames helps even without motion.** The shuffled version (all frames,
+  no coherent motion) scores 0.795 and the still version (three frames) 0.752, so part of
+  what the still arm loses is appearance and part is motion. This pair has no interval; it
+  is not among the planned comparisons.
+- Not planned, computed after the results were seen, on the same draws: the order-free head
+  beats the temporal head on V-JEPA 2 tokens too, by +0.015 [+0.006, +0.023]. This is what
+  Y-B2 found for DINOv3. The best V-JEPA 2 arm and the best DINOv3 arm are equal: 0.848
+  against 0.850, −0.002 [−0.017, +0.013].
+
+Per beach (macro-F1 over the types present there, mean of the seeds):
+
+| Beach | V-JEPA 2 in order | shuffled | still | in order, order-free head | shuffled, order-free head | DINOv3 temporal |
+|---|---|---|---|---|---|---|
+| A, Outer Banks | 0.78 | 0.71 | 0.72 | 0.78 | 0.75 | 0.82 |
+| B, Oak Island | 0.76 | 0.74 | 0.66 | 0.81 | 0.76 | 0.74 |
+| C, Port Aransas | 0.71 | 0.62 | 0.42 | 0.70 | 0.64 | 0.71 |
+| D, Point Reyes | 0.87 | 0.87 | 0.78 | 0.93 | 0.88 | 0.90 |
+| E, Huangcuo | 0.83 | 0.78 | 0.77 | 0.85 | 0.76 | 0.85 |
+| F, Xisha Bay | 0.88 | 0.85 | 0.85 | 0.89 | 0.87 | 0.90 |
+
+Shuffling the frames lowers the recall of every type, where recall is the share of a type's
+clips labelled correctly. For the candidate head, spilling falls from 0.88 to 0.85, plunging
+from 0.79 to 0.75 and surging from 0.82 to 0.79. Most errors are still between plunging and
+surging: per seed, about 490 surging clips are called plunging and 410 plunging clips are
+called surging, close to DINOv3's 430 and 350. The still version fails most at dissipative
+Port Aransas, where it calls 230 of the 588 spilling clips plunging (per seed), against 29
+for the clip in order.
+
+**What it means.** At beaches it was never trained on, frozen V-JEPA 2 does use the breaking
+motion. Given the same pixels in the wrong order it loses 0.04 macro-F1, and given one frame
+per window it loses 0.08. Both controls point the same way, and the gap does not need a
+head that reads order. That answers the question Y-B2 left open: the motion carries
+information about breaker type, and a video encoder picks it up. But at these crops it buys
+no more than DINOv3 gets from single frames. V-JEPA 2 with motion reaches 0.83-0.85,
+DINOv3 without motion 0.84-0.85. So the image encoder's appearance features (foam, the
+wave face, run-up) make up for what DINOv3 cannot see in time. Not tested, each needing a
+bar of its own: whether the two are complementary (DINOv3 frames together with V-JEPA 2
+motion tokens), an attentive probe over V-JEPA 2's full token grid instead of the spatial
+average, and fine-tuning. The limits of Y-B1 apply here too: these are curated crops around
+a visible event, and within a site the label is mostly the day.
