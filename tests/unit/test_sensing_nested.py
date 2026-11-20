@@ -7,6 +7,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
+
+from wave_analysis.ingest.checksum import sha256_file
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -61,3 +64,52 @@ def test_variance_weights_favour_the_smaller_residual():
     hs, ww = vw.predict(test.assign(cmp_hs=np.maximum(test["cmp_ww"], 2.0)))
     assert np.all(np.abs(ww - y) < np.abs(test["cmp_ww"] - y))
     assert np.all(hs >= ww)
+
+
+def test_nested_builder_protects_existing_and_overlapping_paths(tmp_path):
+    src = tmp_path / "source"
+    src.mkdir()
+    marker = src / "original"
+    marker.write_text("keep")
+    alias = tmp_path / "alias"
+    alias.symlink_to(src, target_is_directory=True)
+    existing = tmp_path / "other"
+    existing.mkdir()
+    for dest in (src, src / "child", tmp_path, alias / "child", existing):
+        with pytest.raises(SystemExit):
+            ns.main(["--src", str(src), "--out", str(dest)])
+    assert marker.read_text() == "keep"
+    assert existing.is_dir()
+    assert not (src / "child").exists()
+
+
+def test_nested_builder_publishes_only_verified_packages(tmp_path, monkeypatch):
+    import buoycam_cv_folds
+
+    monkeypatch.setattr(buoycam_cv_folds, "N_DRAWS", 50)
+    monkeypatch.setattr(buoycam_cv_folds, "VAL_MIN_BUOYS", 2)
+    src = tmp_path / "source"
+    src.mkdir()
+    strips = _strips()
+    strips.to_csv(src / "labels.csv", index=False)
+    folds = strips.groupby("station_group", as_index=False).agg(
+        stations=("station_id", "nunique"),
+        strips=("station_id", "size"),
+        cv_fold=("cv_fold", "first"),
+    )
+    folds.assign(swell_share=0.5).to_csv(src / "folds.csv", index=False)
+    sums = "".join(f"{sha256_file(src / name)}  {name}\n" for name in ("labels.csv", "folds.csv"))
+    manifest = src / "SHA256SUMS"
+    manifest.write_text(sums.replace(sha256_file(src / "folds.csv"), "0" * 64))
+    dest = tmp_path / "nested"
+    args = ["--src", str(src), "--out", str(dest)]
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        ns.main(args)
+    assert list(tmp_path.iterdir()) == [src]
+    manifest.write_text(sums)
+    assert ns.main(args) == 0
+    assert (dest / "folds.csv").samefile(src / "folds.csv")
+    assert not (src / "labels.csv").samefile(dest / "labels.csv")
+    for line in (dest / "SHA256SUMS").read_text().splitlines():
+        digest, name = line.split()
+        assert sha256_file(dest / name) == digest

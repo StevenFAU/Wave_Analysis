@@ -21,7 +21,7 @@ preprocessing:
 split:
   protocol: cross_station
   group_col: station_id
-  test_groups: []        # fix explicitly once the camera archive has >= 3 months of data
+  test_groups: []        # template: fill with held-out station IDs before building this benchmark
   val_groups: []
   audit:
     group_cols: [station_id]

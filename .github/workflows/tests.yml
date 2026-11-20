@@ -27,6 +27,9 @@ jobs:
       - run: uv python install ${{ matrix.python }}
       - run: uv sync --group dev --extra netcdf --python ${{ matrix.python }}
       - run: uv run pytest --cov --cov-report=term --cov-report=xml
+      - name: Locked forecast baseline smoke test
+        if: matrix.python == '3.12'
+        run: uv run --locked --group forecast pytest -q tests/integration/test_forecast_corrector.py
       - uses: actions/upload-artifact@v4
         if: matrix.python == '3.12'
         with:

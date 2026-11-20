@@ -26,17 +26,17 @@ fold-by-fold inner models).
 Writes ``<out>`` (default ``data/processed/packages/ndbc_buoycam_heights_v2cvn``): every
 file of v2cv as a hard link except ``labels.csv`` (v2cv's text plus ten ``split_pair<ab>``
 columns), ``SHA256SUMS`` (rewritten) and a new ``pairs.csv`` (one row per group: its
-fold and its role in each pair).
+fold and its role in each pair). Choose a new output directory for each build.
+The package is published after the source manifest checksums have been verified.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import itertools
-import shutil
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
 import pandas as pd
@@ -44,6 +44,7 @@ import pandas as pd
 from buoycam_cv_folds import N_FOLDS, VAL_SHARE, draw_val  # scripts/ is on sys.path
 from wave_analysis.config import data_dir
 from wave_analysis.datasets.splits import TEST, TRAIN, VAL
+from wave_analysis.ingest.checksum import sha256_file
 
 SEED = 100
 VAL_OF_POOL = VAL_SHARE / (1 - 1 / N_FOLDS)
@@ -74,16 +75,7 @@ def pair_roles(t: pd.DataFrame) -> tuple[dict[str, dict[str, str]], pd.DataFrame
     return role, pd.DataFrame(summary)
 
 
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument(
-        "--src", type=Path, default=data_dir("processed") / "packages/ndbc_buoycam_heights_v2cv"
-    )
-    ap.add_argument(
-        "--out", type=Path, default=data_dir("processed") / "packages/ndbc_buoycam_heights_v2cvn"
-    )
-    args = ap.parse_args(argv)
-    src, out = args.src, args.out
+def build_package(src: Path, out: Path) -> tuple[int, int, pd.DataFrame]:
     labels = pd.read_csv(
         src / "labels.csv", dtype={"station_id": str, "cv_fold": str}, low_memory=False
     )
@@ -91,10 +83,10 @@ def main(argv: list[str] | None = None) -> int:
     t = labels.loc[use].copy()
     role, summary = pair_roles(t)
 
-    if out.exists():
-        shutil.rmtree(out)
+    if (src / "pairs.csv").is_file():
+        raise ValueError("source already contains pairs.csv; supply the outer-fold package")
     for f in src.rglob("*"):
-        if f.is_file() and f.name not in ("labels.csv", "SHA256SUMS"):
+        if f.is_file() and f.relative_to(src) not in (Path("labels.csv"), Path("SHA256SUMS")):
             dest = out / f.relative_to(src)
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.hardlink_to(f)
@@ -116,23 +108,53 @@ def main(argv: list[str] | None = None) -> int:
         **{f"role_{n}": folds["station_group"].map(lambda g, n=n: role[g][n]) for n in names}
     )
     pairs.to_csv(out / "pairs.csv", index=False, float_format="%.4f")
-    sums = {
-        n: hashlib.sha256((out / n).read_bytes()).hexdigest() for n in ("labels.csv", "pairs.csv")
-    }
     lines = []
+    seen = set()
     for line in (src / "SHA256SUMS").read_text().splitlines():
-        _sha, name = line.split(None, 1)
-        lines.append(
-            f"{sums['labels.csv']}  {name.strip()}"
-            if name.strip().lstrip("./") == "labels.csv"
-            else line
-        )
-    prefix = "./" if any(" ./" in x for x in lines) else ""
-    lines.append(f"{sums['pairs.csv']}  {prefix}pairs.csv")
+        digest, name = line.split(None, 1)
+        path = Path(name)
+        if path.is_absolute() or ".." in path.parts or path in seen:
+            raise ValueError(f"invalid or duplicate package path {name}")
+        seen.add(path)
+        if path == Path("labels.csv"):
+            actual = sha256_file(src / path)
+            line = f"{sha256_file(out / path)}  {name}"
+        else:
+            actual = sha256_file(out / path)
+        if actual != digest:
+            raise ValueError(f"checksum mismatch for {name}")
+        lines.append(line)
+    if not {Path("labels.csv"), Path("folds.csv")} <= seen:
+        raise ValueError("source manifest must include labels.csv and folds.csv")
+    prefix = "./" if any(" ./" in line for line in lines) else ""
+    lines.append(f"{sha256_file(out / 'pairs.csv')}  {prefix}pairs.csv")
     (out / "SHA256SUMS").write_text("\n".join(lines) + "\n")
-    print(
-        f"{out}: {len(t):,} strips, {t['station_group'].nunique()} groups; validation {VAL_OF_POOL:.4f} of each pool"
+    return len(t), t["station_group"].nunique(), summary
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument(
+        "--src", type=Path, default=data_dir("processed") / "packages/ndbc_buoycam_heights_v2cv"
     )
+    ap.add_argument(
+        "--out", type=Path, default=data_dir("processed") / "packages/ndbc_buoycam_heights_v2cvn"
+    )
+    args = ap.parse_args(argv)
+    src, out = args.src, args.out
+    src = src.resolve(strict=True)
+    target = out.resolve()
+    if target.is_relative_to(src) or src.is_relative_to(target):
+        ap.error("source and output directories must be separate and must not contain each other")
+    if out.exists() or out.is_symlink():
+        ap.error(f"output already exists: {out}; choose a new package directory")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(dir=out.parent) as temp:
+        stage = Path(temp) / "package"
+        stage.mkdir()
+        strips, groups, summary = build_package(src, stage)
+        stage.rename(out)
+    print(f"{out}: {strips:,} strips, {groups} groups; validation {VAL_OF_POOL:.4f} of each pool")
     print(summary.to_string(index=False, float_format=lambda x: f"{x:.3f}"))
     return 0
 

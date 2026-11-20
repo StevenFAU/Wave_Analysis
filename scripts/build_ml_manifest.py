@@ -10,6 +10,7 @@ together with a provenance record.
 """
 
 import argparse
+from dataclasses import replace
 
 import pandas as pd
 
@@ -24,6 +25,7 @@ from wave_analysis.datasets import (
     time_block_split,
     write_provenance,
 )
+from wave_analysis.datasets.splits import TEST, TRAIN, VAL
 
 
 def make_split(df: pd.DataFrame, spec: dict):
@@ -78,8 +80,24 @@ def main() -> int:
         filters=cfg["task"].get("filters", []),
         split=split,
     )
-    audit = cfg["split"].get("audit", {})
-    report = check_leakage(df.loc[df.index.isin(split.labels.index)], split, **audit)
+    spec = cfg["split"]
+    required = {TRAIN, TEST}
+    if spec["protocol"] == "iid_grouped":
+        fractions = spec.get("fractions", (0.7, 0.15, 0.15))
+        required = {
+            role for role, share in zip((TRAIN, VAL, TEST), fractions, strict=True) if share > 0
+        }
+    elif spec["protocol"] in ("cross_time", "extreme") or spec.get("val_groups"):
+        required.add(VAL)
+    counts = built.manifest["split"].value_counts().to_dict()
+    if missing := sorted(required - counts.keys()):
+        ap.error(
+            f"{split.protocol} has no eligible rows for {', '.join(missing)}; check the split and task filters"
+        )
+
+    # The audit and the reported counts describe the rows actually written.
+    filtered_split = replace(split, labels=built.manifest["split"])
+    report = check_leakage(built.manifest, filtered_split, **spec.get("audit", {}))
     name = cfg["name"]
     out = repo_root() / "data" / "manifests" / "ml" / name
     paths = built.write(out, name)
@@ -94,7 +112,7 @@ def main() -> int:
         out / f"{name}.provenance.yaml",
     )
     print(
-        f"{name}: {len(built.manifest)} samples, {len(built.exclusions)} excluded; split {split.summary()}; "
+        f"{name}: {len(built.manifest)} samples, {len(built.exclusions)} excluded; split {counts}; "
         f"leakage ok={report.ok}"
     )
     return 0 if report.ok else 2

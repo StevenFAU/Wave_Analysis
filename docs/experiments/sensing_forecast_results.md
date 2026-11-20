@@ -98,7 +98,43 @@ The historical S2 arrangement, re-run by the same code, gives 0.2668 and 0.2398 
 
 ## Reproduce
 
-Run `scripts/sensing_forecast_corrector.py` with the v2cv package labels, `runs/gfs-wave-strip-match-v1.parquet`, the hourly `era5_at_buoys.parquet` and the measurement branch's `runs/prep-v1/station-depths.csv`. The script uses scikit-learn and the repository dependencies. Run `scripts/sensing_fusion_diagnostic.py` with those labels, the saved forecast predictions and the existing `oof_dinov3-gentle.csv`. The row-level outputs are `runs/forecast-baseline-oof-v1.parquet` and `runs/forecast-fusion-historical-v1.parquet`.
+From the repository root, the following commands verify the saved inputs and score both
+targets with the registered models. The checksum manifest identifies the local research
+artifacts required for this run. The output directory must be new.
+
+```bash
+sha256sum --check --quiet data/manifests/ml/forecast-fusion-nested-v1.sha256
+uv run --locked --group forecast python scripts/sensing_nested_fusion.py \
+  --labels data/processed/packages/ndbc_buoycam_heights_v2cvn/labels.csv \
+  --oof runs/buoycam-cv-stage1-20261119/oof_dinov3-gentle.csv \
+  --forecast runs/forecast-baseline-oof-v1.parquet \
+  --inner-forecast runs/forecast-baseline-inner-v1.parquet \
+  --inner-runs runs/buoy-pair*-seed*-nested-gentle \
+  --out runs/forecast-fusion-nested-reproduction
+```
+
+The primary comparison is in `summary.json` under `test1 → nested → model_wind`.
+The two targets are `true_wind_wave_m` and `true_hs_m`. The `forecast` and
+`fusion` entries give the RMSE values in metres.
+
+### Rebuild the forecast inputs
+
+The outer corrector uses scikit-learn 1.9.1. With the archived inputs, this command
+produces one forecast for each eligible strip and target (71,542 rows in total).
+The station-depth file is the copy used by the confirmation protocol.
+
+```bash
+uv run --locked --group forecast python scripts/sensing_forecast_corrector.py \
+  --labels data/processed/packages/ndbc_buoycam_heights_v2cv/labels.csv \
+  --matched runs/gfs-wave-strip-match-v1.parquet \
+  --era data/processed/era5/buoycam/era5_at_buoys.parquet \
+  --depths runs/claims-inputs/station-depths.csv \
+  --out runs/forecast-baseline-oof-reproduction.parquet
+```
+
+For the historical diagnostic, run `scripts/sensing_fusion_diagnostic.py` with the
+outer labels, forecast predictions and `oof_dinov3-gentle.csv`. The archived output
+is `runs/forecast-fusion-historical-v1.parquet`.
 
 For the nested result:
 1. Build the pair-split package with `scripts/sensing_nested_splits.py`.

@@ -20,17 +20,22 @@
 > wave spectrum, that normally require dedicated wave instruments? Can it do so
 > **on cameras and coastlines it has never seen**?
 
-The reviewed literature suggests a sharp answer to the *second* question is not yet
-possible. That is not for lack of architectures: CNN/ConvLSTM (Choi et al. 2020),
-CNN-BiLSTM with ADCP ground truth (Kim et al. 2023), V-JEPA + SlowFast +
-physics loss (Kamagata et al. 2026), and image–IMU attention fusion (Yang et al. 2026)
-have all been tried. What is missing is **large, diverse, synchronised, real-world data
-whose labels trace back to a physical instrument**
-([literature matrix](docs/literature/literature_matrix.md)).
+## What the buoy cameras added
 
-Wave_Analysis therefore builds the **data foundation first**: verified acquisition,
-preserved spectra, layered QC, explicit synchronisation, leakage-safe splits, and
-provenance for every number. Models come after.
+At buoys held out from training, a six-view camera strip improved estimates of **wind-wave
+height** when added to ERA5, GFS-Wave and the buoy's measured wind. The full autumn 2026
+package contains 41,091 daylight and twilight strips from 79 buoys in 43 geographic
+groups. Both rows below use the same 34,723 eligible strips from 71 buoys in 41 groups.
+Each strip is labelled from measurements at its own buoy.
+
+| Target | Forecast + measured wind RMSE | With camera | Difference and 95% interval |
+|---|---:|---:|---:|
+| Wind-wave height | 0.2258 m | 0.2079 m | −0.0179 m [−0.0253, −0.0088] |
+| Total significant wave height | 0.2670 m | 0.2623 m | −0.0047 m [−0.0083, −0.0007] |
+
+These retrospective intervals resample whole station groups. With equal weight per
+group, the wind-wave improvement persists and the total-height interval crosses zero.
+The prospective check uses later strips and frozen models. [Evaluation protocol](docs/experiments/sensing_model_bar.md) · [Fold results and sensitivities](docs/experiments/sensing_forecast_results.md) · [Scoring command](docs/experiments/sensing_forecast_results.md#reproduce) · [Scoring input checksums](data/manifests/ml/forecast-fusion-nested-v1.sha256)
 
 ### Working hypotheses
 

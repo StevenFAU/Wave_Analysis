@@ -305,8 +305,8 @@ def check_leakage(
         report.temporal_neighbours = n
 
     if hash_col is not None:
-        tr_h = df.loc[lab == TRAIN, hash_col].astype("int64").tolist()
-        te_h = df.loc[lab == TEST, hash_col].astype("int64").tolist()
+        tr_h = df.loc[lab == TRAIN, hash_col].astype("uint64").tolist()
+        te_h = df.loc[lab == TEST, hash_col].astype("uint64").tolist()
         report.near_duplicate_pairs = sum(
             1 for a in te_h for b in tr_h if hamming_distance(int(a), int(b)) <= max_hamming
         )

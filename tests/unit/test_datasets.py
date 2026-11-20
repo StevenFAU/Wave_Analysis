@@ -325,6 +325,15 @@ def test_near_duplicate_detection_in_audit():
     assert check_leakage(df, r, hash_col="h").near_duplicate_pairs == 1
 
 
+@pytest.mark.parametrize(
+    ("candidate", "expected"), [(0x8000000000000001, 1), (0xFFFFFFFFFFFFFFFF, 0)]
+)
+def test_duplicate_audit_preserves_unsigned_high_bit(candidate, expected):
+    df = pd.DataFrame({"station": ["A", "B"], "h": pd.Series([0, candidate], dtype="uint64")})
+    split = holdout_groups_split(df, "station", test_groups=["B"])
+    assert check_leakage(df, split, hash_col="h").near_duplicate_pairs == expected
+
+
 # ----------------------------------------------------------------------------- builder / provenance
 
 

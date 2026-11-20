@@ -50,4 +50,6 @@ Every manifest build runs `check_leakage`:
 3. near-duplicate frames (dHash Hamming distance ≤ 4) across train and test.
 
 The result is written into the manifest's provenance. `scripts/build_ml_manifest.py`
-exits non-zero on leakage.
+exits non-zero on leakage. Its cross-station and cross-region benchmarks require
+eligible training and test rows after task filters, plus validation rows when validation
+groups were requested. The builder checks these counts before writing any output.
