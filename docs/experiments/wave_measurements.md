@@ -277,6 +277,31 @@ validation slope 0.741 % at epoch 6, below its heads-only best (0.757 %). B: bes
 (`buoy_slope_v2lr`) runs on the five folds.** Its fold-1 pilot is that recipe's fold-1
 run (same config, seed and data; its test lines unread), so folds 0, 2, 3 and 4 follow.
 
+### M-S3 result (2026-11-20): not met; a stable fine-tune adds nothing to the frozen features
+
+Candidate B on all five folds (fold 1 from its pilot; folds 0, 2-4 on the lab server,
+commits `5d1b260` to `f0c5544`, identical training code; about 55 minutes each), scored
+as M-S2 on the same 38,387 strips.
+
+| Arm (stacked with wind + geometry on the validation buoys) | Slope RMSE |
+|---|---|
+| Frozen probe (all inputs) | 0.0084 |
+| Stable fine-tune, candidate B (all inputs) | 0.0084 |
+| Wind + geometry | 0.0101 |
+
+- **Bar M-S3 is not met:** fine-tuned minus frozen is +0.00004 [−0.00012, +0.00017],
+  level. The fine-tuned camera alone is level with the frozen camera alone too (0.0088
+  each, −0.00002 [−0.0003, +0.0002]).
+- **The recipe is stable:** no fold diverged; the training loss fell steadily after
+  unfreezing (to 0.011-0.016) at every fold, where M-S2's collapsed to 0.42.
+- It trained the backbone usefully on the validation buoys at three folds (chosen epochs
+  5, 6 and 5: 0.73-0.75 % against 0.75-0.82 % for their heads-only epochs) and not at two
+  (folds 0 and 4 kept epochs 2 and 1).
+
+So end-to-end training on slope, once it works, buys nothing over a ridge on the frozen
+height model's features at unseen buoys: what the camera knows about slope is already
+in what it learned for height. M-S1's gain stands as the camera's slope result.
+
 ## Bar T5: the visibility curve and the virtual anemometer (fixed 2026-11-19, before any T5 run)
 
 Test 5 of the wave-sensing report (`reports/Wave sensing landscape and multimodal
@@ -393,6 +418,13 @@ Beside the bar (found, not confirmed):
   M-S1) would be the next control.
 
 **Wind-wave height:** untouched (frozen probes).
+
+**Fine-tune: not run.** The probes show skill, so the bar allows one with M-S3's
+recipe. M-S3 then showed that recipe trains the backbone stably and gains nothing over
+the frozen features for slope, the nearest wind-sea quantity, at unseen buoys; the
+frozen probe already beats ERA5 for wind. A T5 fine-tune would also need new label
+columns (band equivalent heights) on the server and a multi-target bar. It is left as
+a possible follow-up, not a next step.
 
 ## Review of the prepared experiments (2026-11-19)
 

@@ -24,6 +24,15 @@ separately (`docs/REPRODUCIBILITY.md`).
   (0.0086 against 0.0084, +0.0002 [+0.0001, +0.0004]). Every fold kept a heads-only
   epoch: four of five runs diverged once the backbone unfroze, so end-to-end slope
   training is still untested.
+- **Bar M-S3 not met:** with a stable recipe (`buoy_slope_v2lr`: the backbone's learning
+  rate re-warms at unfreezing, gradient clipping, lr 1e-4; `fit_heights(rewarm_epochs=,
+  grad_clip=)`, off by default) no fold diverges, but the fine-tune is level with the
+  frozen probe (0.0084 each, +0.00004 [−0.00012, +0.00017]).
+- **Test 5 (bar T5):** ERA5 10-m wind and gust at the buoys (`scripts/buoycam_era5_wind.py`)
+  and the 46 bins' energies (`measurement_labels.py`). **T5-W met:** one camera strip gives
+  the buoy's wind speed with RMSE 0.96 m/s against 1.27 m/s for ERA5 (−0.31 [−0.44,
+  −0.10]). The camera adds to wind at every spectral bin from 0.0525 Hz (19 s) up, so its
+  skill is not confined above the sea-swell separation.
 
 ### Added (2026-11-14)
 - NDBC buoy-camera sea-state dataset (`ndbc_buoycam_sea_state_v0`): every archived
