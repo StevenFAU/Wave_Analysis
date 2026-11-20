@@ -193,6 +193,55 @@ separately (`docs/REPRODUCIBILITY.md`).
 - The storm set is sealed: no per-clip label, feature or score of a storm date is opened
   until the bars that use it are committed (`docs/experiments/webcoos_video.md`, "Storm set").
 
+### Results (2026-11-19, test 9: time-exposure and brightest images)
+- T9-A and T9-B not met: on the held-out year 2025 one still estimates H_s better than the
+  ten-minute time-exposure or brightest-pixel image of the same minutes (0.265 m against
+  0.308 and 0.311 m; +0.043 m [+0.026, +0.061] and +0.045 m [+0.035, +0.056]), and the three
+  together are no better than the still (0.281 m). The same in 2026 and at every camera.
+  Write-up: `docs/experiments/sensing_timex_bars.md`.
+
+### Results (2026-11-19, test 3 video half: Kamagata's network)
+- T3-S: the project's whole-clip read-out (H_s RMSE 0.513 m) is ahead of Kamagata's
+  SlowFast head with its physics loss (1.140 m) on the same 992 clips and date folds,
+  -0.627 m [-0.924, -0.364]. The physics term (T_p^2 = 6 H_s) collapses the head to about
+  2.0 m for every clip; without it the head reaches 0.653 m and the project is still ahead,
+  -0.140 m [-0.207, -0.061]. Write-up: `docs/experiments/sensing_per_wave_bars.md`.
+- Kim's network: smoke test only (GoogLeNet loading fixed); the full run waits for the
+  sealed storm set, where the class endpoints are now decided (bars fixed before any storm
+  label was opened).
+
+### Added (2026-11-19, test 9: time-exposure and brightest images)
+- Bar T9 fixed before any run (`docs/experiments/sensing_timex_bars.md`): a still, a
+  `timex` and a `brt` image of the same ten minutes at the four CDIP-paired cameras,
+  frozen DINOv3 probes, trained on 2024 and scored on 2025 (97.5 % day-bootstrap
+  intervals for each input against the still). Package of 30,931 triples
+  (`scripts/sensing_timex_package.py`; 5 truncated source images excluded and listed),
+  probes `scripts/sensing_timex_probe.py`, config `configs/experiments/sensing_timex_v1.yaml`.
+
+### Added (2026-11-19, shore per-wave labels: tests 2 and 3, video half)
+- CDIP per-wave labels for the shore clips on the 18 development dates
+  (`scripts/sensing_cdip_waves.py`, Codex's, checked): mean individual height,
+  H_1/3, H_1/10, T_z and wave count from the buoy record holding each clip's midpoint.
+  1,444 clips, 1,145 records, 17 dates (2026-09-24 is past CDIP 433's archive). The
+  provider evaluated every wave (no flag 2), so the flag sensitivity is empty. Counts:
+  `scripts/sensing_cdip_inventory.py`; write-up `docs/experiments/sensing_per_wave_bars.md`.
+- Measured mean height is 0.58 H_s at these buoys, not Kim's 0.631; the interim run's
+  proxy overstated it by about 8 %.
+- Bars T2 (per-wave targets) and T3-V (Kim's CNN-BiLSTM and Kamagata's SlowFast head with
+  its physics loss, on the interim run's 992 clips and date folds) fixed before any run;
+  Kim's training options corrected to the paper's Table 6 before any Kim run. Scorer
+  `scripts/sensing_shore_test2.py`, trainer `scripts/sensing_shore_test3.py`, config
+  `configs/experiments/sensing_shore_v1.yaml`.
+
+### Results (2026-11-19, test 2 on the development dates)
+- Kim's classes are unassessable on these dates (186 clips in range, 6 dates, mostly one
+  storm); every arm names the lowest class for every clip (64.0 %, the majority's), since
+  no estimate reaches 1.25 m. They are decided on the confirmation dates.
+- T2-C not met: the pixel spectrum's T_z error is 1.29 s against climatology's 1.37 s,
+  -0.08 s [-0.20, +0.08].
+- Test 3's video arms are queued behind the paper strip runs; Kim's network is not
+  trained on the development dates.
+
 ### Added (2026-11-19, shore video: physics features v2 and bars M6-M7)
 - The 18 interim dates are now development data (`configs/experiments/webcoos_video_dev_dates.txt`,
   committed with its SHA-256 before any development); every date the final run adds is a

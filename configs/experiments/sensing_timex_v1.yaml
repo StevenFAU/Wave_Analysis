@@ -1,0 +1,41 @@
+# Test 9: time-exposure (timex) and brightest-pixel (brt) images against one still.
+# Fixed 2026-11-19 before any image was packaged: docs/experiments/sensing_timex_bars.md.
+# Package: scripts/sensing_timex_package.py (desktop). Probes: scripts/sensing_timex_probe.py,
+# run by deploy/dgx/run.sh with TRAIN_SCRIPT=scripts/sensing_timex_probe.py PKG=sensing_timex_v1 KIND=video.
+name: sensing_timex_v1
+cameras: {currituck_hampton_inn: 433, jennette_south: 243, oakisland_east: 200, oakisland_west: 200}
+data:
+  window_min: 10                  # timex/brt cover the ten minutes from their stamp
+  min_sun_elevation_deg: 0.0      # at the still
+  height_px: 256                  # aspect kept; two 256-px squares at feature time
+  jpeg_quality: 90
+  masks:                          # source pixels (x, y from the bottom, w, h), as the video work
+    currituck_hampton_inn: [0, 170, 560, 170]
+split:
+  train_year: 2024
+  val_week_share: 0.15            # ISO weeks of the training year, seed 0
+  seed: 0
+  test_year: 2025
+  embargo_days: 3                 # 1-3 January of the test year left out
+  later_year: 2026
+encoder:                          # the shore video's DINOv3 image recipe, unchanged
+  timm: vit_large_patch16_dinov3.lvd1689m
+  layers: [11, 15, 19, 23]
+  pool: [1, 4, 4]
+  tile_px: 256
+arms: [still, timex, brt]         # all3 (the three side by side) reported, not a bar
+heads:                            # the shore video's attentive probe settings
+  d: 256
+  heads: 4
+  dropout: 0.2
+  epochs: 60
+  batch_size: 32
+  lr: 3.0e-4
+  weight_decay: 0.05
+  seeds: [0, 1, 2]
+evaluation:
+  bootstrap: {n_boot: 2000, alpha: 0.025, seed: 0, groups: local_day}   # 97.5 %: two inputs vs the still
+  wmo_edges_m: [0.5, 1.25, 2.5]   # closed on the right (WMO code table 3700)
+  bars:
+    T9-A: timex minus still, RMSE of H_s on 2025, 97.5 % interval below zero
+    T9-B: brt minus still, RMSE of H_s on 2025, 97.5 % interval below zero
