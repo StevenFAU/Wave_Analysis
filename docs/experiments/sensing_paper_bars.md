@@ -34,6 +34,31 @@ Use training splits for fitting and validation only for epoch selection. Use thr
 
 **Five grouped folds (fixed 2026-11-19, before any fold run).** Arms `choi`, `kim`, `kim` with its own options, `yang` and `yang-no-attitude`, each on folds 0–4 of `ndbc_buoycam_heights_v2cv` with seeds 0, 1 and 2 and the recipes above (75 runs). Each fold trains on its training groups, chooses its epoch on its validation groups and predicts its test groups once; the five test sets together cover all 79 buoys in 43 station groups. The reference is DINOv3-gentle's own fold runs on the same folds and seeds (`buoy-fold<k>-…-seed<s>-cv-dinov3-gentle`). Each fold's three-seed mean is scored on its own test groups and the folds are pooled out of fold; the paired differences and pass marks are those of the sealed rows, with 95 % intervals from 2,000 resamples of whole station groups (seed 0). Fold 0's test set is a single group of 18 West Coast buoys, so the group count, not the buoy count, sets the interval width. `score_sensing_papers.py` takes the 15 runs per arm.
 
+### Results on the sealed buoys (2026-11-19, retrospective)
+
+Three-seed means on identical strips; 95 % intervals from 2,000 resamples of whole sealed buoys. These 12 buoys have served earlier decisions, so the rows look back; they do not confirm. Runs and scorer outputs are under `runs/` in this worktree (`*-station-three-seed-comparison.json`).
+
+| Comparison | Strips, buoys | DINOv3-gentle | Paper's network | Difference [95 % interval] | Bar |
+|---|---|---|---|---|---|
+| Choi, calm or rough (accuracy) | 3,185, 12 | 99.22 % | VGG16 94.66 % | +4.55 points [+2.08, +8.61] | met |
+| Kim, five classes, shared recipe (accuracy) | 4,791, 12 | 70.17 % | snapshot CNN 50.09 % | +20.08 points [+12.82, +26.25] | met (both) |
+| Kim, five classes, Kim's own options (accuracy) | 4,791, 12 | 70.17 % | snapshot CNN 46.48 % | +23.69 points [+15.23, +30.75] | |
+| Yang, H_s (RMSE) | 3,419, 11 | 0.418 m | 0.514 m | −0.096 m [−0.122, −0.063] | met |
+| Yang with minus without attitude (RMSE) | 3,419, 11 | | 0.514 against 0.495 m | +0.020 m [+0.007, +0.031] | attitude does not help |
+
+- **Choi.** The project model is 4.6 points more accurate than VGG16 on the calm-or-rough task, and the gain comes from how it uses the images, not from its backbone:
+
+  | Control (3,185 strips, 12 buoys) | Accuracy | Difference [95 % interval] |
+  |---|---|---|
+  | DINOv3 backbone in Choi's pipeline, gentle schedule, minus VGG16 | 94.07 against 94.66 % | −0.60 points [−1.24, −0.16] |
+  | Six-view DINOv3-gentle minus the same backbone in Choi's pipeline | 99.22 against 94.07 % | +5.15 points [+2.40, +9.63] |
+  | DINOv3 backbone in Choi's pipeline, shared recipe (collapsed) | 70.39 % (every strip called calm) | not informative |
+
+  With everything else Choi's, the DINOv3 backbone is no better than VGG16: slightly worse on the six-view average, 0.5–1.0 points better per single view (only view 0's interval excludes zero). What lifts the project model is its own input and design: whole views at 270 × 480 rather than lower halves at 224 × 224, one model across the six views, and training on every sea state with the wind-wave and swell heights. One view alone gives VGG16 89.4–91.8 % and the backbone in Choi's pipeline 90.1–92.5 % (2,535–2,919 strips per position), so averaging the six views is worth about 3–5 points in Choi's pipeline.
+- **Kim.** Kim's snapshot CNN, trained from random weights, barely leaves the lowest class: always guessing that class scores 46.3 % on these strips, the shared recipe 50.1 % and Kim's own options 46.5 %. Within one class, the snapshot CNN is right on 85 % of strips and DINOv3 on 99 %. The project model's 70 % is the earlier V2 result again (69 %, `compare_papers.py`).
+- **Yang.** DINOv3 is 0.096 m better in RMSE. Buoy 44065 drops out because its view 3 never has a horizon reading, and Yang needs six views with attitude. The horizon attitude makes Yang worse by 0.020 m, as it made the project model worse in bar V2-1 (+0.038 m). Without attitude Yang scores 0.495 m, still 0.076 m behind DINOv3 (−0.099 to −0.049, not a registered row).
+- The middle sea states are outside Choi's task, and Kim's classes cover H_s from 1.19 to 5.15 m only.
+
 ### GPU queue
 
 The sealed strip order is Choi VGG16, Kim snapshot, Yang and its no-attitude control. Each arm uses seeds 0, 1 and 2. Submit one seed at a time and fetch its predictions and settings before aggregating. The deployment runner expects the existing heights package locally for checksum comparison. Set `GPU_HOST` to the authorized SSH alias. Use a current shared-server utilization check to select the device. Torchvision will require the official VGG16 and ResNet18 ImageNet weights in the server torch cache or network access during initialization. Use the same cloned weights for the three seeds.
