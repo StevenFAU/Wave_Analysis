@@ -67,6 +67,31 @@ separately (`docs/REPRODUCIBILITY.md`).
   −0.10]). The camera adds to wind at every spectral bin from 0.0525 Hz (19 s) up, so its
   skill is not confined above the sea-swell separation.
 
+### Added (2026-11-19, the papers' own networks on the sealed buoys)
+- Test 3, strip half (`docs/experiments/sensing_paper_bars.md`, three seeds each, 12 sealed
+  buoys, retrospective): DINOv3-gentle beats every paper network trained on our strips. Choi
+  (VGG16, calm or rough) 99.2 against 94.7 % (+4.6 points [+2.1, +8.6]); Kim (snapshot CNN,
+  five classes) 70.2 against 50.1 % (+20.1 [+12.8, +26.2]), and against 46.5 % with Kim's own
+  training options; Yang (ResNet-18 + attitude transformer, H_s) 0.418 against 0.514 m
+  (−0.096 m [−0.122, −0.063]). Yang's horizon attitude makes it worse (+0.020 m [+0.007, +0.031]).
+- Choi's controls: the DINOv3 backbone inside Choi's own pipeline (gentle schedule) is no
+  better than VGG16 (94.1 against 94.7 %, −0.6 points [−1.2, −0.2]), and the six-view project
+  model beats it by +5.2 points [+2.4, +9.6]: the gain is the project's input and design, not
+  the backbone. One view alone gives VGG16 89-92 %. With the shared recipe the backbone
+  collapsed to calling every strip calm; the gentle rerun was registered before it ran.
+- The same arms over the five grouped folds (all 79 buoys out of fold, 75 runs, station-group
+  intervals) agree: Choi +2.9 points [+1.6, +4.0], Kim +13.9 [+10.8, +18.4] (+18.7 with Kim's
+  own options), Yang −0.066 m [−0.085, −0.046]. Attitude: −0.022 m [−0.041, +0.004] there,
+  so across both splits it has no consistent effect on Yang.
+- `Kim2023SnapshotCNN` now follows the paper's Fig. 5 (4 × 4 pooling after blocks 1-3, none
+  after block 4, flattened map into one dense layer); the earlier class pooled 2 × 2 after every
+  block and averaged globally. Fixed before any Kim run.
+- `scripts/train_sensing_papers.py`: per-view test probabilities, arm `choi-dinov3` (the
+  project's backbone in Choi's pipeline), Adam and a gentle schedule as recipe options;
+  `scripts/predict_sensing_papers.py` (per-view probabilities from a finished run's chosen
+  epoch); `scripts/score_sensing_papers.py`: registered arm pairs (`--control`), each view
+  position (`--views`), and the five grouped folds (15 runs per arm, station-group intervals).
+
 ### Added (2026-11-14)
 - NDBC buoy-camera sea-state dataset (`ndbc_buoycam_sea_state_v0`): every archived
   strip paired with its own buoy's wave height (`scripts/buoycam_pairs.py`), and a

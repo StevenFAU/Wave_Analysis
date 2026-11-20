@@ -19,7 +19,7 @@ papers' numbers, whose data are unavailable or simulated.
 | Module | Paper | Structure | Unverified details (exposed as parameters) |
 |---|---|---|---|
 | `baselines/choi2020.py::Choi2020Regressor` | Choi et al. 2020 | frame differences → VGG-16 trunk → BiConvLSTM (256, 3×3) → GAP → FC → H_s | FC widths, resolution, optimiser |
-| `baselines/kim2023.py::Kim2023SnapshotCNN` | Kim et al. 2023 | 4 conv blocks (16-32-64-64) → FC → softmax | kernel sizes, FC width |
+| `baselines/kim2023.py::Kim2023SnapshotCNN` | Kim et al. 2023 (Fig. 5, Table 3) | 4 blocks of 3×3 conv (16-32-64-64) + BN + ReLU; 4×4/4 max pooling after blocks 1-3, none after 4 → flatten → FC → softmax | input size (not stated; 224 × 224 here) |
 | `baselines/kim2023.py::Kim2023CNNBiLSTM` | Kim et al. 2023 | GoogLeNet features → BiLSTM(2000) → dropout 0.5 → FC | frozen vs fine-tuned encoder |
 | `multimodal/yang2026.py::Yang2026Fusion` | Yang et al. 2026 | ResNet-18 + sin/cos attitude MLP → fusion → sinusoidal PE → transformer encoder → mean pool → MLP; `sliding_window_predict` | fusion operator (concat vs sum), depth, heads |
 | `multimodal/slowfast_head.py::SlowFastWaveHead` | Kamagata et al. 2026 (verified V1) | fast (16 frames, 4 heads) + slow (α = 4, 8 heads) transformers, 2 layers, d = 384 → Linear → MLP 384-128-5 (GELU) → 5·Softplus | frame encoder supplied externally (V-JEPA weights not bundled) |
