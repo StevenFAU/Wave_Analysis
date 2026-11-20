@@ -66,9 +66,13 @@ data/external/**
 id_rsa*
 id_ed25519*
 id_ecdsa*
+id_dsa*
 rclone.conf
 .cdsapirc
 .netrc
+.pypirc
+sync.env
+*.kdbx
 kubeconfig
 *.kubeconfig
 *.ovpn
@@ -83,4 +87,9 @@ credentials*.json
 *.mov
 *.avi
 *.mkv
+*.webm
+*.m4v
 *.log
+# Camera stills (NDBC, WebCOOS) are JPEG; a figure meant for the docs goes in with git add -f.
+*.jpg
+*.jpeg
