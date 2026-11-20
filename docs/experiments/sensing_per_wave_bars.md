@@ -359,9 +359,12 @@ What it means:
   better than the pixel spectrum (1.29 s) and climatology (1.37 s) on the 922 labelled
   clips, found, not confirmed.
 
-**Kim's network:** the first smoke test failed in setup (this torchvision refuses
-`aux_logits=False` with pretrained GoogLeNet weights); fixed in 1864e3af0, smoke test
-relaunched. No Kim training has happened; the full run waits for the storm set.
+**Kim's network:** two smoke tests failed in setup (this torchvision refuses
+`aux_logits=False` with pretrained GoogLeNet weights, fixed in 1864e3af0; an unlabelled
+clip made the class labels float, fixed in 778e8293c). The third,
+`video-days-20261120t0010-t3-kim-smoke` (29 clips, two epochs), ran end to end: frame
+features, BiLSTM heads, scores. Its numbers mean nothing; the full run waits for the
+storm set.
 
 GoogLeNet's ImageNet weights (`googlenet-1378be20.pth`, SHA-256 `1378be20a8e8...`) are in
 the server's torch cache with a row in its weights ledger.
