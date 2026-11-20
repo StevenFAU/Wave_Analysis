@@ -69,6 +69,9 @@ separately (`docs/REPRODUCIBILITY.md`).
   buoys, swell share predicts the under-call (Spearman −0.89).
 
 ### Added (2026-11-19, shore video: sealed storm set)
+- `configs/experiments/webcoos_video_storm_v1.yaml`: the storm-date estimate run for the shore-labels storm bars
+  (T2-A, T2-B, T3-K). It is webcoos_video_v1's whole-clip recipe in five folds of storm dates, with no physics-v2
+  block. Its M3-M5 lines are estimates there, not bars. It starts on its own once the storm package is on the server.
 - Storm storage: `WEBCOOS_VIDEO_SET=storm` gives `scripts/webcoos_video_clips.py` the storm set's own raw root,
   output folder and package (`webcoos_video_storm_v1`). The new `offload` step moves cut storm clips to the GPU
   server, checked against their ledger SHA-256, and frees the local copies. `ship` and `offload` share one R2 helper.

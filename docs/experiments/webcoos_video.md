@@ -460,6 +460,21 @@ under the same lock):
   The desktop thus holds about one date's clips at a time, with 40 GB kept free. At the end,
   the storm package and its windows are shipped like the sample's.
 
+**Storm-date estimates (set 2026-11-19, to start once the storm package is on the server).**
+The shore-labels session's storm-set bars (T2-A, T2-B, T3-K;
+`docs/experiments/sensing_per_wave_bars.md`, committed at c11351d0c before any storm label
+was opened) score `clip`, `window` and `window_image` estimates out of fold. The final run
+leaves the storm dates out, so the bars' fallback applies:
+- the same whole-clip recipe, `train_video_probe.py --whole-clip-only` with
+  `configs/experiments/webcoos_video_storm_v1.yaml` (webcoos_video_v1's settings, minus
+  the physics-v2 block);
+- trained and read out in five folds of the storm dates;
+- window features in their own server cache, so the final run's cache is untouched.
+
+That run's "M3-M5" lines are estimates on storm dates, not bars; M6-M7 are not scored. It
+launches under the same GPU rule as the final run, and only while no other video container
+runs, so the video work holds one GPU at a time.
+
 **Sealed, the third set beside development and confirmation.** The storm clips have their
 own archive root, `data/raw/webcoos_video_storm`, which the sample's `pair` never reads.
 So they cannot enter the `webcoos_video_v1` package or the final run's development or
