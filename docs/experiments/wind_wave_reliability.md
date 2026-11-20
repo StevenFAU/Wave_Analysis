@@ -58,3 +58,13 @@ uv run --locked --group forecast python scripts/wind_wave_reliability.py --out r
 ```
 
 The output includes row-level predictions, per-fold weights and cuts, calibration counts, fold and geographic scores, and paired intervals. The small result files are tracked in `reports/wind-wave-reliability/`. The SHA-256 in `fits.json` identifies the archived outer predictions used for scoring.
+
+## Earlier calibration, later scoring
+
+### Protocol fixed after the two results above, before fitting this comparison
+
+To test whether conditional weighting survives a shift in dates, use one fixed historical cutoff across all buoys. For each held-out geographic fold, fit every combiner on its usual nested calibration strips dated **before October 29, 2026 at 00:00 UTC**. Score every eligible strip in the held-out fold **from October 31 at 00:00 UTC** to the end of the same historical archive. This leaves a common 48-hour gap. Choose one cutoff to reserve roughly the last two weeks for scoring. Do not select among dates or change the fit after scoring.
+
+Use the same wind-wave endpoint, three-input rule, penalty and paired group-bootstrap intervals as above. Refit the constant blend, the variance-weighted energy blend (including its forecast-total quartiles), and the two-input control on the same early rows. Report the raw forecast and camera as references. The primary comparisons are the three-input rule against the constant and variance-weighted blends. Require the strip-weighted 95% upper endpoints for both differences to fall below zero. Report group counts, fold scores, equal-group sensitivity, and calibration and test date ranges.
+
+This cutoff applies to blend calibration. The archived base models were fitted geographically and can draw on later dates at other stations. ERA5 is reanalysis. This tests calendar transfer of the weights within an already inspected archive. An end-to-end prospective claim requires a separate window and base predictions available at issue time.
