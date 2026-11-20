@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-import torch
 
-from wave_analysis.models.wave_heights import FLOOR_M, MultiViewRegressor, log_heights
+torch = pytest.importorskip("torch")
+
+from wave_analysis.models.wave_heights import FLOOR_M, MultiViewRegressor, log_heights  # noqa: E402
 
 
 def test_log_heights_floor_and_nan():

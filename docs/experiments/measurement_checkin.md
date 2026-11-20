@@ -1,6 +1,6 @@
 # Wave measurement experiments · November 2026
 
-Start with the buoy slope comparison. It has a physical target for all 41,091 strips and can reuse the five geographic folds from the height study. The first question is whether the camera reduces error beyond measured wind, gust and buoy tilt. At the shore, the immediate opportunity is to measure local crest timing directly while the video collection builds independent dates. The supporting evidence and published comparisons are in the [research review](../../reports/Wave%20measurements%20to%20learn%20next.md).
+Start with the buoy slope comparison. It has a physical target for all 41,091 strips and can reuse the five geographic folds from the height study. The first question is whether the camera reduces error beyond measured wind, gust and buoy tilt. At the shore, the immediate opportunity is to measure local crest timing directly while the video collection builds independent dates. The supporting evidence and published comparisons are in the [research review](https://github.com/StevenFAU/Wave_Analysis/blob/main/reports/Wave%20measurements%20to%20learn%20next.md).
 
 ## First check after the current runs finish
 

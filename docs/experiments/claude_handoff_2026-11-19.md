@@ -4,7 +4,7 @@
 
 ## Where to work
 
-Use the sibling worktree `../Wave_Analysis-measurements` (next to the main checkout), branch `codex/wave-measurement-experiments`. Experiment code is committed at `26f0455a7`. The prepared data and portable package are in this worktree’s ignored `runs/prep-v1/`. Upstream predictions and checkpoints are in the main checkout's `runs/`. The `scripts/measurements` launcher resolves those paths from this machine. The preparation passed 329 unit tests, a complete portable-package checksum verification, and small CPU runs of both the frozen probe and slope fine-tune. [Launch and rebuild guide](measurement_checkin.md) · [Research rationale](../../reports/Wave%20measurements%20to%20learn%20next.md)
+Use the sibling worktree `../Wave_Analysis-measurements` (next to the main checkout), branch `codex/wave-measurement-experiments`. Experiment code is committed at `26f0455a7`. The prepared data and portable package are in this worktree’s ignored `runs/prep-v1/`. Upstream predictions and checkpoints are in the main checkout's `runs/`. The `scripts/measurements` launcher resolves those paths from this machine. The preparation passed 329 unit tests, a complete portable-package checksum verification, and small CPU runs of both the frozen probe and slope fine-tune. [Launch and rebuild guide](measurement_checkin.md) · [Research rationale](https://github.com/StevenFAU/Wave_Analysis/blob/main/reports/Wave%20measurements%20to%20learn%20next.md)
 
 ## What finished overnight
 
@@ -14,7 +14,7 @@ Use the sibling worktree `../Wave_Analysis-measurements` (next to the main check
 | Partition-aware fusion | On 39,767 matched strips, the gated partition swap reduced total-height RMSE from 0.288 m for ERA5 + wind to 0.267 m. The group-bootstrap interval for the difference was [−0.034, −0.009] m. | Retain the wind and model baselines when measuring the camera’s contribution. |
 | Spectral heads | The three-seed report favors ERA5 for total peak period, energy period and mean direction. The camera beat ERA5 on wind-wave period, 0.69 s versus 0.93 s RMSE. | Prioritize slope and wind-sea structure. In a morning sensitivity check across 40,726 common strips, nearest-record peak RMSE was 3.57 s for the camera and 1.95 s for ERA5. Changing the peak definition preserved the ordering. The direction control using solar position, location and time also beat the camera, 61.64° versus 75.83° mean absolute error across 40,038 strips. |
 
-The three upstream reports are under the main checkout. Their denominators and confidence intervals use the respective study protocols. [Height CV](../../../Wave_Analysis/runs/buoycam-cv-stage1-20261119/report.md) · [Fusion](../../../Wave_Analysis/runs/buoycam-cv-fusion-20261119/report.md) · [Spectral heads](../../../Wave_Analysis/runs/buoycam-cv-spectral-20261119/report.md)
+The three upstream reports are under the main checkout. Their denominators and confidence intervals use the respective study protocols. Height CV (`runs/buoycam-cv-stage1-20261119/report.md`, local) · Fusion (`runs/buoycam-cv-fusion-20261119/report.md`, local) · Spectral heads (`runs/buoycam-cv-spectral-20261119/report.md`, local)
 
 ## First actions at check-in
 

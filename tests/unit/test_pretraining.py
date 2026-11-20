@@ -5,11 +5,17 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-import torch
-from PIL import Image
 
-from wave_analysis.pretraining.buoy_views import BuoyViews, ViewMetadata, crop_view, view_table
-from wave_analysis.pretraining.dinov3_weights import (
+torch = pytest.importorskip("torch")
+Image = pytest.importorskip("PIL.Image")
+
+from wave_analysis.pretraining.buoy_views import (  # noqa: E402
+    BuoyViews,
+    ViewMetadata,
+    crop_view,
+    view_table,
+)
+from wave_analysis.pretraining.dinov3_weights import (  # noqa: E402
     dinov3_to_timm,
     teacher_checkpoint,
     timm_to_dinov3,

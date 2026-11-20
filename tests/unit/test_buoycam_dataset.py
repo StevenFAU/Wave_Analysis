@@ -9,9 +9,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from PIL import Image
 
-from wave_analysis.datasets.buoycam import (
+Image = pytest.importorskip("PIL.Image")
+
+from wave_analysis.datasets.buoycam import (  # noqa: E402
     crop_strip,
     snapshot_stamp,
     spatial_groups,

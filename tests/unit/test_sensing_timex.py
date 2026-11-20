@@ -8,7 +8,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from PIL import Image
+
+Image = pytest.importorskip("PIL.Image")
 
 torch = pytest.importorskip("torch")
 ROOT = Path(__file__).resolve().parents[2]

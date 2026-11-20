@@ -304,9 +304,11 @@ def main(argv: list[str] | None = None) -> int:
     (out / "metrics.json").write_text(
         json.dumps({"run": run_info, "partitions": metrics}, indent=1, default=str)
     )
-    inputs = [pkg / "labels.csv", pkg / "SHA256SUMS", Path(args.config)] + (
-        [pkg / "views.csv"] if views is not None else []
-    ) + ([Path(args.backbone_weights)] if args.backbone_weights else [])
+    inputs = (
+        [pkg / "labels.csv", pkg / "SHA256SUMS", Path(args.config)]
+        + ([pkg / "views.csv"] if views is not None else [])
+        + ([Path(args.backbone_weights)] if args.backbone_weights else [])
+    )
     if args.init_heights_run:
         inputs.extend([args.init_heights_run / "metrics.json", args.init_heights_run / "best.pt"])
     write_provenance(

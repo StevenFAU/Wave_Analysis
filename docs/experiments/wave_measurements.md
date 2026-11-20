@@ -9,7 +9,7 @@ prepared this and other measurement experiments on 2026-11-19 (branch
 records the review of that code (branch `claude/wave-measurements-review`).
 
 Launch and rebuild guide: [measurement_checkin.md](measurement_checkin.md). Rationale and
-published comparisons: [Wave measurements to learn next](../../reports/Wave%20measurements%20to%20learn%20next.md).
+published comparisons: [Wave measurements to learn next](https://github.com/StevenFAU/Wave_Analysis/blob/main/reports/Wave%20measurements%20to%20learn%20next.md).
 
 ## Bar M-S1: surface slope from the buoy cameras (fixed 2026-11-19, before any run)
 

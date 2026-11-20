@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import math
 
-import torch
+import pytest
 
-from wave_analysis.models.wave_spectral import (
+torch = pytest.importorskip("torch")
+
+from wave_analysis.models.wave_spectral import (  # noqa: E402
     Layout,
     MultiViewSpectral,
     direction_loss,

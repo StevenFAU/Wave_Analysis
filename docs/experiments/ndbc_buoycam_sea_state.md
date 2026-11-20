@@ -667,7 +667,7 @@ so it holds more variance.)
 
 ## Grouped cross-validation: every buoy a test buoy once (fixed 2026-11-18, before any run on the folds)
 
-Rank 1 of the [architecture review](../../reports/Wave%20camera%20architectures%20beyond%20backbones.md).
+Rank 1 of the [architecture review](https://github.com/StevenFAU/Wave_Analysis/blob/main/reports/Wave%20camera%20architectures%20beyond%20backbones.md).
 Every bar so far was decided by 12 test buoys, and the 12 validation buoys that chose
 each epoch carry far less swell (share 0.40) than the test buoys (0.67). B1-B3 ended
 with differences of about 0.01 m whose intervals straddle zero. Here each buoy is

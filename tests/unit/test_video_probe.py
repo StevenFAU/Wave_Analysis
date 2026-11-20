@@ -115,7 +115,9 @@ def test_stacked_probes_match_separate_training() -> None:
     plan = [([0, 1, 2], 6), ([0, 2], 6), ([0, 1, 2], 6), ([0], 6), ([1, 2], 6), ([0, 1, 2], 6)]
     totals = [sum(1 for ids, _ in plan if c in ids) for c in range(3)]
     alone = [make(s) for s in (0, 1, 2)]
-    stacked = StackedProbes([copy.deepcopy(m) for m in alone], lr=3e-3, weight_decay=0.05, total_steps=totals)
+    stacked = StackedProbes(
+        [copy.deepcopy(m) for m in alone], lr=3e-3, weight_decay=0.05, total_steps=totals
+    )
     opts = [torch.optim.AdamW(m.parameters(), lr=3e-3, weight_decay=0.05) for m in alone]
     scheds = [torch.optim.lr_scheduler.OneCycleLR(o, max_lr=3e-3, total_steps=t, pct_start=0.1)
               for o, t in zip(opts, totals, strict=True)]  # fmt: skip
@@ -133,8 +135,13 @@ def test_stacked_probes_match_separate_training() -> None:
         mine = stacked.state(c)
         for k, v in alone[c].state_dict().items():
             a, b = mine[k], v
-            if k.endswith("in_proj_bias"):  # the key bias has no gradient (softmax ignores a shift):
-                a, b = torch.cat([a[:16], a[32:]]), torch.cat([b[:16], b[32:]])  # Adam steps on rounding
+            if k.endswith(
+                "in_proj_bias"
+            ):  # the key bias has no gradient (softmax ignores a shift):
+                a, b = (
+                    torch.cat([a[:16], a[32:]]),
+                    torch.cat([b[:16], b[32:]]),
+                )  # Adam steps on rounding
             assert torch.allclose(a, b, atol=1e-6), (c, k)
         alone[c].eval()
     out = stacked.predict([0, 1, 2], x[:5])
