@@ -95,6 +95,11 @@ def main(argv: list[str] | None = None) -> int:
         type=float,
         help="override model.backbone_lr_scale (the backbone's learning rate as a share of lr)",
     )
+    ap.add_argument(
+        "--backbone-weights",
+        help="a timm state dict loaded into the backbone once built (strict), e.g. continued "
+        "DINOv3 pretraining (scripts/dinov3_weights.py to-timm)",
+    )
     ap.add_argument("--epochs", type=int)
     ap.add_argument("--batch-size", type=int)
     ap.add_argument("--num-workers", type=int)
@@ -190,6 +195,10 @@ def main(argv: list[str] | None = None) -> int:
         layers=int(arch.get("layers", 1)), dropout=float(arch.get("dropout", 0.1)),
         pretrained=settings.pretrained, distribution=bool(dist),
     )  # fmt: skip
+    if args.backbone_weights:
+        state = torch.load(args.backbone_weights, map_location="cpu", weights_only=True)
+        model.encoder.load_state_dict(state, strict=True)
+        log(f"backbone weights from {args.backbone_weights}")
     val_true = np.exp(y_of(parts[VAL]))
     lr_scale = args.backbone_lr_scale
     if lr_scale is None:
@@ -251,13 +260,14 @@ def main(argv: list[str] | None = None) -> int:
         "lp_epochs": int(args.lp_epochs if args.lp_epochs is not None else mcfg.get("lp_epochs", 0)),
         "distribution": dist, "gpu": torch.cuda.get_device_name(device) if device.type == "cuda" else None,
         "torch": torch.__version__, "limit_per_partition": args.limit, "seed": seed,
+        "backbone_weights": args.backbone_weights,
     }  # fmt: skip
     (out / "metrics.json").write_text(
         json.dumps({"run": run_info, "partitions": metrics}, indent=1, default=str)
     )
     inputs = [pkg / "labels.csv", pkg / "SHA256SUMS", Path(args.config)] + (
         [pkg / "views.csv"] if views is not None else []
-    )
+    ) + ([Path(args.backbone_weights)] if args.backbone_weights else [])
     write_provenance(
         build_provenance(
             artifact_id=f"{cfg['name']}_{args.split}_heights_{args.aux}",
