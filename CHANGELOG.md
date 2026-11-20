@@ -172,6 +172,82 @@ separately (`docs/REPRODUCIBILITY.md`).
   The continued weights fall under Meta's DINOv3 License (research use, acknowledgement
   required).
 
+### Added (2026-11-19, shore video: sealed storm set)
+- `configs/experiments/webcoos_video_storm_v1.yaml`: the storm-date estimate run for the shore-labels storm bars
+  (T2-A, T2-B, T3-K). It is webcoos_video_v1's whole-clip recipe in five folds of storm dates, with no physics-v2
+  block. Its M3-M5 lines are estimates there, not bars. It starts on its own once the storm package is on the server.
+- Storm storage: `WEBCOOS_VIDEO_SET=storm` gives `scripts/webcoos_video_clips.py` the storm set's own raw root,
+  output folder and package (`webcoos_video_storm_v1`). The new `offload` step moves cut storm clips to the GPU
+  server, checked against their ledger SHA-256, and frees the local copies. `ship` and `offload` share one R2 helper.
+  The storm driver now cuts and offloads each date before fetching the next, so the desktop keeps 40 GB free; its
+  budget counts fetched bytes from the ledgers, and dates already done are skipped on a rerun.
+- `scripts/webcoos_storm_dates.py`: storm dates chosen from CDIP records alone. A storm date
+  has a daylight mean H_s of 2.0 m or more at the paired buoy. Development and sample dates
+  are excluded, and only one date is kept per storm and site. The dates are ordered over
+  site × H_s band (2.0-2.8 m, ≥ 2.8 m) × season.
+  `configs/experiments/webcoos_video_storm_dates.csv` lists 72 dates (17 with H_s ≥ 2.8 m).
+- `scripts/webcoos_storm_sample.sh` downloads them in that order: hourly clips, until 24
+  dates have video or 120 GB is reached (about 78 GB expected). It runs after the video
+  sample, under the same lock and pace, into its own root `data/raw/webcoos_video_storm`.
+  The sample's pairing never reads that root, so the set stays out of the final run.
+- The storm set is sealed: no per-clip label, feature or score of a storm date is opened
+  until the bars that use it are committed (`docs/experiments/webcoos_video.md`, "Storm set").
+
+### Added (2026-11-19, shore video: physics features v2 and bars M6-M7)
+- The 18 interim dates are now development data (`configs/experiments/webcoos_video_dev_dates.txt`,
+  committed with its SHA-256 before any development); every date the final run adds is a
+  confirmation date, on which alone bars M6-M7 are scored (`docs/experiments/webcoos_video.md`,
+  "Physics features v2").
+- Spectrum recipe v2 (`wave_analysis.processing.pixel_spectrum.physics_v2`; v1 unchanged):
+  the common mode taken out of each water block with its own gain, an onset spectrum of
+  max(dI/dt, 0), a cBathy-style coherence (lambda_1 / sum(lambda) of the cross-spectral
+  matrix), a peak-prominence measure; four features added to v1's ten. Five label-free
+  breaking features for H_s (foam fraction and its Otsu separability, foam arrivals per
+  minute, foam-band width, foam persistence). CDIP energy period Tm-1,0 as a second
+  period label (`Te_label_s`).
+- `scripts/webcoos_video_clips.py physics` (features beside each windows zip, packed as
+  `physics_v2.csv`); `scripts/train_video_probe.py` adds the M6-M7 ridge arms and scores
+  them on confirmation dates only, refusing if the development-date file changed.
+- Development results (chosen on, so optimistic): M6 −0.037 s [−0.109, +0.050] on T_p;
+  M7 +0.032 m [+0.017, +0.051] (the breaking features make H_s worse). With about 28
+  confirmation dates, M6 resolves only differences of about 0.07-0.09 s, so it is
+  underpowered for its development estimate. Coherence weighting, as first planned,
+  lowered the period's correlation with T_p and was dropped as a weight (development log
+  in the doc).
+- Bibliography: Otsu 1979, Welch 1967, Donelan & Pierson 1983, Lippmann & Holman 1989
+  (DOIs checked against Crossref).
+
+### Results (2026-11-19, shore video interim run: bars M1-M5)
+- First scored run of the WebCOOS video test (`docs/experiments/webcoos_video.md`,
+  Results): 992 clips of 18 local dates, folds of whole dates, CDIP labels. **M1 and M2
+  not met**: video, a repeated frame and shuffled frames give the same H_s error
+  (0.533-0.535 m; climatology 0.740 m). **M3 met**: reading all windows of a clip cuts
+  H_s RMSE from 0.524 to 0.513 m. **M4 met but empty**: no attentive probe's T_p beats
+  climatology (`clip` 2.86 s against 2.72 s). **M5 not met** (−0.39 s [−0.74, +0.02]; met on
+  clips with K ≥ 15); the pixel spectrum alone is the only T_p estimate that beats
+  climatology (2.46 s). Kim's five classes: no skill at unseen dates (58 %, the same as
+  naming the average class). The record pooler is worse than the plain average and is
+  dropped.
+
+### Added (2026-11-18, whole-clip video: windows, pixel spectrum, shipping)
+- Shore video, whole-clip bars M3-M5 implemented and their recipe fixed before scoring
+  (`docs/experiments/webcoos_video.md`, "Whole-clip implementation"):
+  `scripts/webcoos_video_clips.py windows` cuts every clip whole at 4 fps into its
+  K = floor(duration / 16 s) windows (one stored zip per clip, about 35 MB a 10-min clip)
+  and computes its pixel spectrum (`wave_analysis.processing.pixel_spectrum`, recipe v1:
+  4 x 4 px blocks, Welch spectra, water chosen without labels by the wave band's share of
+  the brightness-rate spectrum, peak above a fitted power-law background);
+  `scripts/train_video_probe.py --windows` caches V-JEPA 2 and DINOv3 features per
+  window, trains the 25 fold/seed window probes in lock step (`StackedProbes`, checked
+  against separate training), reads each clip by its midpoint window and by all its
+  windows, and adds the record pooler (`RecordPooler`), ridge heads on the spectrum and
+  the scores of M3-M5 (also on clips with K >= 15).
+- `scripts/webcoos_video_clips.py ship`: bulk data to the GPU server through the
+  project's R2 bucket (36 Mbit/s up, 20 MB/s down, signed links, SHA-256 checks), since
+  the SSH route through FAU's bastion carried 1.46 Mbit/s. The server does not download
+  from WebCOOS itself: the agreed pace is one request at a time, and the desktop's sample
+  download holds it.
+
 ### Added (2026-11-18, architecture review and whole-clip bars)
 - `reports/Wave camera architectures beyond backbones.md` (notes in `research_notes/`
   under the same name): what to train beyond the backbone choice, ranked by value for

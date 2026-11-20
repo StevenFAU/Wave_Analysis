@@ -53,5 +53,20 @@ evaluation:
     hs_average: energy           # sqrt(mean(H_s^2)); mean of log H_s reported beside it
     tp_average: geometric
     reported: [clip mean-log H_s, pooled (learned record pooler), clip-image (DINOv3 per window), pixel spectrum alone, Kim 5-class at 1 / 11 / K windows]
+    # Implementation and pixel-spectrum recipe v1, fixed 2026-11-18 before scoring
+    # (docs/experiments/webcoos_video.md, "Whole-clip implementation"): windows cut by
+    # scripts/webcoos_video_clips.py windows; spectrum wave_analysis.processing.pixel_spectrum
+    # (RECIPE = 1); ridge heads alpha 1 on standardised inputs (train_video_probe.RIDGE_ALPHA).
+  # Physics features v2, bars M6-M7: fixed 2026-11-19 on the development dates, before any
+  # confirmation date was opened (docs/experiments/webcoos_video.md, "Physics features v2").
+  # Features: scripts/webcoos_video_clips.py physics (wave_analysis.processing.pixel_spectrum.physics_v2,
+  # RECIPE_V2 = 2), the package's physics_v2.csv; heads: train_video_probe.physics_v2_arms.
+  physics_v2:
+    dev_dates: configs/experiments/webcoos_video_dev_dates.txt
+    dev_dates_sha256: 64685e3602fac031391295d35eba7b07581dac28852f6c89e8df154433fcc289
+    min_confirmation_dates: 15   # bars scored on the confirmation dates only (all others)
+    M6: ridge on v1's ten spectrum features + v2's four minus ridge on v1's ten, RMSE of T_p, 95 % interval below zero
+    M7: ridge on log clip H_s + five breaking features minus ridge on log clip H_s alone, RMSE of H_s, 95 % interval below zero
+    reported: [untrained T_pix v2 minus v1, clip + v2 spectrum minus clip_ridge (T_p), per camera, M6-M7 with a camera intercept, Oak Island T_p beside Kamagata 1.42 s, the T_p comparisons against T_e = Tm-1,0]
   reported: [video minus shuffled, video minus image (DINOv3), per camera, Kamagata metrics at Oak Island, Kim 5-class accuracy]
   first_scored_run: at least 15 local dates framed; interim until the sample download finishes
