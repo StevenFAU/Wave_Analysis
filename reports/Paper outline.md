@@ -325,11 +325,34 @@ caption, and quality-controlled labels.
 | F3 | Model and fusion diagram: shared encoder, view transformer, masked mean, three heads; the partition swap with its gate | `wave_analysis.models.wave_heights`; `scripts/buoycam_partition_fusion.py` |
 | F4 | Per-buoy RMSE, camera against ERA5, for wind-wave and total height (dumbbells, OOF) | `oof_dinov3-gentle.csv` with each fold's ERA5 line |
 | F5 | Visibility curve: R² per spectral bin for camera, wind, and camera + wind, with intervals | `runs/measurement-t5/dinov3-s012/` |
-| F6 | Fusion by fold: comparator, gated swap, variance-weighted (NEST), with the S2 check | `runs/forecast-fusion-nested-v1/rows.parquet` |
+| F6 | [Historical pooled and group effects](figures/buoycam-fusion/forecast-fusion.svg). Supporting results by fold: comparator, gated swap, variance-weighted (NEST), with the S2 check | `runs/forecast-fusion-nested-v1/rows.parquet` |
 | F7 | Conformal coverage per buoy, the 11 buoys below 0.80 marked, with mean bias | B2-CV outputs in `runs/buoycam-cv-stage1-20261119` |
 | F8 (supplement) | Swell share against under-calls (Q-M8); horizon roll against slope | `scripts/buoycam_swell_check.py`, `scripts/buoycam_horizon.py` outputs |
 
 WebCOOS frames go in no figure until WebCOOS agrees to their publication (see below).
+
+### Historical figure and buoy 41040 image review
+
+**Draft figure caption.** Adding buoy-camera estimates to ERA5, GFS-Wave and measured wind reduced pooled wind-wave height RMSE from 22.58 to 20.79 cm (7.9%) across 34,723 strips at 71 buoys. Panel A shows RMSE reductions of 1.79 cm for wind-wave height (95% interval 0.88 to 2.53 cm) and 0.47 cm for total significant height (0.07 to 0.83 cm). The intervals come from 2,000 paired resamples of whole geographic groups. With equal weight per group the total-height interval included zero. Each bar in panel B is one group's wind-wave reduction. Of 41 groups, 27 improved and 14 worsened. The median group improved by 1.57 cm. Panel C is reserved for the frozen fresh-strip test. [Vector figure](figures/buoycam-fusion/forecast-fusion.svg) · [Raster figure](figures/buoycam-fusion/forecast-fusion.png) · [Group-level data](figures/buoycam-fusion/station-groups.csv)
+
+**Why the worst group matters.** At buoy 41040, 631 eligible strips spanned 51 UTC dates from September 23 to November 12. The forecast alone had the lowest wind-wave RMSE of all 41 groups (7.49 cm, group median 20.65 cm). The camera alone had an RMSE of 20.91 cm, close to the group median of 21.65 cm, and underestimated height by 14.82 cm on average. Fusion lowered the forecast estimate on 569 strips and increased RMSE to 16.18 cm. The largest group improvement was 8.48 cm at g46084 (483 strips).
+
+| Measured wind at 41040 (m/s) | Strips | UTC dates | Forecast RMSE (cm) | Fusion RMSE (cm) | Fusion bias (cm) |
+|---|---:|---:|---:|---:|---:|
+| ≤4.43 | 164 | 23 | 5.45 | 5.01 | −1.57 |
+| >4.43 to 6.00 | 189 | 34 | 7.16 | 13.08 | −10.51 |
+| >6.00 to 7.00 | 136 | 31 | 7.70 | 17.36 | −14.09 |
+| >7.00 | 142 | 23 | 9.47 | 24.85 | −20.50 |
+
+Bounds are station-specific sample quartiles, displayed rounded. Tied wind readings share a bin. A date can appear in several bins. Bias is prediction minus the buoy reference. These are exploratory summaries for a station selected for its large loss.
+
+**What the strips show.** I compared the three largest fusion underestimates on different UTC dates with three accurate same-buoy strips. Each control had absolute fusion error ≤10 cm, came from a different day than its case, and had the same illumination class. Controls were selected without reuse, first by closest observed wind-wave height, then by closest sun elevation. On October 4 and October 24 the buoy measured 1.80 m in both strips. Fusion estimated 1.18 and 1.80 m respectively. The October 4 strip shows open water and a visible horizon in most views, with one hazy sector. The accurate October 24 strip includes strong sun glitter and a conspicuously tilted horizon. The October 25 underestimate also has glare. All six strips met the image-quality threshold in all six views. [Six original panoramas with measurements and predictions](figures/buoycam-fusion/41040-strips.png)
+
+Across the full station sample, the 63 largest underestimates had a median observed wind-wave height of 1.40 m, versus 0.43 m for the 63 smallest absolute errors. Sixty of the 63 large underestimates were in daylight. At winds above 7 m/s, the rank correlation of fusion error with median absolute roll was −0.01 and with median absolute vertical horizon displacement was −0.02. Mean view brightness still had a correlation of −0.43. The orientation measures use valid horizon fits relative to each view's usual mounting. Brightness also varies with illumination and sea state, so the images alone cannot establish a cause. [Station measurements, image IDs, and selections](figures/buoycam-fusion/41040-strips.csv)
+
+**Check at other buoys.** Applying the same >7 m/s cutoff to the other 70 buoys gave 13,034 strips in 40 groups. In this subset, adding the camera reduced pooled RMSE from 33.81 to 31.28 cm and improved 26 groups. A blanket wind-speed cutoff would discard useful information. This cutoff came from the selected station's wind distribution, so this cross-site check is exploratory. [Other groups above 7 m/s](figures/buoycam-fusion/other-groups-above-7mps.csv)
+
+**Hypothesis for a later test.** The camera gets too much weight where the local forecast is unusually accurate and the camera reads low. Estimate each arm's reliability from training groups using forecast height, measured wind and camera–forecast disagreement. Select any weighting change inside the training folds and test on independent stations or dates. Keep the registered confirmation fixed. [Figure and image-selection script](../scripts/buoycam_fusion_review.py)
 
 ## Still to land before submission
 
