@@ -19,6 +19,10 @@ separately (`docs/REPRODUCIBILITY.md`).
   model beats it by +5.2 points [+2.4, +9.6]: the gain is the project's input and design, not
   the backbone. One view alone gives VGG16 89-92 %. With the shared recipe the backbone
   collapsed to calling every strip calm; the gentle rerun was registered before it ran.
+- The same arms over the five grouped folds (all 79 buoys out of fold, 75 runs, station-group
+  intervals) agree: Choi +2.9 points [+1.6, +4.0], Kim +13.9 [+10.8, +18.4] (+18.7 with Kim's
+  own options), Yang −0.066 m [−0.085, −0.046]. Attitude: −0.022 m [−0.041, +0.004] there,
+  so across both splits it has no consistent effect on Yang.
 - `Kim2023SnapshotCNN` now follows the paper's Fig. 5 (4 × 4 pooling after blocks 1-3, none
   after block 4, flattened map into one dense layer); the earlier class pooled 2 × 2 after every
   block and averaged globally. Fixed before any Kim run.

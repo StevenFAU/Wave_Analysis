@@ -59,6 +59,23 @@ Three-seed means on identical strips; 95 % intervals from 2,000 resamples of who
 - **Yang.** DINOv3 is 0.096 m better in RMSE. Buoy 44065 drops out because its view 3 never has a horizon reading, and Yang needs six views with attitude. The horizon attitude makes Yang worse by 0.020 m, as it made the project model worse in bar V2-1 (+0.038 m). Without attitude Yang scores 0.495 m, still 0.076 m behind DINOv3 (−0.099 to −0.049, not a registered row).
 - The middle sea states are outside Choi's task, and Kim's classes cover H_s from 1.19 to 5.15 m only.
 
+### Results over the five grouped folds (2026-11-20)
+
+Out of fold over all 79 buoys: each fold's three-seed mean on its own test groups, against DINOv3-gentle's runs on the same folds and seeds; 95 % intervals from 2,000 resamples of whole station groups. All runs from commit `95e17f790`; scorer outputs `runs/*-folds-comparison.json`.
+
+| Comparison | Strips, groups | DINOv3-gentle | Paper's network | Difference [95 % interval] | Bar |
+|---|---|---|---|---|---|
+| Choi, calm or rough (accuracy) | 23,864, 43 | 98.47 % | VGG16 95.53 % | +2.94 points [+1.55, +4.00] | met |
+| Kim, five classes, shared recipe | 27,523, 43 | 66.61 % | 52.72 % | +13.89 points [+10.83, +18.40] | met (both) |
+| Kim, five classes, Kim's own options | 27,523, 43 | 66.61 % | 47.87 % | +18.73 points [+14.49, +24.65] | |
+| Yang, H_s (RMSE) | 21,150, 41 | 0.498 m | 0.564 m | −0.066 m [−0.085, −0.046] | met |
+| Yang with minus without attitude (RMSE) | 21,150, 41 | | 0.564 against 0.587 m | −0.022 m [−0.041, +0.004] | not shown to help |
+
+- The folds agree with the sealed buoys on every paper row: the project model is ahead of each paper's network, by less on the calm-or-rough task (+2.9 against +4.6 points) and on Kim's classes (+13.9 against +20.1).
+- Kim's own training options leave its network near a single class: in 10 of 15 fold runs it gives one class to over 90 % of the test strips.
+- Attitude goes the other way from the sealed buoys (slightly better, interval reaching zero; there it was 0.020 m worse). Across both, the horizon attitude has no consistent effect on Yang. Two single-buoy groups (44065, 46002) have no strips with six views and attitude and drop out of the Yang rows. Without attitude Yang is 0.089 m behind DINOv3 (−0.107 to −0.055, not a registered row).
+- No paper recipe was tuned on these folds; DINOv3-gentle's fold runs had served bar B2-CV before.
+
 ### GPU queue
 
 The sealed strip order is Choi VGG16, Kim snapshot, Yang and its no-attitude control. Each arm uses seeds 0, 1 and 2. Submit one seed at a time and fetch its predictions and settings before aggregating. The deployment runner expects the existing heights package locally for checksum comparison. Set `GPU_HOST` to the authorized SSH alias. Use a current shared-server utilization check to select the device. Torchvision will require the official VGG16 and ResNet18 ImageNet weights in the server torch cache or network access during initialization. Use the same cloned weights for the three seeds.
