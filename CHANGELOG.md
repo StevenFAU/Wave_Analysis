@@ -7,6 +7,33 @@ separately (`docs/REPRODUCIBILITY.md`).
 
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
+### Added (2026-11-19, wave measurements beyond height)
+- Review of Codex's prepared measurement experiments and bars M-S1 and M-S2, fixed before
+  their runs, in `docs/experiments/wave_measurements.md`. Fixed before any run: the slope
+  probe's comparator gains the de-mounted horizon roll and pitch, every ridge fits on the
+  fold's training buoys by name (plus a validation-fit sensitivity), the checkpoint's test
+  strips must equal the fold's, and 50 all-zero spectra get no slope. The breaker trainer
+  is not run (re-decodes every clip every epoch for frozen encoders; one frame per 1.9 s).
+- `deploy/dgx/measure.sh`: frozen buoy probes on the GPU server in the `run.sh` pattern.
+- **Bar M-S1 met** (five folds over the 43 station groups, 38,387 strips at 77 buoys):
+  the buoy's RMS slope is predicted with RMSE 0.0089 from camera + wind + horizon
+  geometry against 0.0102 from wind + geometry, −0.0013 [−0.0017, −0.0008]; the camera
+  alone (0.0093) also beats wind + geometry. With only the water below each horizon the
+  gain halves but holds (−0.0007 [−0.0010, −0.0005]).
+- **Bar M-S2 not met:** the ten-epoch slope fine-tune is no better than the frozen probe
+  (0.0086 against 0.0084, +0.0002 [+0.0001, +0.0004]). Every fold kept a heads-only
+  epoch: four of five runs diverged once the backbone unfroze, so end-to-end slope
+  training is still untested.
+- **Bar M-S3 not met:** with a stable recipe (`buoy_slope_v2lr`: the backbone's learning
+  rate re-warms at unfreezing, gradient clipping, lr 1e-4; `fit_heights(rewarm_epochs=,
+  grad_clip=)`, off by default) no fold diverges, but the fine-tune is level with the
+  frozen probe (0.0084 each, +0.00004 [−0.00012, +0.00017]).
+- **Test 5 (bar T5):** ERA5 10-m wind and gust at the buoys (`scripts/buoycam_era5_wind.py`)
+  and the 46 bins' energies (`measurement_labels.py`). **T5-W met:** one camera strip gives
+  the buoy's wind speed with RMSE 0.96 m/s against 1.27 m/s for ERA5 (−0.31 [−0.44,
+  −0.10]). The camera adds to wind at every spectral bin from 0.0525 Hz (19 s) up, so its
+  skill is not confined above the sea-swell separation.
+
 ### Added (2026-11-14)
 - NDBC buoy-camera sea-state dataset (`ndbc_buoycam_sea_state_v0`): every archived
   strip paired with its own buoy's wave height (`scripts/buoycam_pairs.py`), and a

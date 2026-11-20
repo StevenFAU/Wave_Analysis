@@ -275,6 +275,17 @@ def predict_heights(
     return heights, mu_log, sigma_log
 
 
+def backbone_rewarm(start: float, length: float) -> Callable[[int], float]:
+    """Learning-rate factor of the backbone: 1, or a linear ramp over ``length`` steps from ``start``."""
+
+    def factor(step: int) -> float:
+        if length <= 0 or step < start:
+            return 1.0
+        return min(1.0, (step - start + 1) / length)
+
+    return factor
+
+
 def fit_heights(
     model: nn.Module,
     train_loader: DataLoader[Any],
@@ -288,9 +299,12 @@ def fit_heights(
     huber_delta: float = 1.0,
     log: Callable[[str], object] = print,
     names: Sequence[str] = ("hs", "wind_wave", "swell"),
+    units: Sequence[str] | None = None,
     lp_epochs: int = 0,
     backbone_lr_scale: float = 1.0,
     dist_beta: float = 0.5,
+    rewarm_epochs: float = 0.0,
+    grad_clip: float | None = None,
 ) -> HeightsFit:
     """Train for ``settings.epochs``; keep the epoch with the lowest validation RMSE of the first height.
 
@@ -301,8 +315,14 @@ def fit_heights(
     fine-tuning moves pretrained weights gently); the rest at ``settings.lr``.
     A model with a distribution head adds :func:`beta_nll` (``dist_beta``) to the Huber
     loss of the point head, with equal weight; the epoch is still chosen on the point head.
+    ``rewarm_epochs`` > 0: when the backbone unfreezes, its learning rate warms up again
+    from zero over that many epochs (AdamW starts its state afresh there, and its first
+    steps are a full learning rate in every weight, the smallest ones included).
+    ``grad_clip``: the gradient's total norm is clipped to this before each step.
+    Both are off by default (the stage-1 recipe).
     """
     model.to(device).to(memory_format=torch.channels_last)
+    units = list(units) if units is not None else ["m"] * len(names)
     enc = getattr(model, "encoder", None)
     enc_ids = {id(q) for q in enc.parameters()} if enc is not None else set()
     groups = [
@@ -313,9 +333,20 @@ def fit_heights(
         {"params": [q for q in model.parameters() if id(q) not in enc_ids], "lr": settings.lr},
     ]
     opt = torch.optim.AdamW([g for g in groups if g["params"]], weight_decay=settings.weight_decay)
-    steps = settings.epochs * max(1, len(train_loader))
-    warm = settings.warmup_epochs * max(1, len(train_loader))
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: lr_lambda(s, warmup=warm, total=steps))
+    per_epoch = max(1, len(train_loader))
+    steps = settings.epochs * per_epoch
+    warm = settings.warmup_epochs * per_epoch
+    rewarm = backbone_rewarm(lp_epochs * per_epoch, rewarm_epochs * per_epoch)
+
+    def schedule(s: int) -> float:
+        return lr_lambda(s, warmup=warm, total=steps)
+
+    lambdas = [
+        (lambda s: schedule(s) * rewarm(s)) if g is groups[0] else schedule
+        for g in groups
+        if g["params"]
+    ]
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambdas)
     mu = torch.as_tensor(mean, dtype=torch.float32, device=device)
     sd = torch.as_tensor(std, dtype=torch.float32, device=device)
     loss_fn = nn.HuberLoss(reduction="none", delta=huber_delta)
@@ -352,6 +383,10 @@ def fit_heights(
                 loss = (per * oks).sum() / denom
                 loss.backward()
                 batch_loss += loss.detach()
+            if grad_clip:
+                nn.utils.clip_grad_norm_(
+                    [q for q in model.parameters() if q.grad is not None], grad_clip
+                )
             opt.step()
             sched.step()
             total += float(batch_loss) * len(y)
@@ -362,13 +397,13 @@ def fit_heights(
             "train_loss": total / max(1, n),
             "seconds": time.monotonic() - t0,
         }
-        for j, name in enumerate(names):
+        for j, (name, unit) in enumerate(zip(names, units, strict=True)):
             ok_v = np.isfinite(val_true_m[:, j])
-            row[f"val_rmse_{name}_m"] = float(
+            row[f"val_rmse_{name}_{unit}"] = float(
                 np.sqrt(np.mean((pred_m[ok_v, j] - val_true_m[ok_v, j]) ** 2))
             )
         history.append(row)
-        chosen = row[f"val_rmse_{names[0]}_m"]
+        chosen = row[f"val_rmse_{names[0]}_{units[0]}"]
         mark = ""
         if chosen < best[0]:
             best = (chosen, epoch)
@@ -376,7 +411,10 @@ def fit_heights(
             mark = "  <- best"
         log(
             f"epoch {epoch:>2}/{settings.epochs}: loss {row['train_loss']:.4f}, "
-            + ", ".join(f"val RMSE {nm} {row[f'val_rmse_{nm}_m']:.3f} m" for nm in names)
+            + ", ".join(
+                f"val RMSE {nm} {row[f'val_rmse_{nm}_{unit}']:.3f} {unit}"
+                for nm, unit in zip(names, units, strict=True)
+            )
             + f", {row['seconds']:.0f} s{mark}"
         )
     return HeightsFit(best[1], best[0], history, best_state)

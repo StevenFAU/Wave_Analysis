@@ -100,6 +100,11 @@ def main(argv: list[str] | None = None) -> int:
         help="a timm state dict loaded into the backbone once built (strict), e.g. continued "
         "DINOv3 pretraining (scripts/dinov3_weights.py to-timm)",
     )
+    ap.add_argument(
+        "--init-heights-run",
+        type=Path,
+        help="transfer a full same-fold images-only encoder and view mixer",
+    )
     ap.add_argument("--epochs", type=int)
     ap.add_argument("--batch-size", type=int)
     ap.add_argument("--num-workers", type=int)
@@ -125,8 +130,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     if device.type == "cpu":
         settings.amp = "none"
-    targets = list(mcfg["targets"])  # label columns, metres; the first chooses the epoch
+    targets = list(mcfg["targets"])  # label columns; the first chooses the epoch
     tnames = list(mcfg.get("target_names", targets))
+    units = list(mcfg.get("target_units", ["m"] * len(targets)))
     pkg, out = Path(args.package), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     log_fh = (out / "train.log").open("a", encoding="utf-8")
@@ -144,6 +150,9 @@ def main(argv: list[str] | None = None) -> int:
         boot["group_col"][args.split] if isinstance(boot["group_col"], dict) else boot["group_col"]
     )
     table = labels[labels[col].isin([TRAIN, *PARTITIONS])].reset_index(drop=True)
+    for c in mcfg.get("missing_if_nonpositive", []):
+        # zero here means no measurement (an all-zero spectrum), not a calm sea
+        table.loc[table[c] <= 0, c] = np.nan
     if args.limit:
         rng = np.random.default_rng(seed)
         keep = np.zeros(len(table), bool)
@@ -193,23 +202,52 @@ def main(argv: list[str] | None = None) -> int:
         settings.backbone, len(targets), aux_dim=3 if views is not None else 0,
         d_model=int(arch.get("d_model", 256)), heads=int(arch.get("heads", 4)),
         layers=int(arch.get("layers", 1)), dropout=float(arch.get("dropout", 0.1)),
-        pretrained=settings.pretrained, distribution=bool(dist),
+        pretrained=settings.pretrained and args.init_heights_run is None, distribution=bool(dist),
     )  # fmt: skip
+    if args.backbone_weights and args.init_heights_run:
+        raise SystemExit("--backbone-weights and --init-heights-run both set the encoder; use one")
     if args.backbone_weights:
         state = torch.load(args.backbone_weights, map_location="cpu", weights_only=True)
         model.encoder.load_state_dict(state, strict=True)
         log(f"backbone weights from {args.backbone_weights}")
+    if args.init_heights_run:
+        previous = json.loads((args.init_heights_run / "metrics.json").read_text())["run"]
+        if (
+            previous["config"] != "ndbc_buoycam_heights_v2cv"
+            or previous["split"] != args.split
+            or previous["settings"]["backbone"] != settings.backbone
+            or previous["aux"] != "none"
+            or previous.get("limit_per_partition") is not None
+            or previous["seed"] != seed
+        ):
+            raise ValueError(
+                "transfer requires a full images-only run with matching fold, backbone and seed"
+            )
+        checkpoint = torch.load(
+            args.init_heights_run / "best.pt", map_location="cpu", weights_only=False
+        )
+        keep = {
+            k: v
+            for k, v in checkpoint["state_dict"].items()
+            if not k.startswith(("head.", "dist_head."))
+        }
+        missing, unexpected = model.load_state_dict(keep, strict=False)
+        if unexpected or any(not k.startswith(("head.", "dist_head.")) for k in missing):
+            raise ValueError("incompatible feature extractor or mixer")
     val_true = np.exp(y_of(parts[VAL]))
     lr_scale = args.backbone_lr_scale
     if lr_scale is None:
         lr_scale = float(mcfg.get("backbone_lr_scale", 1.0))
     result = fit_heights(
         model, loader(parts[TRAIN], True), loader(parts[VAL], False), val_true,
-        settings=settings, mean=mean, std=std, device=device, log=log, names=tnames,
+        settings=settings, mean=mean, std=std, device=device, log=log, names=tnames, units=units,
         lp_epochs=int(args.lp_epochs if args.lp_epochs is not None else mcfg.get("lp_epochs", 0)),
         backbone_lr_scale=lr_scale, dist_beta=float(dist.get("beta", 0.5)) if dist else 0.5,
+        rewarm_epochs=float(mcfg.get("rewarm_epochs", 0)), grad_clip=mcfg.get("grad_clip"),
     )  # fmt: skip
-    log(f"chosen epoch {result.best_epoch} (val RMSE {tnames[0]} {result.best_rmse_m:.3f} m)")
+    log(
+        f"chosen epoch {result.best_epoch} (val RMSE {tnames[0]} {result.best_rmse_m:.3f} {units[0]})"
+    )
     model.load_state_dict(result.state_dict)
     torch.save(
         {"state_dict": result.state_dict, "settings": settings.__dict__, "targets": targets,
@@ -234,9 +272,9 @@ def main(argv: list[str] | None = None) -> int:
         fr = pd.DataFrame({"sample_id": t["sample_id"], "partition": p, "station_id": t["station_id"],
                            "station_day": t["station_day"]})  # fmt: skip
         entry = {}
-        for j, (c, nm) in enumerate(zip(targets, tnames, strict=True)):
+        for j, (c, nm, unit) in enumerate(zip(targets, tnames, units, strict=True)):
             truth = t[c].to_numpy(dtype=float)
-            fr[f"true_{nm}_m"], fr[f"pred_{nm}_m"] = truth, pred[:, j]
+            fr[f"true_{nm}_{unit}"], fr[f"pred_{nm}_{unit}"] = truth, pred[:, j]
             if dist:
                 fr[f"mu_{nm}_log"], fr[f"sigma_{nm}_log"] = mu_log[:, j], sigma_log[:, j]
             ok = np.isfinite(truth)
@@ -247,8 +285,8 @@ def main(argv: list[str] | None = None) -> int:
                     block_bootstrap_ci(truth[ok], pred[ok, j], fn, groups=g, **kw)[1:]
                 )
             entry[nm] = rep
-            log(f"{p:<5} {nm:<10} n={int(rep['n']):,}: RMSE {rep['rmse']:.3f} m [{rep['rmse_ci'][0]:.3f}, "
-                f"{rep['rmse_ci'][1]:.3f}], bias {rep['bias']:+.3f} m, R2 {rep['r2']:.3f}, "
+            log(f"{p:<5} {nm:<10} n={int(rep['n']):,}: RMSE {rep['rmse']:.3f} {unit} [{rep['rmse_ci'][0]:.3f}, "
+                f"{rep['rmse_ci'][1]:.3f}], bias {rep['bias']:+.3f} {unit}, R2 {rep['r2']:.3f}, "
                 f"Pearson {rep['pearson']:.3f}, slope {rep['slope']:.2f}")  # fmt: skip
         rows.append(fr)
         metrics[p] = entry
@@ -262,12 +300,15 @@ def main(argv: list[str] | None = None) -> int:
         "torch": torch.__version__, "limit_per_partition": args.limit, "seed": seed,
         "backbone_weights": args.backbone_weights,
     }  # fmt: skip
+    run_info["init_heights_run"] = str(args.init_heights_run) if args.init_heights_run else None
     (out / "metrics.json").write_text(
         json.dumps({"run": run_info, "partitions": metrics}, indent=1, default=str)
     )
     inputs = [pkg / "labels.csv", pkg / "SHA256SUMS", Path(args.config)] + (
         [pkg / "views.csv"] if views is not None else []
     ) + ([Path(args.backbone_weights)] if args.backbone_weights else [])
+    if args.init_heights_run:
+        inputs.extend([args.init_heights_run / "metrics.json", args.init_heights_run / "best.pt"])
     write_provenance(
         build_provenance(
             artifact_id=f"{cfg['name']}_{args.split}_heights_{args.aux}",
