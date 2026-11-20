@@ -7,6 +7,39 @@ separately (`docs/REPRODUCIBILITY.md`).
 
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
+### Added (2026-11-20, breaker type: does a video encoder use the motion?)
+- Bar Y-B3, fixed before any run (`docs/experiments/breaker_types.md`): frozen V-JEPA 2
+  ViT-L on each VWBT_9000 clip in order, against the same frames shuffled. Each clip is read
+  as three 64-frame windows over its 30 s at 5 fps, and the tokens are averaged over space
+  (75 per clip). The head and folds are Y-B1's, with seeds 0-2. Still-frame and order-free
+  arms are reported beside, along with Y-B1's DINOv3 and CRNN predictions on the same
+  bootstrap draws. `scripts/breaker_features.py --encoders vjepa2` decodes each clip once
+  for all three versions. `scripts/train_breaker_heads.py` gains five `vjepa2_*` arms and
+  `score --with` (another run's predictions scored beside), and `deploy/dgx/breakers.sh`
+  gains `WITH=<run>`.
+- **Bar Y-B3 met:** in order minus shuffled is +0.038 [+0.024, +0.052] pooled macro-F1
+  (0.833 against 0.795) at the held-out beach, at every seed. In order also beats each
+  window's middle frame repeated (+0.081 [+0.066, +0.098]), and the gap holds with heads
+  that cannot read token order (+0.035). So the encoder uses the breaking motion.
+- But motion only brings V-JEPA 2 level with DINOv3 on single frames: −0.007
+  [−0.026, +0.012] against DINOv3's temporal head, and 0.848 against 0.850 for the best arm
+  of each.
+
+### Added (2026-11-19, breaker type at unseen beaches)
+- Breaker-type classification on Yin et al.'s VWBT_9000 (9,000 clips, six beaches) on the
+  official leave-one-site-out split, with bars Y-B1 and Y-B2 fixed before any run
+  (`docs/experiments/breaker_types.md`). It replaces the rejected breaker trainer: each clip
+  is decoded once into frozen ResNet-18 and DINOv3 features at the clips' full 5 fps
+  (`scripts/breaker_features.py`), and the heads train on that cache
+  (`scripts/train_breaker_heads.py`, `deploy/dgx/breakers.sh`). Yin et al. publish only a
+  random 5-fold accuracy, so the comparator is their own CRNN re-run (94.0 % under their
+  protocol, against their 96.1 %).
+- **Bar Y-B1 met:** frozen DINOv3 frames reach pooled macro-F1 0.840 at the held-out beach,
+  against 0.653 for Yin et al.'s CRNN, +0.187 [+0.162, +0.214], at every site and seed.
+- **Bar Y-B2 not met:** the temporal head is no better than the same features with frame
+  order removed (−0.010 [−0.018, −0.002]); 5 fps does not help the CRNN either. Offshore
+  ERA5 waves and beach slope are at chance (0.34).
+
 ### Added (2026-11-19, wave measurements beyond height)
 - Review of Codex's prepared measurement experiments and bars M-S1 and M-S2, fixed before
   their runs, in `docs/experiments/wave_measurements.md`. Fixed before any run: the slope
