@@ -187,7 +187,7 @@ Neither official repo documents a continued-pretraining or LoRA mode. DINOv3's l
 - DINOv3's own small models (S, S+, B, L, H+, ConvNeXt) are distilled from the 7B, and the ConvNeXt distillation code is public. — [dinov3 README](https://github.com/facebookresearch/dinov3)
 
 **Measured on the project's shared lab H200 server (shared)**
-- Feature extraction for all four arms of the WebCOOS shore-video experiment takes about **1.5 s per clip**, decoding included; the full sample is about 1.5 h of GPU time. Jennette clips are about 290 MB each (2592×1944). — local note `~/Projects/Wave_Analysis/docs/experiments/webcoos_video.md` (Progress, 2026-11-18)
+- Feature extraction for all four arms of the WebCOOS shore-video experiment takes about **1.5 s per clip**, decoding included; the full sample is about 1.5 h of GPU time. Jennette clips are about 290 MB each (2592×1944). — local note `docs/experiments/webcoos_video.md` (Progress, 2026-11-18)
 
 ### Inferences
 **Image GPU-hour estimate (DINOv3 ViT-B/L, ExPLoRA-style)**
@@ -374,19 +374,19 @@ Realistic budgets:
 ### Cited Findings
 
 **The four papers, from the project's full-text notes (V1)**
-- **Choi 2020** — [local note](~/Projects/Wave_Analysis/docs/literature/papers/choi2020.md):
+- **Choi 2020** — [local note](../../docs/literature/papers/choi2020.md):
   - Classification: VGG16 (best: 84.05 % ± 0.14), ResNet, Inception v3 and DenseNet with ImageNet transfer and GAP/GMP heads, on one-view lower halves resized to 224².
   - Ship regression: frame differences → pretrained VGG → bidirectional ConvLSTM (256 filters, 3×3) → GAP → FC, on 16-frame clips.
   - Hardware: not recorded in the project note.
-- **Kim 2023** — [local note](~/Projects/Wave_Analysis/docs/literature/papers/kim2023.md):
+- **Kim 2023** — [local note](../../docs/literature/papers/kim2023.md):
   - Snapshot CNN of 4 blocks (16-32-64-64).
   - GoogLeNet features → BiLSTM (2,000 hidden) → dropout 0.5 → FC.
   - Grayscale frames every 0.5 s; sequences of 6–300 s; best 180 s.
   - Hardware: not recorded.
-- **Yang 2026** — [local note](~/Projects/Wave_Analysis/docs/literature/papers/yang2026.md):
+- **Yang 2026** — [local note](../../docs/literature/papers/yang2026.md):
   - ResNet-18 per frame + (sin, cos) attitude MLP → multi-head self-attention fusion → mean pool → MLP. 7–9 frames at 2 Hz; ~4,700 simulated samples.
   - Hardware: not recorded.
-- **Kamagata 2026** — [local note](~/Projects/Wave_Analysis/docs/literature/papers/kamagata2026.md); [arXiv:2607.11998](https://arxiv.org/abs/2607.11998):
+- **Kamagata 2026** — [local note](../../docs/literature/papers/kamagata2026.md); [arXiv:2607.11998](https://arxiv.org/abs/2607.11998):
   - **[recent, verified: arXiv abs page, v1 13 Jul 2026, only version]**
   - Model: "V-JEPA" ViT-S (`vit_small_patch16_224`) giving 384-d frame embeddings; Farnebäck optical-flow saliency crops; SlowFast transformer of 2 layers, d = 384 (fast: 16 frames, 4 heads; slow: every 4th frame, 8 heads).
   - Training: 894 clip windows from 6 scenes; AdamW, 50 epochs, early stop at 31.
@@ -410,7 +410,7 @@ Realistic budgets:
 - Additional sizes: DINOv3 ConvNeXt-T 29 M, ViT-S 21 M, ViT-B 86 M, ViT-L 300 M, ViT-7B 6,716 M — [dinov3](https://github.com/facebookresearch/dinov3). V-JEPA 2 ViT-L 300 M, ViT-H 600 M, ViT-g 1 B; V-JEPA 2.1 ViT-G 2 B — [vjepa2](https://github.com/facebookresearch/vjepa2).
 
 **Measured compute anchors**
-- V-JEPA 2 ViT-L frozen feature extraction on the shared H200: ≈ 1.5 s per clip for four arms, decode included. — [local note](~/Projects/Wave_Analysis/docs/experiments/webcoos_video.md)
+- V-JEPA 2 ViT-L frozen feature extraction on the shared H200: ≈ 1.5 s per clip for four arms, decode included. — [local note](../../docs/experiments/webcoos_video.md)
 - FINO ViT-L continued SSL: 10.7–920 GPU-hours per domain (H100/H200). — [arXiv:2606.05107](https://arxiv.org/html/2606.05107)
 - ExPLoRA ViT-L: 96–320 GPU-hours (RTX 6000 Ada / 4 × A4000). — [arXiv:2406.10973](https://arxiv.org/html/2406.10973)
 - RAD-DINO ViT-B continuation: 37 H100-hours at 100k images, 373 at 1M, 1,307 at 3.5M. — [arXiv:2509.12818](https://arxiv.org/html/2509.12818v1)

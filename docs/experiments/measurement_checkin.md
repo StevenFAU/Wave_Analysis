@@ -7,7 +7,7 @@ Start with the buoy slope comparison. It has a physical target for all 41,091 st
 From the measurement worktree, run the following read-only commands. The second command prints the five seed-0 launch commands for a selected arm. Use `a` for the ImageNet ConvNeXt and `dinov3` for DINOv3 ConvNeXt. An absent or ambiguous fold prints a comment. Set `MEASURE_RUNS` to a different downloaded run root if needed.
 
 ```bash
-cd ~/Projects/Wave_Analysis-measurements
+cd ../Wave_Analysis-measurements   # from the main checkout
 scripts/measurements status
 scripts/measurements plan --arm a --seed 0 --stage probe
 ```

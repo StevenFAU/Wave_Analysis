@@ -16,7 +16,7 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
-NS="${NS:?set NS to your namespace, e.g. export NS=cohens2025-wave}"
+NS="${NS:?set NS to your namespace, e.g. export NS=<netid>-wave}"
 K=(kubectl -n "$NS")
 HERE=deploy/k8s
 HELPER=wave-analysis-helper

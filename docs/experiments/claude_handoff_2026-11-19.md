@@ -4,7 +4,7 @@
 
 ## Where to work
 
-Use `~/Projects/Wave_Analysis-measurements`, branch `codex/wave-measurement-experiments`. Experiment code is committed at `0674b9ce6`. The prepared data and portable package are in this worktree’s ignored `runs/prep-v1/`. Upstream predictions and checkpoints are in `~/Projects/Wave_Analysis/runs/`. The `scripts/measurements` launcher resolves those paths from this machine. The preparation passed 329 unit tests, a complete portable-package checksum verification, and small CPU runs of both the frozen probe and slope fine-tune. [Launch and rebuild guide](measurement_checkin.md) · [Research rationale](../../reports/Wave%20measurements%20to%20learn%20next.md)
+Use the sibling worktree `../Wave_Analysis-measurements` (next to the main checkout), branch `codex/wave-measurement-experiments`. Experiment code is committed at `0674b9ce6`. The prepared data and portable package are in this worktree’s ignored `runs/prep-v1/`. Upstream predictions and checkpoints are in the main checkout's `runs/`. The `scripts/measurements` launcher resolves those paths from this machine. The preparation passed 329 unit tests, a complete portable-package checksum verification, and small CPU runs of both the frozen probe and slope fine-tune. [Launch and rebuild guide](measurement_checkin.md) · [Research rationale](../../reports/Wave%20measurements%20to%20learn%20next.md)
 
 ## What finished overnight
 
@@ -21,7 +21,7 @@ The three upstream reports are under the main checkout. Their denominators and c
 Run these from **the measurement worktree**. The plan prints local commands and matched checkpoints. The final two commands reproduce the morning sensitivity checks using saved predictions.
 
 ```bash
-cd ~/Projects/Wave_Analysis-measurements
+cd ../Wave_Analysis-measurements   # from the main checkout
 scripts/measurements status
 GPU_HOST=<ssh-alias> deploy/dgx/run.sh check
 scripts/measurements plan --arm dinov3 --seed 0 --stage probe
