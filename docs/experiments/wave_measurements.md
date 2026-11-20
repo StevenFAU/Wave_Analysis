@@ -508,8 +508,8 @@ environment or `uv sync --extra imaging --extra ml --extra netcdf`.
   the same for `run_info` once `--init-heights-run` is recorded there.
   `wave_heights.py` (Codex's `units`) does not conflict with that branch.
 
-**Hostnames.** **Fixed:** the handoff's `GPU_HOST=<lab-host>` is now `<ssh-alias>`. The whole
-diff has no other lab hostname, bastion name or IP address.
+**Hostnames.** **Fixed:** the handoff's `GPU_HOST=` named the lab's server; it is now
+`<ssh-alias>`. The whole diff has no other lab hostname, bastion name or IP address.
 
 **Data licences** (read 2026-11-19):
 
