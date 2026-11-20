@@ -100,7 +100,7 @@ rule (at most 7 of the project's containers, a GPU with at least 40 GB free that
 
 ## Results (2026-11-19)
 
-Run `video-year-20261119t2229-t9-timex` (commit b88a8a7b1, one GPU, 100 min), after a
+Run `video-year-20261119t2229-t9-timex` (commit a0bdc786d, one GPU, 100 min), after a
 smoke test. 30,931 triples; 2025: 10,942 triples on 362 days.
 
 How to read: RMSE is the typical error of H_s in metres (lower is better). A difference

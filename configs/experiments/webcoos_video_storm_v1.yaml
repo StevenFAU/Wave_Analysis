@@ -1,6 +1,6 @@
 # Storm-date estimates for the shore-labels session's storm-set bars (T2-A, T2-B, T3-K;
 # docs/experiments/sensing_per_wave_bars.md on claude/sensing-shore-labels, committed at
-# c11351d0c before any storm label was opened): the whole-clip recipe of webcoos_video_v1,
+# f5b5aa7a2 before any storm label was opened): the whole-clip recipe of webcoos_video_v1,
 # unchanged, trained and read out of fold in five folds of the sealed storm set's dates
 # (docs/experiments/webcoos_video.md, "Storm set"). Not a test of bars M1-M7: on these dates
 # the trainer's "M3-M5" lines are estimates only, and M6-M7 are not scored (no physics_v2 key).

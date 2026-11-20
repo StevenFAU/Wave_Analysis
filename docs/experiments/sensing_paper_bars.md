@@ -61,7 +61,7 @@ Three-seed means on identical strips; 95 % intervals from 2,000 resamples of who
 
 ### Results over the five grouped folds (2026-11-20)
 
-Out of fold over all 79 buoys: each fold's three-seed mean on its own test groups, against DINOv3-gentle's runs on the same folds and seeds; 95 % intervals from 2,000 resamples of whole station groups. All runs from commit `95e17f790`; scorer outputs `runs/*-folds-comparison.json`.
+Out of fold over all 79 buoys: each fold's three-seed mean on its own test groups, against DINOv3-gentle's runs on the same folds and seeds; 95 % intervals from 2,000 resamples of whole station groups. All runs from commit `492b0c9e0`; scorer outputs `runs/*-folds-comparison.json`.
 
 | Comparison | Strips, groups | DINOv3-gentle | Paper's network | Difference [95 % interval] | Bar |
 |---|---|---|---|---|---|

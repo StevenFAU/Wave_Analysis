@@ -162,7 +162,7 @@ lock. A feature smoke test on 24 clips comes first and is not scored.
 
 ## Result (2026-11-19): Y-B1 met, Y-B2 not met
 
-Three runs on the lab server, all on commit `0cedfefee`: the feature pass over the 9,000
+Three runs on the lab server, all on commit `94b2f2919`: the feature pass over the 9,000
 clips (`video-breakers-20261119t2216-features-v1`, 11 minutes, one GPU), the heads
 (`video-breakers-20261119t2254-heads-v1`, 30 minutes for 72 neural fits, both physics arms
 and the score) and a 24-clip smoke test before them, which was not scored. 8,998 clips
@@ -337,8 +337,8 @@ free, launched inside the project's shared launch lock.
 
 ## Result of Y-B3 (2026-11-20 UTC): met, and the still-frame control agrees
 
-Three runs on the lab server, all on code commit `19bda86e8` (the bar was committed before
-them, in `8551d83a8`). First a 24-clip smoke test (`video-breakers-20261119t2349-features-vj-smoke`,
+Three runs on the lab server, all on code commit `7de809ecd` (the bar was committed before
+them, in `dde153c60`). First a 24-clip smoke test (`video-breakers-20261119t2349-features-vj-smoke`,
 not scored). Then the V-JEPA 2 pass over the 9,000 clips in three versions
 (`video-breakers-20261120t0005-features-vj-v1`, 97 minutes on one shared GPU, 4.1 GB of
 features). Then the heads (`video-breakers-20261120t0143-heads-vj-v1`, 15 minutes for 90

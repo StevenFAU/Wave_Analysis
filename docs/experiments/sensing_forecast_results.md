@@ -94,7 +94,7 @@ The inner models are slightly weaker than the outer ones, as expected from three
 
 The historical S2 arrangement, re-run by the same code, gives 0.2668 and 0.2398 m. S2's scored result, 0.267 against 0.288 m, does not depend on the leak. Bar S2 and its fresh-strip confirmation on 2026-11-27 are unchanged.
 
-**Cost.** The 30 inner runs took 1,265 GPU-minutes (21.1 GPU-hours) on the shared server. That is above the 18–20-hour estimate, because the runs shared busy GPUs, and below the amendment's 22-hour stop. Two runs ran at commit `0a9668670` and 28 at `9f7426637`; their training code is identical.
+**Cost.** The 30 inner runs took 1,265 GPU-minutes (21.1 GPU-hours) on the shared server. That is above the 18–20-hour estimate, because the runs shared busy GPUs, and below the amendment's 22-hour stop. Two runs ran at commit `969c0679c` and 28 at `2610e77c4`; their training code is identical.
 
 ## Reproduce
 

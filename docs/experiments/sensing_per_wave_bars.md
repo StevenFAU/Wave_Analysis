@@ -37,7 +37,7 @@ crest row. On all 1,145 records, the crest row's height equals the crest minus t
 preceding trough the median difference is 0.14 m), and its period equals the span of
 the crest and following trough rows (99th percentile 3e-7 s; 1.1 s median otherwise).
 So each wave is an upcrossing wave, read once from its crest row, as the script does.
-Codex's convention note (cbdd6523b) is right.
+Codex's convention note (1cd3d505c) is right.
 
 **Quality tiers.** `good`: both half-waves of a wave carry primary flag 1 (the primary
 endpoint). `incl_unevaluated`: flag 1 or 2 (not evaluated), the sensitivity tier. Flag 2
@@ -272,7 +272,7 @@ final run's folds and scored on those clips, once. T2-C and T3-S are repeated th
 the storm set also fails the coverage rule, the class endpoints are reported as
 unassessable for this sample.
 
-## What changed from the first draft (Codex, 0d331c01f) and why
+## What changed from the first draft (Codex, 5641f73ed) and why
 
 - **Cohort fixed to the interim run's 992 clips and folds**, so every comparison is
   paired with the 0.513 m read-out on identical clips, without new feature extraction in
@@ -296,8 +296,8 @@ unassessable for this sample.
 
 ### Test 2, development dates (2026-11-19)
 
-Scored with commit 25a23ac1f (`runs/sensing-test2-dev-20261119b`, report re-rendered by
-3d72a2a4f with identical scores). 922 clips on 17 dates; the `incl_unevaluated` tier
+Scored with commit 111b939dd (`runs/sensing-test2-dev-20261119b`, report re-rendered by
+ba79f3444 with identical scores). 922 clips on 17 dates; the `incl_unevaluated` tier
 gives the same numbers, since no wave carries flag 2.
 
 How to read: RMSE is the typical error (m for heights, s for periods; lower is better).
@@ -332,7 +332,7 @@ What it means:
 
 ### Test 3, video half: Kamagata's network (2026-11-19)
 
-Run `video-days-20261119t2143-t3-kamagata` (commit 8b9e8e48d, one GPU, 77 min), after a
+Run `video-days-20261119t2143-t3-kamagata` (commit 1933af002, one GPU, 77 min), after a
 smoke test; launched under the project's GPU rule once the queue order was relaxed. The
 992 interim clips, 18 dates, five folds, five seeds.
 
@@ -360,8 +360,8 @@ What it means:
   clips, found, not confirmed.
 
 **Kim's network:** two smoke tests failed in setup (this torchvision refuses
-`aux_logits=False` with pretrained GoogLeNet weights, fixed in 1864e3af0; an unlabelled
-clip made the class labels float, fixed in 778e8293c). The third,
+`aux_logits=False` with pretrained GoogLeNet weights, fixed in 82afec211; an unlabelled
+clip made the class labels float, fixed in d8fc68a26). The third,
 `video-days-20261120t0010-t3-kim-smoke` (29 clips, two epochs), ran end to end: frame
 features, BiLSTM heads, scores. Its numbers mean nothing; the full run waits for the
 storm set.

@@ -5,7 +5,7 @@ reads the wind-wave height better than ERA5 and adds little to the total
 ([sea-state study](ndbc_buoycam_sea_state.md), stage 2 and stage 3). Surface slope is a
 wind-sea quantity, so the next measurement is the slope the buoy itself records. Codex
 prepared this and other measurement experiments on 2026-11-19 (branch
-`codex/wave-measurement-experiments`, code `0674b9c`); this doc fixes their bars and
+`codex/wave-measurement-experiments`, code `26f0455`); this doc fixes their bars and
 records the review of that code (branch `claude/wave-measurements-review`).
 
 Launch and rebuild guide: [measurement_checkin.md](measurement_checkin.md). Rationale and
@@ -111,7 +111,7 @@ package (from 2026-11-14 16:00 UTC), as stage 2's.
 ### M-S1 result (2026-11-19): met
 
 Five probe runs on the lab server, one per fold (`deploy/dgx/measure.sh`, commit
-`5263299`; about 6 minutes per fold on a shared H200), scored by
+`fb79857`; about 6 minutes per fold on a shared H200), scored by
 `scripts/measurement_review.py probes`. 38,387 of the 41,091 strips are scored, at 77
 of the 79 buoys (the rest lack wind or three clear horizons, or are the 50 dropouts).
 Slope RMSE is the typical error of the predicted slope (dimensionless; the slope's own
@@ -144,7 +144,7 @@ spread on these strips is 0.020).
   wind + geometry. The frozen features still read the wind sea.
 
 **Water-only control** (beside the bar; `--water-only`, the same five checkpoints, commit
-`2c3e196`): each view is cut to the water below its horizon (from 8 % of the view height
+`0a47589`): each view is cut to the water below its horizon (from 8 % of the view height
 under the horizon line to 90 %) and resized, so the horizon line and the sky are gone.
 38,334 strips at 77 buoys.
 
@@ -202,8 +202,8 @@ ridge then trusts it a little too much, which can only hurt it at the test buoys
 
 ### M-S2 result (2026-11-19): not met
 
-Five fine-tunes on the lab server (`deploy/dgx/run.sh train`, commits `a7a3fcc` and
-`93cd540`, one per fold, two at a time; about 45-50 minutes each), scored by
+Five fine-tunes on the lab server (`deploy/dgx/run.sh train`, commits `eb91bb5` and
+`0397abc`, one per fold, two at a time; about 45-50 minutes each), scored by
 `scripts/measurement_review.py finetune` on the same 38,387 strips as M-S1. Both stacks
 are fitted on the validation buoys, so the frozen side here is M-S1's validation-fit
 arm (0.0084), not its primary (0.0089).
@@ -280,7 +280,7 @@ run (same config, seed and data; its test lines unread), so folds 0, 2, 3 and 4 
 ### M-S3 result (2026-11-20): not met; a stable fine-tune adds nothing to the frozen features
 
 Candidate B on all five folds (fold 1 from its pilot; folds 0, 2-4 on the lab server,
-commits `5d1b260` to `f0c5544`, identical training code; about 55 minutes each), scored
+commits `0efa5e3` to `756227f`, identical training code; about 55 minutes each), scored
 as M-S2 on the same 38,387 strips.
 
 | Arm (stacked with wind + geometry on the validation buoys) | Slope RMSE |
@@ -362,7 +362,7 @@ before it runs.
 
 ### T5 result (2026-11-20): T5-W met; the camera's skill reaches into the swell
 
-Fifteen probe runs on the lab server (`deploy/dgx/measure.sh`, commit `2bb64ae`; seeds
+Fifteen probe runs on the lab server (`deploy/dgx/measure.sh`, commit `9620ff7`; seeds
 0, 1, 2 x five folds, 7-10 minutes each; checkpoint hashes and test strips checked per
 run), scored by `scripts/measurement_visibility.py` (output
 `runs/measurement-t5/dinov3-s012/`). R² is the share of the variation of a quantity
@@ -428,7 +428,7 @@ a possible follow-up, not a next step.
 
 ## Review of the prepared experiments (2026-11-19)
 
-Codex's diff against `8f225d5c8` (26 files, about 3,400 lines) was read before any run.
+Codex's diff against `f00423f1f` (26 files, about 3,400 lines) was read before any run.
 Fixed means fixed on this branch before the run it affects; open means not fixed and
 not needed for the runs here; rejected means not run.
 
@@ -494,11 +494,11 @@ environment or `uv sync --extra imaging --extra ml --extra netcdf`.
 **Shared code and merge conflicts** (`scripts/train_wave_heights.py`,
 `src/wave_analysis/models/wave_heights.py`; not resolved here):
 
-- `claude/strips-grouped-cv-085fd2`: none in these files. Its commits after `8f225d5c8`
+- `claude/strips-grouped-cv-085fd2`: none in these files. Its commits after `f00423f1f`
   touch neither. `CHANGELOG.md` will conflict textually (both add entries at the top).
   This bar lives in its own doc so as not to touch `ndbc_buoycam_sea_state.md`, which
   that branch edits.
-- `claude/dinov3-continued-pretraining-fc2b1a` (branched at `1dfcc5f29`, so it must
+- `claude/dinov3-continued-pretraining-fc2b1a` (branched at `23a372cfd`, so it must
   first take the strips branch's changes to these files): three hunks in
   `train_wave_heights.py`. (a) Both add an option right after `--backbone-lr-scale`
   (`--init-heights-run`, `--backbone-weights`): keep both. (b) The model's

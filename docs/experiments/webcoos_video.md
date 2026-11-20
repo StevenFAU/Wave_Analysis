@@ -462,7 +462,7 @@ under the same lock):
 
 **Storm-date estimates (set 2026-11-19, to start once the storm package is on the server).**
 The shore-labels session's storm-set bars (T2-A, T2-B, T3-K;
-`docs/experiments/sensing_per_wave_bars.md`, committed at c11351d0c before any storm label
+`docs/experiments/sensing_per_wave_bars.md`, committed at f5b5aa7a2 before any storm label
 was opened) score `clip`, `window` and `window_image` estimates out of fold. The final run
 leaves the storm dates out, so the bars' fallback applies:
 - the same whole-clip recipe, `train_video_probe.py --whole-clip-only` with
@@ -501,7 +501,7 @@ date-level buoy H_s in the list is the stratification variable.
   excluded as unreadable. Jennette's clips are about 290 MB each (2592 x 1944), so the
   sample takes about two days at the archive's pace; the first scored run follows the
   first two sample weeks.
-- **Scored interim run (2026-11-19, commit e0bdd4c5c):** started once 17 local dates had
+- **Scored interim run (2026-11-19, commit 01df72df4):** started once 17 local dates had
   at least 10 framed clips each. `video-days-20261119t0628-m12` (the 64-frame arms, 1 h)
   and `video-days-20261119t0628-wholeclip` (window features 1.8 h, video window probes
   3.2 h, image window probes 0.8 h, about 34 GB of GPU memory) ran side by side on one

@@ -745,7 +745,7 @@ work moves to fusion (stage 2) and new outputs (stage 3). The arm with the lower
 out-of-fold H_s RMSE is the camera model for stages 2 and 3.
 
 **Result (2026-11-19): not met; DINOv3-gentle is the camera model for stages 2 and 3.**
-Five folds x three seeds per arm (30 runs at `8f225d5`, `runs/buoycam-cv-stage1-20261119`).
+Five folds x three seeds per arm (30 runs at `f00423f`, `runs/buoycam-cv-stage1-20261119`).
 Every buoy is predicted once, by models that saw neither it nor any buoy within 300 km.
 RMSE is the typical error in metres; CRPS is the average error of the whole predicted
 distribution, in metres (lower is better).
@@ -996,7 +996,7 @@ chance is the wind sea: its own period and the shape, which are reported beside 
 
 **Result (2026-11-19): P1-P3 not met, as expected; the camera beats ERA5 on the wind
 sea's period, and the joint model harms H_s.** DINOv3-gentle, five folds x three seeds
-(15 runs at `8f225d5`, `runs/buoycam-cv-spectral-20261119`). Periods are scored by RMSE
+(15 runs at `f00423f`, `runs/buoycam-cv-spectral-20261119`). Periods are scored by RMSE
 in seconds; directions by the mean absolute angle between predicted and true direction,
 in degrees (a random guess gives 90°).
 
