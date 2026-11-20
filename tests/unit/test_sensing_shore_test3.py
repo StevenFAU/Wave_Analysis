@@ -39,6 +39,7 @@ def _package(tmp: Path, n_days: int = 15, per_day: int = 2, k: int = 12, dim: in
                 tmp / "kim" / "cam" / f"{cid}.npy",
                 rng.standard_normal((90, 1024)).astype(np.float16),
             )
+    labs = labs[1:]  # one clip without a per-wave label, as on real data (class column then float)
     (tmp / "pkg").mkdir()
     pd.DataFrame(rows).to_csv(tmp / "pkg" / "interim.csv", index=False)
     pd.DataFrame(labs).to_csv(tmp / "pkg" / "labels.csv", index=False)
@@ -81,6 +82,6 @@ def test_test3_end_to_end(tmp_path):
     assert rc == 0
     res = json.loads((tmp_path / "out" / "metrics.json").read_text())
     assert res["kamagata"]["n_clips"] == 30 and "T3-S verdict" in res["kamagata"]
-    assert res["kim"]["n_clips"] == 30 and res["kim"]["assessable"]
+    assert res["kim"]["n_clips"] == 29 and res["kim"]["assessable"]
     p = pd.read_csv(tmp_path / "out" / "predictions.csv")
     assert p["kamagata_pred_hs_clip"].gt(0).all() and p["kamagata_pred_hs_window"].gt(0).all()

@@ -212,14 +212,18 @@ def kim_arm(
     k = cfg["kim"]
     dev = args.device
     x = torch.from_numpy(np.stack([feats[c] for c in d["clip_id"]]).astype(np.float32)).to(dev)
-    y = torch.as_tensor(d["kim_true"].to_numpy().copy(), device=dev)
+    y = torch.as_tensor(d["kim_true"].to_numpy().astype(np.int64), device=dev)  # class indices
     fold, days = d["fold"].to_numpy(), d["local_day"].to_numpy()
     prob = np.zeros((len(d), 5))
     for f in sorted(set(fold)):
         te, trall = np.flatnonzero(fold == f), np.flatnonzero(fold != f)
         for seed in cfg["seeds"]:
-            vday = val_date(days, days[trall], int(f), int(seed))
+            vday = val_date(days, days[trall], int(f), int(seed)) if len(trall) else ""
             va, tr = trall[days[trall] == vday], trall[days[trall] != vday]
+            if len(tr) == 0 or len(va) == 0:  # only in tiny smoke tests: uniform probabilities
+                prob[te] += 1 / 5
+                log(f"kim fold {f} seed {seed}: no training or validation clips, skipped")
+                continue
             torch.manual_seed(int(seed))
             m = Kim2023CNNBiLSTM(5, backbone="googlenet", pretrained=False,
                                  hidden_size=int(k["hidden"]), dropout=float(k["dropout"]))  # fmt: skip
