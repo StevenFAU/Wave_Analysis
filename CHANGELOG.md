@@ -25,6 +25,37 @@ separately (`docs/REPRODUCIBILITY.md`).
   [−0.026, +0.012] against DINOv3's temporal head, and 0.848 against 0.850 for the best arm
   of each.
 
+### Added (2026-11-20, test 1 with nested calibration)
+- **Test 1 met** (camera added to a GFS-Wave + ERA5 forecast with the buoy's measured
+  wind; bar and amendment in `docs/experiments/sensing_model_bar.md`). The gate was refitted
+  per outer fold on inner predictions only. On 34,723 strips at 71 buoys in 41 groups:
+  - wind-wave height RMSE 0.2258 → 0.2079 m (−0.0179 [−0.0253, −0.0088], station groups);
+  - total height RMSE 0.2670 → 0.2623 m (−0.0047 [−0.0083, −0.0007]).
+- **Supporting results.**
+  - Permuting the camera within buoy and forecast-height quartile makes the fusion worse
+    than the forecast alone, so the gain comes from the individual images.
+  - The secondary variance-weighted arm does better still: 0.2578 m total and 0.2020 m
+    wind-wave.
+  - With the anemometer withheld, the swap's total-height gain does not clear zero; its
+    wind-wave gain does.
+- **The historical diagnostic is superseded** (0.2635 / 0.2095 m; its calibration
+  predictions came from models that trained or validated on the outer test groups, per the
+  inventory in the bar doc).
+- **S2 check.** The same nested calibration applied to bar S2's stage-2 fusion gives
+  0.2667 against 0.2883 m total and 0.2407 against 0.2928 m wind-wave. S2 and its
+  2026-11-27 confirmation are unchanged.
+- **New scripts.**
+  - `scripts/sensing_nested_splits.py`: leave-two-folds-out pair splits, package
+    `ndbc_buoycam_heights_v2cvn`. They drove 30 inner DINOv3-gentle runs
+    (10 pairs × seeds 0–2, 21.1 GPU-hours on the shared server).
+  - `scripts/sensing_nested_inventory.py`: which groups each cached model saw.
+  - `scripts/sensing_nested_fusion.py`: the nested scorer and the S2 check; fed the outer
+    predictions, it reproduces the historical numbers exactly.
+- **Changed scripts and config.**
+  - `scripts/sensing_forecast_corrector.py --splits`.
+  - Pair-split bootstrap keys in `configs/experiments/ndbc_buoycam_heights_v2cv.yaml`.
+  - Results in `docs/experiments/sensing_forecast_results.md`.
+
 ### Added (2026-11-19, breaker type at unseen beaches)
 - Breaker-type classification on Yin et al.'s VWBT_9000 (9,000 clips, six beaches) on the
   official leave-one-site-out split, with bars Y-B1 and Y-B2 fixed before any run
@@ -91,67 +122,6 @@ separately (`docs/REPRODUCIBILITY.md`).
   `scripts/predict_sensing_papers.py` (per-view probabilities from a finished run's chosen
   epoch); `scripts/score_sensing_papers.py`: registered arm pairs (`--control`), each view
   position (`--views`), and the five grouped folds (15 runs per arm, station-group intervals).
-
-### Added (2026-11-14)
-- NDBC buoy-camera sea-state dataset (`ndbc_buoycam_sea_state_v0`): every archived
-  strip paired with its own buoy's wave height (`scripts/buoycam_pairs.py`), and a
-  package of 41,091 twilight and daylight strips at 79 buoys with the caption cut,
-  a split by unseen buoys at least 300 km apart and a split by later weeks
-  (`scripts/buoycam_package.py`, `configs/experiments/ndbc_buoycam_sea_state_v0.yaml`).
-  Method in `docs/experiments/ndbc_buoycam_sea_state.md`.
-- First results of `currituck_sea_state_v0` (desktop GPU): on the held-out year
-  2025 the camera alone scores balanced accuracy 0.73, below WIS (0.77) and level
-  with ERA5; `scripts/sea_state_fusion.py` shows it adds macro-F1 +0.04 to +0.06
-  to either hindcast (intervals above zero), without clearing WIS on both
-  metrics. Details in `docs/experiments/currituck_sea_state.md`.
-- Full-frame ablation: alone, below the sea band on 2025 (balanced accuracy
-  −0.07 [−0.10, −0.04]) and level on 2026; with a hindcast, level or slightly
-  better (macro-F1 +0.02, not planned beforehand).
-- `scripts/sea_state_haze_check.py`: sea-band sharpness of every still and a fog
-  test of a trained model. The Currituck camera has grown hazier each year (93 % of
-  2026 stills below the blurriest third of 2022-2024); haze of that size lowers the
-  model's calm calls only from 0.73 to 0.67-0.70, against 0.49 seen in 2025.
-
-- Six-view training for the buoy cameras: `model.input: views` reads each strip's
-  six views with one backbone and averages the features of the usable ones
-  (`MultiViewNet`, `StripDataset`); `train_sea_state.py` takes any split of a
-  package, bootstraps over the config's group column and has `--class-weights none`.
-- `scripts/buoycam_era5.py`: ERA5 wave height at every camera buoy from one global
-  request per month (`ERA5WaveSource.fetch_area`), and the package's ERA5 baseline.
-
-- `deploy/k8s/`: training on a Kubernetes cluster with NVIDIA GPUs (FAU's H200
-  machine through Rancher), driven from the desktop by `run.sh` (storage volume,
-  helper pod, upload with checksums, environment from uv.lock, one-GPU job).
-  `git_state` reads the commit of a `git archive` tree from its `GIT_COMMIT` file.
-
-### Added (2026-11-17)
-- `deploy/dgx/run.sh`: training on a shared GPU server over SSH in a Docker
-  container, the way FAU's CAAI lab uses its H200 server (the lab does not run
-  jobs through Rancher). Same pieces as `deploy/k8s` (code of one commit, package
-  tar checked by SHA-256, environment from uv.lock), on the server's data disk;
-  one GPU per run, picked as the least busy with enough free memory. Uploads go
-  by rsync, which resumes a broken transfer: the route through FAU's bastion
-  carried about 2 Mbit/s on 2026-11-17 (heavy packet loss; the home line does 34).
-  `deploy/container/{setup,train}.sh` run inside the container for both routes
-  (`train.sh` was `deploy/k8s/train_in_pod.sh`).
-
-- `scripts/buoycam_bar.py`: scores a buoy-camera run against the bar fixed before
-  training (paired bootstrap of the gain over ERA5, over whole buoys or buoy-days)
-  and writes `bar.json` into the run.
-- First buoy-camera result (station split, one H200): the camera does not beat ERA5
-  on the test buoys (balanced accuracy 0.70 against 0.74, gain −0.03 [−0.15, +0.01];
-  macro-F1 0.65 against 0.77, −0.12 [−0.39, −0.03]); it mostly calls the sea one
-  class too calm. `docs/experiments/ndbc_buoycam_sea_state.md`.
-- Three more buoy-camera runs in parallel (2026-11-18): a second seed scores macro-F1
-  0.12 lower on the test buoys (−0.142 to −0.079) and leans further calm; without
-  class weights, no difference; the time split beats each buoy's majority class
-  (+0.32 balanced accuracy) but not ERA5 on the 41 % of test strips it covers.
-
-- `scripts/buoycam_swell_check.py` (research question Q-M8): the buoy camera sees the
-  wind sea, not the swell. Within each buoy and class its too-calm share rises by
-  0.20 [0.15, 0.25] from the least- to the most-swell third of strips (ERA5: flat);
-  its calls follow wind-wave height more than swell height; over 24 held-out
-  buoys, swell share predicts the under-call (Spearman −0.89).
 
 ### Added (2026-11-18/19, domain pretraining)
 - Rank 6 of the architecture review, domain pretraining
@@ -277,6 +247,54 @@ separately (`docs/REPRODUCIBILITY.md`).
   climatology (2.46 s). Kim's five classes: no skill at unseen dates (58 %, the same as
   naming the average class). The record pooler is worse than the plain average and is
   dropped.
+
+### Added (2026-11-19, grouped cross-validation, partition fusion and spectral targets)
+- `scripts/buoycam_cv_folds.py` and package `ndbc_buoycam_heights_v2cv`: v2's strips in
+  five folds over the 43 station groups, balanced by strips, each with validation groups
+  drawn from its own training folds to match their swell share. Every buoy is predicted
+  once, out of fold.
+- A distribution head beside the point head (`model.distribution`, beta-NLL with
+  beta = 0.5, Seitzer 2022); `predictions.csv` gains each height's log mean and spread.
+- `wave_analysis.evaluation.uncertainty`: log-normal CRPS, merging seeds' Gaussians, and
+  buoy-level split-conformal thresholds (Lee, Barber & Willett 2023).
+- `scripts/buoycam_oof.py`: out-of-fold scores of a model's five folds x seeds, with
+  conformal 90 % intervals (coverage per buoy and per sea state), CRPS, every paper's
+  measure and a paired bar between two arms.
+- **Bar B2-CV not met:** DINOv3-gentle lowers out-of-fold H_s RMSE against ImageNet arm A
+  by 0.019 m [−0.028, −0.011] at all 79 buoys (0.532 against 0.550 m), but the wind sea
+  only by 0.002 m [−0.008, +0.004]. Conformal intervals cover 0.90 on average; 11 buoys
+  fall below 0.80.
+- `scripts/buoycam_partition_check.py`: WVHT² = SwH² + WWH² holds within rounding on all
+  295,547 records at the camera buoys. `scripts/buoycam_partition_fusion.py`: a gated
+  swap of ERA5 + wind's wind sea for the camera's, beside ridge, gradient boosting and
+  the raw partition rule, fitted fold by fold.
+- **Bar S2 met out of fold:** the gated swap lowers H_s RMSE from 0.288 to 0.267 m
+  (−0.021 m [−0.031, −0.012]) and wind-wave RMSE from 0.293 to 0.240 m against
+  ERA5 + wind at 77 buoys. To be confirmed on strips archived after the package
+  (about 2026-11-26).
+- `buoycam_era5.py`: ERA5 periods and directions (`pp1d`, `mwp`, `mp2`, `mwd`, `mpww`,
+  `mdww`, `mpts`) at each buoy's wave grid point. The parquet is now written whole
+  before it replaces the old one.
+- `scripts/buoycam_spectral_labels.py` and package `ndbc_buoycam_spectral_v3cv`: peak,
+  mean (Tm-1,0), average and wind-sea periods, the wind-sea part of the 1-D spectrum
+  and the mean direction (relative to the sun's azimuth: the caption's heading is a
+  fixed "90°") from each buoy's own spectral records.
+  `wave_analysis.models.wave_spectral` and `scripts/train_wave_spectral.py` train
+  these outputs.
+- **Bar S3 not met**, as expected: ERA5 wins peak period (1.70 against 3.44 s), energy period
+  (0.67 against 2.40 s) and mean direction (14° against 76°). The camera beats ERA5 on the wind
+  sea's period (Tm-1,0 0.55 against 0.75 s, −0.21 s [−0.24, −0.17]); trained jointly, the
+  extra outputs raise H_s RMSE by 0.086 m, so heights stay with stage 1's model.
+- `deploy/dgx/run.sh`: split names may contain digits (`fold0`).
+
+### Added (2026-11-19, bar S2 on new weeks: the tool)
+- `scripts/buoycam_fusion_confirm.py` (`build`, `predict`, `score`): the pre-registered
+  confirmation of bar S2 on strips archived after the package. The package's light rules
+  and labels, each strip predicted by its own buoy's fold's three seed models (CPU,
+  float32), and each fold's ERA5 lines and fitted combiners applied without refitting.
+  Before scoring it checks that its camera, ERA5 lines and combiners reproduce the
+  out-of-fold tables on the package's strips; a dry run counts strips but scores none.
+  `scripts/buoycam_pairs.py --start` pairs only strips taken from a given time on.
 
 ### Added (2026-11-18, whole-clip video: windows, pixel spectrum, shipping)
 - Shore video, whole-clip bars M3-M5 implemented and their recipe fixed before scoring
@@ -404,84 +422,66 @@ separately (`docs/REPRODUCIBILITY.md`).
   earlier package's identical images and sends only the other files; a package's content
   is named by the SHA-256 of its `SHA256SUMS`.
 
-### Added (2026-11-19, grouped cross-validation, partition fusion and spectral targets)
-- `scripts/buoycam_cv_folds.py` and package `ndbc_buoycam_heights_v2cv`: v2's strips in
-  five folds over the 43 station groups, balanced by strips, each with validation groups
-  drawn from its own training folds to match their swell share. Every buoy is predicted
-  once, out of fold.
-- A distribution head beside the point head (`model.distribution`, beta-NLL with
-  beta = 0.5, Seitzer 2022); `predictions.csv` gains each height's log mean and spread.
-- `wave_analysis.evaluation.uncertainty`: log-normal CRPS, merging seeds' Gaussians, and
-  buoy-level split-conformal thresholds (Lee, Barber & Willett 2023).
-- `scripts/buoycam_oof.py`: out-of-fold scores of a model's five folds x seeds, with
-  conformal 90 % intervals (coverage per buoy and per sea state), CRPS, every paper's
-  measure and a paired bar between two arms.
-- **Bar B2-CV not met:** DINOv3-gentle lowers out-of-fold H_s RMSE against ImageNet arm A
-  by 0.019 m [−0.028, −0.011] at all 79 buoys (0.532 against 0.550 m), but the wind sea
-  only by 0.002 m [−0.008, +0.004]. Conformal intervals cover 0.90 on average; 11 buoys
-  fall below 0.80.
-- `scripts/buoycam_partition_check.py`: WVHT² = SwH² + WWH² holds within rounding on all
-  295,547 records at the camera buoys. `scripts/buoycam_partition_fusion.py`: a gated
-  swap of ERA5 + wind's wind sea for the camera's, beside ridge, gradient boosting and
-  the raw partition rule, fitted fold by fold.
-- **Bar S2 met out of fold:** the gated swap lowers H_s RMSE from 0.288 to 0.267 m
-  (−0.021 m [−0.031, −0.012]) and wind-wave RMSE from 0.293 to 0.240 m against
-  ERA5 + wind at 77 buoys. To be confirmed on strips archived after the package
-  (about 2026-11-26).
-- `buoycam_era5.py`: ERA5 periods and directions (`pp1d`, `mwp`, `mp2`, `mwd`, `mpww`,
-  `mdww`, `mpts`) at each buoy's wave grid point. The parquet is now written whole
-  before it replaces the old one.
-- `scripts/buoycam_spectral_labels.py` and package `ndbc_buoycam_spectral_v3cv`: peak,
-  mean (Tm-1,0), average and wind-sea periods, the wind-sea part of the 1-D spectrum
-  and the mean direction (relative to the sun's azimuth: the caption's heading is a
-  fixed "90°") from each buoy's own spectral records.
-  `wave_analysis.models.wave_spectral` and `scripts/train_wave_spectral.py` train
-  these outputs.
-- **Bar S3 not met**, as expected: ERA5 wins peak period (1.70 against 3.44 s), energy period
-  (0.67 against 2.40 s) and mean direction (14° against 76°). The camera beats ERA5 on the wind
-  sea's period (Tm-1,0 0.55 against 0.75 s, −0.21 s [−0.24, −0.17]); trained jointly, the
-  extra outputs raise H_s RMSE by 0.086 m, so heights stay with stage 1's model.
-- `deploy/dgx/run.sh`: split names may contain digits (`fold0`).
+### Added (2026-11-17)
+- `deploy/dgx/run.sh`: training on a shared GPU server over SSH in a Docker
+  container, the way FAU's CAAI lab uses its H200 server (the lab does not run
+  jobs through Rancher). Same pieces as `deploy/k8s` (code of one commit, package
+  tar checked by SHA-256, environment from uv.lock), on the server's data disk;
+  one GPU per run, picked as the least busy with enough free memory. Uploads go
+  by rsync, which resumes a broken transfer: the route through FAU's bastion
+  carried about 2 Mbit/s on 2026-11-17 (heavy packet loss; the home line does 34).
+  `deploy/container/{setup,train}.sh` run inside the container for both routes
+  (`train.sh` was `deploy/k8s/train_in_pod.sh`).
 
-### Added (2026-11-19, bar S2 on new weeks: the tool)
-- `scripts/buoycam_fusion_confirm.py` (`build`, `predict`, `score`): the pre-registered
-  confirmation of bar S2 on strips archived after the package. The package's light rules
-  and labels, each strip predicted by its own buoy's fold's three seed models (CPU,
-  float32), and each fold's ERA5 lines and fitted combiners applied without refitting.
-  Before scoring it checks that its camera, ERA5 lines and combiners reproduce the
-  out-of-fold tables on the package's strips; a dry run counts strips but scores none.
-  `scripts/buoycam_pairs.py --start` pairs only strips taken from a given time on.
+- `scripts/buoycam_bar.py`: scores a buoy-camera run against the bar fixed before
+  training (paired bootstrap of the gain over ERA5, over whole buoys or buoy-days)
+  and writes `bar.json` into the run.
+- First buoy-camera result (station split, one H200): the camera does not beat ERA5
+  on the test buoys (balanced accuracy 0.70 against 0.74, gain −0.03 [−0.15, +0.01];
+  macro-F1 0.65 against 0.77, −0.12 [−0.39, −0.03]); it mostly calls the sea one
+  class too calm. `docs/experiments/ndbc_buoycam_sea_state.md`.
+- Three more buoy-camera runs in parallel (2026-11-18): a second seed scores macro-F1
+  0.12 lower on the test buoys (−0.142 to −0.079) and leans further calm; without
+  class weights, no difference; the time split beats each buoy's majority class
+  (+0.32 balanced accuracy) but not ERA5 on the 41 % of test strips it covers.
 
-### Added (2026-11-20, test 1 with nested calibration)
-- **Test 1 met** (camera added to a GFS-Wave + ERA5 forecast with the buoy's measured
-  wind; bar and amendment in `docs/experiments/sensing_model_bar.md`). The gate was refitted
-  per outer fold on inner predictions only. On 34,723 strips at 71 buoys in 41 groups:
-  - wind-wave height RMSE 0.2258 → 0.2079 m (−0.0179 [−0.0253, −0.0088], station groups);
-  - total height RMSE 0.2670 → 0.2623 m (−0.0047 [−0.0083, −0.0007]).
-- **Supporting results.**
-  - Permuting the camera within buoy and forecast-height quartile makes the fusion worse
-    than the forecast alone, so the gain comes from the individual images.
-  - The secondary variance-weighted arm does better still: 0.2578 m total and 0.2020 m
-    wind-wave.
-  - With the anemometer withheld, the swap's total-height gain does not clear zero; its
-    wind-wave gain does.
-- **The historical diagnostic is superseded** (0.2635 / 0.2095 m; its calibration
-  predictions came from models that trained or validated on the outer test groups, per the
-  inventory in the bar doc).
-- **S2 check.** The same nested calibration applied to bar S2's stage-2 fusion gives
-  0.2667 against 0.2883 m total and 0.2407 against 0.2928 m wind-wave. S2 and its
-  2026-11-27 confirmation are unchanged.
-- **New scripts.**
-  - `scripts/sensing_nested_splits.py`: leave-two-folds-out pair splits, package
-    `ndbc_buoycam_heights_v2cvn`. They drove 30 inner DINOv3-gentle runs
-    (10 pairs × seeds 0–2, 21.1 GPU-hours on the shared server).
-  - `scripts/sensing_nested_inventory.py`: which groups each cached model saw.
-  - `scripts/sensing_nested_fusion.py`: the nested scorer and the S2 check; fed the outer
-    predictions, it reproduces the historical numbers exactly.
-- **Changed scripts and config.**
-  - `scripts/sensing_forecast_corrector.py --splits`.
-  - Pair-split bootstrap keys in `configs/experiments/ndbc_buoycam_heights_v2cv.yaml`.
-  - Results in `docs/experiments/sensing_forecast_results.md`.
+- `scripts/buoycam_swell_check.py` (research question Q-M8): the buoy camera sees the
+  wind sea, not the swell. Within each buoy and class its too-calm share rises by
+  0.20 [0.15, 0.25] from the least- to the most-swell third of strips (ERA5: flat);
+  its calls follow wind-wave height more than swell height; over 24 held-out
+  buoys, swell share predicts the under-call (Spearman −0.89).
+
+### Added (2026-11-14)
+- NDBC buoy-camera sea-state dataset (`ndbc_buoycam_sea_state_v0`): every archived
+  strip paired with its own buoy's wave height (`scripts/buoycam_pairs.py`), and a
+  package of 41,091 twilight and daylight strips at 79 buoys with the caption cut,
+  a split by unseen buoys at least 300 km apart and a split by later weeks
+  (`scripts/buoycam_package.py`, `configs/experiments/ndbc_buoycam_sea_state_v0.yaml`).
+  Method in `docs/experiments/ndbc_buoycam_sea_state.md`.
+- First results of `currituck_sea_state_v0` (desktop GPU): on the held-out year
+  2025 the camera alone scores balanced accuracy 0.73, below WIS (0.77) and level
+  with ERA5; `scripts/sea_state_fusion.py` shows it adds macro-F1 +0.04 to +0.06
+  to either hindcast (intervals above zero), without clearing WIS on both
+  metrics. Details in `docs/experiments/currituck_sea_state.md`.
+- Full-frame ablation: alone, below the sea band on 2025 (balanced accuracy
+  −0.07 [−0.10, −0.04]) and level on 2026; with a hindcast, level or slightly
+  better (macro-F1 +0.02, not planned beforehand).
+- `scripts/sea_state_haze_check.py`: sea-band sharpness of every still and a fog
+  test of a trained model. The Currituck camera has grown hazier each year (93 % of
+  2026 stills below the blurriest third of 2022-2024); haze of that size lowers the
+  model's calm calls only from 0.73 to 0.67-0.70, against 0.49 seen in 2025.
+
+- Six-view training for the buoy cameras: `model.input: views` reads each strip's
+  six views with one backbone and averages the features of the usable ones
+  (`MultiViewNet`, `StripDataset`); `train_sea_state.py` takes any split of a
+  package, bootstraps over the config's group column and has `--class-weights none`.
+- `scripts/buoycam_era5.py`: ERA5 wave height at every camera buoy from one global
+  request per month (`ERA5WaveSource.fetch_area`), and the package's ERA5 baseline.
+
+- `deploy/k8s/`: training on a Kubernetes cluster with NVIDIA GPUs (FAU's H200
+  machine through Rancher), driven from the desktop by `run.sh` (storage volume,
+  helper pod, upload with checksums, environment from uv.lock, one-GPU job).
+  `git_state` reads the commit of a `git archive` tree from its `GIT_COMMIT` file.
 
 ### Fixed (2026-11-14)
 - `sources.ndbc.buoycam.caption_band_rows`: the caption is a fixed 30-row band in
