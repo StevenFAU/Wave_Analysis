@@ -55,3 +55,32 @@ references/papers/*.pdf
 
 # --- Published research datasets (re-downloadable; scripts/download_external.py) ---
 data/external/**
+
+# --- Secrets and credentials: never commit (checked 2026-11-20) ---------------
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+id_ecdsa*
+rclone.conf
+.cdsapirc
+.netrc
+kubeconfig
+*.kubeconfig
+*.ovpn
+credentials*.json
+*token*.txt
+
+# --- Local agent working notes: drafts, handoffs and worktrees stay local ------
+.claude/
+
+# --- Loose video and logs: imagery carries provider licence limits -----------
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.log
