@@ -17,6 +17,12 @@ classes or thresholds). It reuses the classifier's view handling.
 * :func:`fit_heights` / :func:`predict_heights` - a masked Huber loss on
   standardised log heights; the epoch with the lowest validation RMSE of the
   first height (the total) is kept.
+* Optional distribution head (``dist_beta``): beside the point head, a mean and a
+  variance of each standardised log height, trained with the beta-NLL loss of
+  Seitzer et al. (ICLR 2022, arXiv:2203.09168): the Gaussian negative
+  log-likelihood of each point weighted by its predicted variance to the power
+  beta (no gradient through the weight), which keeps the plain likelihood from
+  neglecting hard points. :func:`beta_nll` is that loss.
 """
 
 from __future__ import annotations
@@ -46,6 +52,8 @@ from wave_analysis.models.sea_state import (
 
 #: Heights below this are set to it before the logarithm (calm seas; NDBC reports 0.0-0.1 m).
 FLOOR_M = 0.05
+#: Smallest variance of a standardised log height the distribution head can give.
+VAR_FLOOR = 1e-4
 
 
 def log_heights(values: np.ndarray) -> np.ndarray:
@@ -114,8 +122,10 @@ class MultiViewRegressor(nn.Module):
         layers: int = 1,
         dropout: float = 0.1,
         pretrained: bool = True,
+        distribution: bool = False,
     ) -> None:
         super().__init__()
+        self.n_outputs = n_outputs
         if backbone.startswith("timm:"):
             # Any timm backbone, e.g. "timm:convnext_tiny.dinov3_lvd1689m" (DINOv3) or
             # "timm:vit_base_patch14_reg4_dinov2.lvd142m" (DINOv2); ViTs take any view size.
@@ -151,9 +161,15 @@ class MultiViewRegressor(nn.Module):
         )
         self.mixer = nn.TransformerEncoder(enc, layers) if layers else None
         self.head = nn.Sequential(nn.LayerNorm(d_model), nn.Linear(d_model, n_outputs))
+        # Beside the point head: a mean and a (softplus) variance per height.
+        self.dist_head = (
+            nn.Sequential(nn.LayerNorm(d_model), nn.Linear(d_model, 2 * n_outputs))
+            if distribution
+            else None
+        )
 
-    def forward(self, x: tuple[torch.Tensor, ...]) -> torch.Tensor:
-        """Standardised log heights ``(B, n_outputs)``."""
+    def tokens(self, x: tuple[torch.Tensor, ...]) -> tuple[torch.Tensor, torch.Tensor]:
+        """Per-view tokens after the mixer ``(B, n_views, d_model)`` and the masked mean ``(B, d_model)``."""
         views, mask = x[0], x[1]
         b, v = views.shape[:2]
         flat = views.flatten(0, 1).contiguous(memory_format=torch.channels_last)
@@ -167,8 +183,47 @@ class MultiViewRegressor(nn.Module):
             h = self.mixer(h, src_key_padding_mask=~mask)
         m = mask.to(h.dtype).unsqueeze(-1)
         pooled = (h * m).sum(dim=1) / m.sum(dim=1).clamp_min(1.0)
+        return h, pooled
+
+    def forward(self, x: tuple[torch.Tensor, ...]) -> torch.Tensor:
+        """Standardised log heights ``(B, n_outputs)``.
+
+        With a distribution head ``(B, 3 n_outputs)``: point, mean, raw variance (see
+        :func:`split_outputs`).
+        """
+        _, pooled = self.tokens(x)
         out: torch.Tensor = self.head(pooled)
+        if self.dist_head is not None:
+            out = torch.cat([out, self.dist_head(pooled)], dim=-1)
         return out
+
+
+def split_outputs(
+    out: torch.Tensor, n_outputs: int
+) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+    """Point, mean and variance (standardised log heights) from :class:`MultiViewRegressor`'s output.
+
+    Without a distribution head the mean and variance are ``None``. The variance is
+    ``softplus(raw) + VAR_FLOOR``, so it is positive and smooth.
+    """
+    point = out[:, :n_outputs]
+    if out.shape[1] == n_outputs:
+        return point, None, None
+    mu = out[:, n_outputs : 2 * n_outputs]
+    var = nn.functional.softplus(out[:, 2 * n_outputs : 3 * n_outputs]) + VAR_FLOOR
+    return point, mu, var
+
+
+def beta_nll(
+    mu: torch.Tensor, var: torch.Tensor, target: torch.Tensor, beta: float = 0.5
+) -> torch.Tensor:
+    """Per-element beta-NLL (Seitzer et al. 2022): ``var**beta`` (no gradient) times the Gaussian NLL.
+
+    ``beta = 0`` is the plain NLL; ``beta = 1`` gives the mean the gradient of a squared
+    error. Constants are dropped.
+    """
+    nll = 0.5 * (torch.log(var) + (target - mu) ** 2 / var)
+    return nll * var.detach() ** beta if beta else nll
 
 
 @dataclass
@@ -190,17 +245,34 @@ def predict_heights(
     mean: np.ndarray,
     std: np.ndarray,
     amp: str = "none",
-) -> np.ndarray:
-    """Heights in metres ``(N, n_outputs)`` for every strip of ``loader``, in order."""
+    with_distribution: bool = False,
+) -> Any:
+    """Heights in metres ``(N, n_outputs)`` for every strip of ``loader``, in order.
+
+    ``with_distribution``: also the distribution head's mean and standard deviation of
+    each log height (natural log of metres), as ``(heights, mu_log, sigma_log)``.
+    """
     model.eval()
-    out = []
+    n_out = len(mean)
+    out, mus, vs = [], [], []
     for x, _ in loader:
         x = _to_device(x, device)
         with _autocast(device, amp):
             z = model(x)
-        out.append(z.float().cpu().numpy())
-    z = np.concatenate(out) if out else np.zeros((0, len(mean)))
-    return np.exp(z * std + mean)
+        point, mu, var = split_outputs(z.float(), n_out)
+        out.append(point.cpu().numpy())
+        if mu is not None and var is not None:
+            mus.append(mu.cpu().numpy())
+            vs.append(var.cpu().numpy())
+    z = np.concatenate(out) if out else np.zeros((0, n_out))
+    heights = np.exp(z * std + mean)
+    if not with_distribution:
+        return heights
+    if not mus:
+        raise ValueError("this model has no distribution head")
+    mu_log = np.concatenate(mus) * std + mean
+    sigma_log = np.sqrt(np.concatenate(vs)) * std
+    return heights, mu_log, sigma_log
 
 
 def fit_heights(
@@ -218,6 +290,7 @@ def fit_heights(
     names: Sequence[str] = ("hs", "wind_wave", "swell"),
     lp_epochs: int = 0,
     backbone_lr_scale: float = 1.0,
+    dist_beta: float = 0.5,
 ) -> HeightsFit:
     """Train for ``settings.epochs``; keep the epoch with the lowest validation RMSE of the first height.
 
@@ -226,6 +299,8 @@ def fit_heights(
     Kumar et al. 2022's LP-FT, which keeps the pretrained features better under shift).
     ``backbone_lr_scale``: the backbone learns at ``settings.lr`` times this (e.g. 0.1, so
     fine-tuning moves pretrained weights gently); the rest at ``settings.lr``.
+    A model with a distribution head adds :func:`beta_nll` (``dist_beta``) to the Huber
+    loss of the point head, with equal weight; the epoch is still chosen on the point head.
     """
     model.to(device).to(memory_format=torch.channels_last)
     enc = getattr(model, "encoder", None)
@@ -244,6 +319,7 @@ def fit_heights(
     mu = torch.as_tensor(mean, dtype=torch.float32, device=device)
     sd = torch.as_tensor(std, dtype=torch.float32, device=device)
     loss_fn = nn.HuberLoss(reduction="none", delta=huber_delta)
+    n_out = len(mean)
     piece = settings.micro_batch or settings.batch_size
     best = (math.inf, -1)
     best_state: dict[str, torch.Tensor] = {}
@@ -268,8 +344,12 @@ def fit_heights(
             batch_loss = torch.zeros((), device=device)
             for xs, zs, oks in zip(_pieces(x, piece), z.split(piece), ok.split(piece), strict=True):
                 with _autocast(device, settings.amp):
-                    pred = model(xs).float()
-                loss = (loss_fn(pred, torch.nan_to_num(zs)) * oks).sum() / denom
+                    point, mu_z, var_z = split_outputs(model(xs).float(), n_out)
+                zs0 = torch.nan_to_num(zs)
+                per = loss_fn(point, zs0)
+                if mu_z is not None and var_z is not None:
+                    per = per + beta_nll(mu_z, var_z, zs0, dist_beta)
+                loss = (per * oks).sum() / denom
                 loss.backward()
                 batch_loss += loss.detach()
             opt.step()
@@ -304,10 +384,13 @@ def fit_heights(
 
 __all__ = [
     "FLOOR_M",
+    "VAR_FLOOR",
     "HeightsDataset",
     "HeightsFit",
     "MultiViewRegressor",
+    "beta_nll",
     "fit_heights",
     "log_heights",
     "predict_heights",
+    "split_outputs",
 ]

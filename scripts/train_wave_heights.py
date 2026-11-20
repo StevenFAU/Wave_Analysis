@@ -10,6 +10,9 @@ roll and pitch (the package's ``views.csv``, :mod:`wave_analysis.processing.hori
 join its image feature. Writes, in ``--out``:
 
 * ``predictions.csv`` - every val/test strip: true and predicted heights (metres);
+  with a distribution head (config ``model.distribution``), also each height's
+  predicted mean and standard deviation of its natural log (``mu_<h>_log``,
+  ``sigma_<h>_log``);
 * ``metrics.json`` - the run (``run``) and, per partition and height, the
   regression report (bias, RMSE, R², Pearson, ...) with 95 % intervals of RMSE,
   R² and Pearson from a bootstrap over the config's groups;
@@ -177,11 +180,15 @@ def main(argv: list[str] | None = None) -> int:
         )  # fmt: skip
 
     arch = mcfg.get("mixer", {})
+    # {loss: beta_nll, beta: 0.5}: a mean and spread beside the point
+    dist = mcfg.get("distribution")
+    if dist and dist.get("loss", "beta_nll") != "beta_nll":
+        raise SystemExit(f"unknown distribution loss {dist['loss']!r}")
     model = MultiViewRegressor(
         settings.backbone, len(targets), aux_dim=3 if views is not None else 0,
         d_model=int(arch.get("d_model", 256)), heads=int(arch.get("heads", 4)),
         layers=int(arch.get("layers", 1)), dropout=float(arch.get("dropout", 0.1)),
-        pretrained=settings.pretrained,
+        pretrained=settings.pretrained, distribution=bool(dist),
     )  # fmt: skip
     val_true = np.exp(y_of(parts[VAL]))
     lr_scale = args.backbone_lr_scale
@@ -191,13 +198,14 @@ def main(argv: list[str] | None = None) -> int:
         model, loader(parts[TRAIN], True), loader(parts[VAL], False), val_true,
         settings=settings, mean=mean, std=std, device=device, log=log, names=tnames,
         lp_epochs=int(args.lp_epochs if args.lp_epochs is not None else mcfg.get("lp_epochs", 0)),
-        backbone_lr_scale=lr_scale,
+        backbone_lr_scale=lr_scale, dist_beta=float(dist.get("beta", 0.5)) if dist else 0.5,
     )  # fmt: skip
     log(f"chosen epoch {result.best_epoch} (val RMSE {tnames[0]} {result.best_rmse_m:.3f} m)")
     model.load_state_dict(result.state_dict)
     torch.save(
         {"state_dict": result.state_dict, "settings": settings.__dict__, "targets": targets,
-         "mean": mean, "std": std, "aux": args.aux, "best_epoch": result.best_epoch},
+         "mean": mean, "std": std, "aux": args.aux, "best_epoch": result.best_epoch,
+         "distribution": dist},
         out / "best.pt",
     )  # fmt: skip
     pd.DataFrame(result.history).to_csv(out / "history.csv", index=False)
@@ -209,14 +217,19 @@ def main(argv: list[str] | None = None) -> int:
         if t.empty:
             continue
         pred = predict_heights(
-            model, loader(t, False), device, mean=mean, std=std, amp=settings.amp
-        )
+            model, loader(t, False), device, mean=mean, std=std, amp=settings.amp,
+            with_distribution=bool(dist),
+        )  # fmt: skip
+        if dist:
+            pred, mu_log, sigma_log = pred
         fr = pd.DataFrame({"sample_id": t["sample_id"], "partition": p, "station_id": t["station_id"],
                            "station_day": t["station_day"]})  # fmt: skip
         entry = {}
         for j, (c, nm) in enumerate(zip(targets, tnames, strict=True)):
             truth = t[c].to_numpy(dtype=float)
             fr[f"true_{nm}_m"], fr[f"pred_{nm}_m"] = truth, pred[:, j]
+            if dist:
+                fr[f"mu_{nm}_log"], fr[f"sigma_{nm}_log"] = mu_log[:, j], sigma_log[:, j]
             ok = np.isfinite(truth)
             rep = regression_report(truth[ok], pred[ok, j])
             g = t.loc[ok, gcol].to_numpy()
@@ -236,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
         "target_names": tnames, "settings": settings.__dict__, "input_size_hw": size,
         "best_epoch": result.best_epoch, "device": str(device), "backbone_lr_scale": lr_scale,
         "lp_epochs": int(args.lp_epochs if args.lp_epochs is not None else mcfg.get("lp_epochs", 0)),
-        "gpu": torch.cuda.get_device_name(device) if device.type == "cuda" else None,
+        "distribution": dist, "gpu": torch.cuda.get_device_name(device) if device.type == "cuda" else None,
         "torch": torch.__version__, "limit_per_partition": args.limit, "seed": seed,
     }  # fmt: skip
     (out / "metrics.json").write_text(

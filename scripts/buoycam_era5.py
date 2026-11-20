@@ -9,7 +9,8 @@ per request: three requests per parameter serve every buoy, where a box per
 buoy would take about 240 (the CDS size limit counts variables x days x hours,
 not area). Parameters: ``swh`` (significant height of wind waves and swell
 together, the default), ``shww`` (wind waves only) and ``shts`` (total swell),
-ERA5's own split of its spectrum. Files go to ``data/raw/era5/global_<param>/``
+ERA5's own split of its spectrum; and the periods and directions of
+:data:`COLUMNS`. Files go to ``data/raw/era5/global_<param>/``
 with their requests, and every attempt to ``data/manifests/raw/era5.csv``. Months that can still change
 upstream (ERA5T, or not yet complete) are requested again when re-run later,
 as for the per-site downloads (``docs/datasets/era5.md``).
@@ -50,8 +51,23 @@ from wave_analysis.sources.era5 import (
 from wave_analysis.sources.ndbc.buoycam import LISTINGS_DIR
 
 GLOBE = [90.0, -180.0, -90.0, 180.0]
-#: ERA5 short name -> column of the extracted table.
-COLUMNS = {"swh": "era5_hs_m", "shww": "era5_windsea_m", "shts": "era5_swell_m"}
+#: ERA5 short name -> column of the extracted table. Periods and directions (added
+#: 2026-11-18 for the period and direction outputs of the buoy-camera strips): peak
+#: period (pp1d), mean period from the -1 moment (mwp, Tm-1,0), zero-crossing period
+#: (mp2, Tm02, NDBC's APD), mean direction the waves come from (mwd), and the wind-sea
+#: mean period and direction and the swell mean period.
+COLUMNS = {
+    "swh": "era5_hs_m",
+    "shww": "era5_windsea_m",
+    "shts": "era5_swell_m",
+    "pp1d": "era5_tp_s",
+    "mwp": "era5_tm10_s",
+    "mp2": "era5_tm02_s",
+    "mwd": "era5_mwd_deg",
+    "mpww": "era5_windsea_tm10_s",
+    "mdww": "era5_windsea_dir_deg",
+    "mpts": "era5_swell_tm10_s",
+}
 BY_SHORT = {p.short: p for p in PARAMETERS if p.short in COLUMNS}
 
 
@@ -110,12 +126,17 @@ def extract(args: argparse.Namespace) -> int:
     pos = station_positions(sorted((archive / LISTINGS_DIR).glob("*.json")))
     tables = []
     points = []
+    # Every parameter is read at the grid point the heights use (``swh``'s nearest sea
+    # point): near coasts another parameter's sea mask can pick another point (44027).
+    fixed: dict[str, tuple[float, float]] | None = None
     for short, paths in files.items():
         series = []
         for path in paths:
-            ser, pts = _one_file(xr, path, short, pos)
+            ser, pts = _one_file(xr, path, short, pos, fixed if short != "swh" else None)
             series += ser
             points += pts
+            if short == "swh" and fixed is None:
+                fixed = {p["station_id"]: (p["grid_latitude"], p["grid_longitude"]) for p in pts}
         if series:
             t = pd.concat(series, ignore_index=True).dropna(subset=[COLUMNS[short]])
             t = t.sort_values(["station_id", "time_utc"]).drop_duplicates(
@@ -128,7 +149,9 @@ def extract(args: argparse.Namespace) -> int:
     s = s.reset_index()
     out = data_dir("processed") / "era5" / "buoycam"
     out.mkdir(parents=True, exist_ok=True)
-    s.to_parquet(out / "era5_at_buoys.parquet", index=False)
+    # Written beside and renamed, so a reader never sees half a file.
+    s.to_parquet(out / "era5_at_buoys.parquet.part", index=False)
+    (out / "era5_at_buoys.parquet.part").replace(out / "era5_at_buoys.parquet")
     pts = pd.DataFrame(points)
     moved = pts.groupby("station_id")[["grid_latitude", "grid_longitude"]].nunique().max(axis=1)
     if (moved > 1).any():
@@ -169,8 +192,14 @@ def extract(args: argparse.Namespace) -> int:
     return 0
 
 
-def _one_file(xr, path, short: str, pos: pd.DataFrame) -> tuple[list[pd.DataFrame], list[dict]]:
-    """The hourly series of one parameter at every buoy's grid point, from one month's file."""
+def _one_file(
+    xr, path, short: str, pos: pd.DataFrame, fixed: dict[str, tuple[float, float]] | None = None
+) -> tuple[list[pd.DataFrame], list[dict]]:
+    """The hourly series of one parameter at every buoy's grid point, from one month's file.
+
+    ``fixed``: each buoy's grid point (latitude, longitude) to read instead of the nearest
+    point where this parameter has sea data.
+    """
     series, points = [], []
     var = short
     with xr.open_dataset(path) as ds:
@@ -193,7 +222,11 @@ def _one_file(xr, path, short: str, pos: pd.DataFrame) -> tuple[list[pd.DataFram
         for r in pos.itertuples(index=False):
             d = np.asarray(haversine_m(r.latitude, r.longitude, glat, glon)) / 1000
             d[~sea] = np.inf
-            i, j = np.unravel_index(int(np.argmin(d)), d.shape)
+            if fixed is not None and r.station_id in fixed:
+                flat, flon = fixed[r.station_id]
+                i, j = int(np.argmin(np.abs(lat - flat))), int(np.argmin(np.abs(lon - flon)))
+            else:
+                i, j = np.unravel_index(int(np.argmin(d)), d.shape)
             v = ds[var].isel(latitude=int(i), longitude=int(j)).to_numpy()
             series.append(
                 pd.DataFrame(

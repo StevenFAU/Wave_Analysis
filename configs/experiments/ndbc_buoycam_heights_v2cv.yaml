@@ -1,0 +1,172 @@
+# Grouped cross-validation of the buoy-camera heights (fixed 2026-11-18, before any run on
+# these folds): rank 1 of reports/Wave camera architectures beyond backbones.md. Every
+# buoy is a test buoy once, predicted by a model that saw neither it nor any buoy within
+# 300 km; each decision rests on all 79 buoys instead of 12. Package derived from v2 by
+# scripts/buoycam_cv_folds.py (labels.csv gains cv_fold and split_fold0..4; folds.csv;
+# images identical). The sealed 12-buoy station split stays the headline; these folds
+# are the protocol for choosing and comparing. Bar B2-CV, intervals and scores: the
+# experiment doc, "Grouped cross-validation".
+#
+#   scripts/buoycam_cv_folds.py                                                   # the package
+#   SPLIT=fold0..fold4, seeds 0-2: scripts/train_wave_heights.py --split foldK    # deploy/dgx/run.sh
+#   scripts/buoycam_oof.py --arm A runs/<15 runs> --arm dinov3-gentle runs/<15 runs>
+#
+# Everything else as v2:
+#
+# Wave heights in metres from NDBC buoy cameras (v2, fixed 2026-11-18 before any
+# v2 training). One model gives the total, wind-wave and swell height of each
+# strip, so every published measure can be computed from it: an RMSE in metres
+# (Kamagata et al. 2026), calm/rough thresholds (Choi et al. 2020), any classes
+# (Kim et al. 2023; the WMO classes of v0). The second arm adds each view's
+# horizon roll and pitch (the buoy's motion, measured in the image), the
+# real-data test of image + attitude (Yang et al. 2026, in simulation).
+# Same strips, light rules, partitions and period as v0. Bars: the experiment doc.
+#
+#   scripts/buoycam_horizon.py                                                     # horizons of every view
+#   scripts/buoycam_package.py configs/experiments/ndbc_buoycam_heights_v2.yaml    # package + views.csv
+#   scripts/train_wave_heights.py --config ... [--aux horizon]                     # deploy/dgx/run.sh
+#   scripts/compare_papers.py runs/<seed 0> runs/<seed 1> runs/<seed 2>            # every paper's measure
+#
+name: ndbc_buoycam_heights_v2cv
+description: >
+  Hourly six-view strips of the NDBC buoy cameras (archived from 2026-09-23),
+  twilight and daylight, labelled by the same buoy's significant wave height
+  (realtime .spec WVHT, computed on board from the hull-motion record): mean
+  of the records centred within 30 min (ADR 0010); also its wind-wave and swell
+  heights by the same rule, its wind, and each view's horizon motion
+  (views.csv). The burned-in caption (station ID, time) is cut from every image.
+input:
+  samples: data/processed/pairs/ndbc_buoycam/samples.parquet
+  # The archive grows every hour; v0 ends with the wave records of the
+  # realtime snapshot of 2026-11-14 15:33 UTC.
+  start_utc: "2026-09-23T00:00:00Z"
+  end_utc: "2026-11-14T15:00:00Z"
+task:
+  id_col: sample_id
+  label: Hs_label_m
+  filters:
+    # Paired, readable and labelled (the pairing's own exclusions); six views
+    # of a known format; light enough to see the sea (below).
+    - {column: exclusion, op: isna}
+    - {column: width, op: in, value: [2880, 2304]}   # 3360 and 3840 px strips hold 7 or 8 views (11 strips)
+    - {column: sun_elevation_deg, op: ge, value: -6.0}
+    - {column: usable_views, op: ge, value: 3}
+  classes:
+    # WMO-No. 306, code table 3700, bands closed on the right (as Currituck).
+    names: [smooth, slight, moderate, rough_or_more]
+    bounds_m: [0.5, 1.25, 2.5]
+  near_boundary_rel_tol: 0.04
+images:
+  # Twilight strips are in colour and show the sea (the cameras raise their
+  # exposure); at night the views are black (median grey 2). Low sun leaves
+  # some views dark or glared, so the rule is per view: a view is usable when
+  # its mean grey is at least 20 and its standard deviation at least 4 (on
+  # 0-255; night views: mean 2, sd 0.1). A strip is kept with 3 usable views.
+  min_sun_elevation_deg: -6.0
+  min_view_mean: 20.0
+  min_view_std: 4.0
+  min_usable_views: 3
+split:
+  station:
+    # Unseen buoys. Buoys within 300 km of each other (chained) form one group
+    # and go to the same partition, so every test buoy is at least 300 km from
+    # every training buoy (44 groups; the largest: US West Coast 21 buoys,
+    # US East Coast 13, Gulf of Alaska 9).
+    protocol: cross_station
+    group_km: 300
+    fractions: [0.7, 0.15, 0.15]
+    seed: 0
+    partitions_from: data/processed/packages/ndbc_buoycam_sea_state_v0/stations.csv
+  time:
+    # The same buoys, later weeks: train before val_start, val, then test,
+    # with 72 h left out after each boundary so that one swell cannot link them.
+    protocol: cross_time
+    val_start: "2026-10-24"
+    test_start: "2026-11-03"
+    embargo: 72h
+  audit:
+    min_gap: 72h
+  cv:
+    # Five folds over the station groups above (43 groups at 79 buoys), balanced by
+    # strips: largest group first, each to the fold with the fewest strips. The US
+    # West Coast group (18 buoys with kept strips, 9,440 strips) is fold 0 alone.
+    # Each fold's validation groups come from its four training folds: random draws
+    # (seed 0 + fold) reaching 15 % of all strips (at most 1.15 times that, at least 8
+    # buoys), the one whose swell share is closest to its training strips' kept.
+    protocol: grouped_kfold
+    n_folds: 5
+    group_col: station_group
+    val_share: 0.15
+    seed: 0
+    splits: [fold0, fold1, fold2, fold3, fold4]
+baselines:
+  # No image: the training strips' majority class, and for the time split
+  # each buoy's own majority class in its training weeks.
+  station_majority: [time]
+  # The physics baseline (added 2026-11-14): ERA5 significant wave height at
+  # the grid point with sea data nearest each buoy (scripts/buoycam_era5.py),
+  # interpolated to the strip's time (no value across a gap over 3 h) and
+  # corrected with a line fitted on each split's training strips.
+  era5:
+    path: era5/buoycam/era5_at_buoys.parquet
+    max_gap: 3h
+    optional: true                  # absent until downloaded and extracted
+package:
+  out: data/processed/packages/ndbc_buoycam_heights_v2cv
+  views_from: data/processed/horizon/ndbc_buoycam_sea_state_v0/horizons.parquet
+  jpeg_quality: 95                  # strips keep their size; only the caption is cut
+model:
+  # wave_analysis.models.wave_heights.MultiViewRegressor: one backbone per view;
+  # (arm 2) the view's de-mounted horizon roll and pitch join its feature; a
+  # one-layer transformer over the usable views; the masked mean gives the log
+  # of each height (Huber loss on standardised logs; missing heights skipped).
+  backbone: convnext_tiny
+  pretrained: true
+  input: views
+  view_size: [270, 480]
+  targets: [Hs_label_m, wind_wave_label_m, swell_label_m]   # the first chooses the epoch (val RMSE)
+  target_names: [hs, wind_wave, swell]
+  mixer: {d_model: 256, heads: 4, layers: 1, dropout: 0.1}
+  # Beside the point head (Huber, as v2): a mean and variance of each standardised log
+  # height, trained with beta-NLL (Seitzer et al. 2022), added to the Huber loss with
+  # equal weight. The epoch is still chosen on the point head's val RMSE of H_s.
+  distribution: {loss: beta_nll, beta: 0.5}
+  augment:
+    horizontal_flip: false
+    scale: [1.0, 1.0]               # no random crop: the horizon's height in a view is the buoy's pitch
+    rotate_deg: 0.0                 # no rotation: the horizon's tilt is the buoy's roll
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.1
+  epochs: 10
+  batch_size: 32
+  lr: 3.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 1
+  num_workers: 8
+  amp: none
+evaluation:
+  # Intervals from a bootstrap over whole buoys (station split: the unit that
+  # generalizes) or whole buoy-days (time split).
+  bootstrap:
+    group_col: {station: station_id, time: station_day, fold0: station_id, fold1: station_id,
+                fold2: station_id, fold3: station_id, fold4: station_id}
+    n_boot: 1000
+    alpha: 0.05
+    seed: 0
+seed: 0
+ensemble:
+  # Three seeds per fold. Point: the mean of the seeds' log heights (as v2). Spread:
+  # the seeds' log-normal distributions merged into one by their first two moments
+  # in log space (mean of means; mean of variances plus variance of means).
+  seeds: [0, 1, 2]
+  combine: mean_log_height
+intervals:
+  # Buoy-level split-conformal 90 % intervals. Score: |log y - mu| / sigma of the
+  # seed ensemble. Fold k's strips get the threshold calibrated on the out-of-fold
+  # scores of the other four folds' buoys (held out of the models that scored them),
+  # each buoy weighted equally (Lee, Barber & Willett 2023, hierarchical conformal),
+  # so coverage holds on average over new buoys, not at each buoy.
+  level: 0.90
+  score: normalised_log_residual
+  calibration: other_folds_oof

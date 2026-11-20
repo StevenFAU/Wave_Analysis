@@ -2,6 +2,7 @@
 """Pair every archived NDBC buoy-camera strip with its own buoy's wave height.
 
     .venv/bin/python scripts/buoycam_pairs.py
+    .venv/bin/python scripts/buoycam_pairs.py --start 2026-11-14T16:00Z --out data/processed/pairs/ndbc_buoycam_fresh
 
 One row per strip in the archive (``data/raw/ndbc/buoycam``), night frames
 included; ``exclusion`` gives the reason a row has no usable label. The
@@ -25,7 +26,10 @@ camera and the wave sensor are on the same buoy (distance 0). For each strip:
 The ``.spec`` records come from the realtime snapshots saved twice a month
 (``data/raw/ndbc/<station>/spec/``); they are NDBC's realtime values, not the
 quality-controlled annual files. Writes
-``data/processed/pairs/ndbc_buoycam/{samples.parquet,summary.json,provenance.yaml}``.
+``data/processed/pairs/ndbc_buoycam/{samples.parquet,summary.json,provenance.yaml}``
+(``--out``). ``--start`` pairs only the strips taken at or after a time (the strips
+archived after a package, for ``scripts/buoycam_fusion_confirm.py``); the records and
+rules are the same.
 Method: ``docs/experiments/ndbc_buoycam_sea_state.md``.
 """
 
@@ -86,10 +90,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ndbc", type=Path, default=data_dir("raw") / "ndbc")
     ap.add_argument("--out", type=Path, default=data_dir("processed") / "pairs" / "ndbc_buoycam")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--start", help="only strips taken at or after this UTC time")
     args = ap.parse_args(argv)
 
     # --- Images ----------------------------------------------------------------
     idx = archive_index(args.archive)
+    if args.start:
+        t0 = pd.Timestamp(args.start)
+        t0 = t0.tz_localize("UTC") if t0.tzinfo is None else t0.tz_convert("UTC")
+        idx = idx[pd.to_datetime(idx["time_utc"], utc=True) >= t0].reset_index(drop=True)
     idx["size_bytes"] = [Path(p).stat().st_size for p in idx["path"]]
     print(f"{len(idx):,} archived strips at {idx['station_id'].nunique()} stations", flush=True)
     with Pool(args.workers) as pool:
@@ -294,6 +303,7 @@ def main(argv: list[str] | None = None) -> int:
                 "interp_max_gap": INTERP_MAX_GAP,
                 "label_rule": "window_mean",
                 "archive": str(args.archive),
+                "start_utc": args.start,
             },
             notes=f"{len(img):,} strips; images are listed by path and sha256, not copied",
         ),

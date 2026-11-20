@@ -158,3 +158,44 @@ def test_metrics_by_stratum():
     assert out.loc["day", "mae"] == 0 and out.loc["night", "mae"] == pytest.approx(0.5)
     bins = sea_state_bins(pd.Series([0.2, 1.0, 7.0]))
     assert bins.tolist()[0] == "[0, 0.5)" and bins.tolist()[-1] == "[6, inf)"
+
+
+def test_lognormal_crps_matches_monte_carlo_and_point_limit():
+    from wave_analysis.evaluation.uncertainty import lognormal_crps
+
+    rng = np.random.default_rng(0)
+    mu, s, y = 0.3, 0.4, 1.1
+    x, x2 = np.exp(rng.normal(mu, s, 200_000)), np.exp(rng.normal(mu, s, 200_000))
+    mc = np.mean(np.abs(x - y)) - 0.5 * np.mean(np.abs(x - x2))
+    assert abs(float(lognormal_crps(y, mu, s)) - mc) < 3e-3
+    # a nearly single-valued forecast scores its absolute error
+    assert abs(float(lognormal_crps(2.0, np.log(1.5), 1e-6)) - 0.5) < 1e-4
+    # a true zero: all the mass lies above it
+    assert float(lognormal_crps(0.0, 0.0, 0.5)) > 0
+
+
+def test_merge_gaussians_adds_the_spread_of_the_means():
+    from wave_analysis.evaluation.uncertainty import merge_gaussians
+
+    mu, sd = merge_gaussians([[0.0], [2.0]], [[1.0], [1.0]])
+    assert np.allclose(mu, [1.0])
+    assert np.allclose(sd, [np.sqrt(2.0)])
+
+
+def test_hierarchical_conformal_threshold_weights_groups_equally():
+    from wave_analysis.evaluation.uncertainty import hierarchical_conformal_threshold
+
+    # 9 groups: one with many tiny scores must not dominate
+    scores = np.concatenate([np.full(1000, 0.1)] + [np.full(2, float(k)) for k in range(1, 9)])
+    groups = np.concatenate([np.zeros(1000)] + [np.full(2, k) for k in range(1, 9)])
+    # weights 1/10 per group plus 1/10 at infinity: the 0.8 quantile is the 8th group's score
+    assert hierarchical_conformal_threshold(scores, groups, 0.8) == 7.0
+    assert hierarchical_conformal_threshold(scores, groups, 0.95) == float("inf")
+    rng = np.random.default_rng(1)
+    cover = []
+    for _ in range(200):
+        sc = np.concatenate([np.abs(rng.normal(0, rng.uniform(0.5, 2), 50)) for _ in range(30)])
+        g = np.repeat(np.arange(30), 50)
+        q = hierarchical_conformal_threshold(sc, g, 0.9)
+        cover.append(np.mean(np.abs(rng.normal(0, rng.uniform(0.5, 2), 400)) <= q))
+    assert np.mean(cover) >= 0.88

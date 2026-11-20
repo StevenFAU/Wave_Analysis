@@ -29,10 +29,13 @@ the same claim as one at unseen sites. Each row says which of our tests matches 
 | Visual-range sea-state dataset, *Symmetry* 14:1487 (2022) (S) | 100,800 images, 4 sea states | not verified | not verified | 81.8 % (NASNet-Mobile) | none until read |
 | Ocean Dynamics 2025, doi:10.1007/s10236-025-01743-x (S) | shore video **timestacks**, no learning | not verified | two months, one site | H_s RMSE 0.12 / 0.09 m, r 0.76 / 0.80 | the physics baseline for shore video |
 
-## Where we stand (2026-11-18)
+## Where we stand (2026-11-19)
 
-Numbers from `docs/experiments/ndbc_buoycam_sea_state.md` ("v2 results", "Test 3"):
-three-seed averages at 12 buoys the model never saw, intervals over whole buoys.
+Numbers from `docs/experiments/ndbc_buoycam_sea_state.md` ("v2 results", "Test 3",
+"Grouped cross-validation", "Stage 2", "Stage 3"): three-seed averages at 12 buoys the model never
+saw, intervals over whole buoys. The rows marked *out of fold* cover all 79 buoys:
+five folds over the 43 station groups, each buoy predicted by models that saw neither it
+nor any buoy within 300 km. The 12-buoy numbers stay the headline.
 
 | Work | Their number | Ours, on our data and split | Reading |
 |---|---|---|---|
@@ -43,6 +46,9 @@ three-seed averages at 12 buoys the model never saw, intervals over whole buoys.
 | (best model since B2) | — | DINOv3 ConvNeXt-Tiny, gentle recipe: H_s 0.440 m [0.38, 0.50], R² 0.82, Pearson 0.921; Kim 70.2 % [62.7, 78.7] | backbones differ by about 0.01 m once each has a recipe that suits it (B1-B3) |
 | Kim 2023, their protocol on our data | 78.3 % (random frames) | random split of our strips: 68.8 % [65.7, 71.8], H_s 0.433 m | the split is not the gap; their single site and session labels are |
 | ERA5 at the buoy | — | wind-wave height: camera 0.215 m against ERA5 0.341 m; total H_s: ERA5 0.267 m against camera 0.434 m; both together cut ERA5 + wind's wind-wave error 30 % | the camera is the wind-sea instrument; swell needs the wave model |
+| *Out of fold*, all 79 buoys | — | DINOv3-gentle: H_s 0.532 m [0.49, 0.58], R² 0.79, Pearson 0.892; Choi 98.4 %; Kim 66.7 % [63.9, 69.6]; 90 % conformal intervals cover 0.90 (11 buoys below 0.80) | harder than the 12 sealed buoys (0.432 m out of fold), mostly from the US West Coast fold (0.70 m), which its models never trained on; the standing against each paper is unchanged |
+| *Out of fold*, ERA5 + wind with the camera's wind sea (stage 2) | — | H_s 0.267 m against 0.288 m for ERA5 + wind (−0.021 m [−0.031, −0.012]); wind-wave 0.240 m against 0.293 m | swapped in as wind-sea energy, the camera now improves the total height too; to be confirmed on new weeks around 2026-11-26 |
+| *Out of fold*, period and direction (stage 3) | — | wind-sea period (Tm-1,0): camera 0.55 s against ERA5 0.75 s; total peak period 3.44 s against 1.70 s; mean direction 76° against 14° | the camera reads the wind sea's period as it reads its height; total period and direction belong to the wave model (no strip carries a compass heading) |
 
 ## Other sensors (context: what an image of the sea surface can reach)
 
