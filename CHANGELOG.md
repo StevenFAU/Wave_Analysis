@@ -7,6 +7,23 @@ separately (`docs/REPRODUCIBILITY.md`).
 
 ## [Unreleased] — v0.1.0 "Dataset discovery and NDBC foundation"
 
+### Added (2026-11-20, test 6: label-free site adaptation)
+- **Test 6 not met** (bar in `docs/experiments/sensing_site_adaptation.md`, fixed before
+  any run). Each camera's cached DINOv3-gentle features were standardised against the
+  training cameras at the same ERA5 total-height quintile, and the heads refitted.
+  - Total height: 0.532 → 0.500 m out of fold, but −0.031 m [−0.069, +0.019] over station
+    groups, not beating the head-matched control.
+  - Wind-wave height: worse, 0.260 → 0.377 m.
+  - The total-height gain is the US West Coast fold's (0.699 → 0.586 m).
+  - Nine of the eleven under-covered buoys rise above 0.80 coverage, but five others fall
+    below it.
+- **Few-shot curve, new for a wave camera.** A shrunk per-buoy log bias from k labelled
+  hours in a buoy's first 14 days lowers total-height RMSE by 0.022 m at k = 1 and 0.060 m
+  at k = 30 (0.567 → 0.507 m on later strips), both intervals below zero. Wind-wave gains
+  only 0.011 m at k = 30.
+- **`scripts/sensing_site_adaptation.py`.** CPU only, on the measurement probe's cached
+  features (`--save-features`); no new GPU work.
+
 ### Added (2026-11-20, breaker type: does a video encoder use the motion?)
 - Bar Y-B3, fixed before any run (`docs/experiments/breaker_types.md`): frozen V-JEPA 2
   ViT-L on each VWBT_9000 clip in order, against the same frames shuffled. Each clip is read

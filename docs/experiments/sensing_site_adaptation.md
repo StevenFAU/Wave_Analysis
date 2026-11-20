@@ -75,3 +75,87 @@ Test 6 is met if both endpoints pass. Each is reported separately.
 - **The other arms** A1, A3, A4 and A5.
 
 No setting is changed after any A2 result is seen. A miss is reported as plainly as a pass.
+
+## Result, 2026-11-20: not met
+
+**Test 6 is not met.** Each camera's features were standardised against the training cameras at the same ERA5 total height.
+- **Total height.** RMSE fell from 0.532 to 0.500 m, a gain larger than the seed spread. But the interval over station groups crosses zero, and the gain does not beat the head-matched control.
+- **Wind-wave height.** It got much worse: 0.260 to 0.377 m.
+
+Nearly all of the total-height gain comes from the US West Coast fold, 0.699 to 0.586 m.
+
+Everything was computed on the CPU from the cached features of the 15 fold models; nothing was trained on a GPU. The output is `runs/site-adaptation-v1/` from `scripts/sensing_site_adaptation.py`.
+
+**RMSE in metres, out of fold.** H_s covers 41,091 strips at 79 buoys; wind-wave covers 37,652 strips at 77 buoys. Three seeds are averaged per strip.
+
+| Arm | Significant height | Wind-wave height |
+|---|---:|---:|
+| A0, the model as trained (comparator) | 0.5315 | 0.2599 |
+| A1, refitted head on raw features | 0.5246 | 0.2571 |
+| **A2, adapted features, refitted head (primary)** | **0.5002** | **0.3765** |
+| A3, adapted mean only | 0.5025 | 0.3980 |
+| A4, plain per-camera standardisation, no bins | 0.9583 | 0.4879 |
+| A5, own head, only held-out cameras adapted | 0.5340 | 0.4161 |
+
+The model's own head on the cached features reproduces A0 within 0.0001 m.
+
+**Differences in metres** (95 % intervals; the bar uses station groups):
+
+| Difference | Target | Estimate | Station groups (bar) | Whole buoys | Equal-group weights |
+|---|---|---:|---:|---:|---:|
+| A2 − A0 | Significant height | −0.0313 | −0.0689 to +0.0193 | −0.0628 to +0.0024 | +0.0018 (−0.0263 to +0.0355) |
+| A2 − A1 | Significant height | −0.0244 | −0.0568 to +0.0214 | −0.0555 to +0.0088 | +0.0047 (−0.0243 to +0.0401) |
+| A1 − A0 | Significant height | −0.0069 | −0.0135 to +0.0021 | | |
+| A2 − A0 | Wind-wave height | +0.1166 | +0.0881 to +0.1412 | +0.0905 to +0.1439 | +0.1177 (+0.0808 to +0.1554) |
+| A2 − A1 | Wind-wave height | +0.1194 | +0.0930 to +0.1429 | +0.0949 to +0.1459 | +0.1229 (+0.0870 to +0.1588) |
+| A1 − A0 | Wind-wave height | −0.0028 | −0.0074 to +0.0001 | | |
+
+**Against the pass criteria.**
+- **H_s:** the gain clears the 0.016 m seed spread, but the interval is not below zero and A2 does not beat A1. The endpoint is not met.
+- **Wind-wave height:** none of the three criteria holds. The endpoint is not met.
+
+**What the numbers mean.**
+- **Total height.** The 3.1 cm average gain sits in one group.
+  - The West Coast fold (one group, 18 buoys) goes from 0.699 to 0.586 m: −0.113 m, whole-buoy interval −0.191 to −0.022. Against the head-matched control it is −0.093 m (−0.170 to −0.002).
+  - Folds 1 and 2 get worse (0.528 → 0.540 and 0.462 → 0.471 m).
+  - Folds 3 and 4 get slightly better (0.423 → 0.411 and 0.463 → 0.457 m).
+  - With each group weighted equally there is no gain (+0.002 m).
+- **Wind-wave height.** It is worse in every fold, for example 0.310 → 0.450 m in fold 1. Bins of ERA5 total height do not hold the wind-sea share fixed, so a camera's offset at a given total height includes its local wind-sea climate, and removing the offset removes that signal. This is the report's sea-climate caveat, realised for the wind sea. The validation-chosen ridge penalty for A2's wind-wave head went to the top of the grid (1,000) in every fold-0 seed, which is consistent with adapted features that no longer predict it. The registered grid was not widened.
+- **Without bins.** Plain per-camera standardisation (A4) nearly doubles total-height error, to 0.958 m. A camera's mean feature does carry its sea climate. Height bins are necessary, but for the wind sea they are not enough.
+- **The refitted head alone** (A1) is level with the model's own head.
+
+**Coverage of the H_s 90 % intervals** (buoy-level conformal, stage 1's method).
+
+| Buoy | 46081 | 46042 | 46047 | 44013 | 42002 | 46013 | 46069 | 46022 | 46014 | 44008 | 45002 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Before (A0) | 0.545 | 0.589 | 0.600 | 0.694 | 0.726 | 0.731 | 0.741 | 0.749 | 0.761 | 0.777 | 0.794 |
+| After (A2) | 0.346 | 0.941 | 0.969 | 0.772 | 0.824 | 0.891 | 0.881 | 0.966 | 0.965 | 0.818 | 0.820 |
+
+- **The eleven buoys.** Nine of them rise above 0.80. 46081 (Gulf of Alaska) falls to 0.35, and 44013 stays below.
+- **Other buoys.** Five others fall below 0.80: 46087 0.49, 46077 0.54, 46088 0.63, 44020 0.76 and 44027 0.78. So the number of buoys below 0.80 goes from 11 to 7, not to 2.
+- **Overall coverage** goes from 0.904 to 0.915.
+
+## Few-shot curve (descriptive)
+
+The curve uses the model as trained (A0). For each buoy, k labelled hours are drawn from its first 14 days, with ten draws. The buoy is scored from day 17 on, against k = 0 on the same strips. Differences are in metres, with intervals over station groups.
+
+| k labelled hours | H_s buoys | H_s RMSE, k = 0 → k | Difference | Wind-wave buoys | Wind-wave RMSE, k = 0 → k | Difference |
+|---:|---:|---|---:|---:|---|---:|
+| 1 | 76 | 0.567 → 0.544 | −0.022 (−0.039 to −0.002) | 70 | 0.261 → 0.260 | −0.002 (−0.003 to −0.001) |
+| 3 | 76 | 0.567 → 0.534 | −0.033 (−0.050 to −0.010) | 70 | 0.261 → 0.258 | −0.004 (−0.005 to −0.002) |
+| 10 | 76 | 0.567 → 0.514 | −0.052 (−0.075 to −0.021) | 70 | 0.261 → 0.254 | −0.007 (−0.010 to −0.004) |
+| 30 | 76 | 0.567 → 0.507 | −0.060 (−0.082 to −0.025) | 70 | 0.261 → 0.251 | −0.011 (−0.015 to −0.006) |
+| 100 | 75 | 0.568 → 0.507 | −0.061 (−0.083 to −0.026) | 66 | 0.259 → 0.249 | −0.010 (−0.016 to −0.003) |
+
+The shrinkage λ chosen on the validation buoys was 3–30 for H_s and 10–30 for wind-wave.
+
+**What the curve means.**
+- **Total height.** One labelled hour already removes more than the seed spread (−0.022 m, interval below zero). Ten hours remove 9 %. The curve flattens at about 0.507 m (11 % lower) by 30 hours. Most of the camera's remaining total-height error at a new buoy is a per-buoy offset, which a few labelled hours remove and the label-free route did not.
+- **Wind-wave height.** It gains little. Thirty hours are needed to exceed its 0.0075 m seed spread (−0.011 m, 4 %).
+- **Coverage.** At k = 10, 8 of the 11 buoys reach 0.80, with overall coverage 0.911. Still below 0.80: 44013, 44008 and 46081 (0.79). At k = 30 and 100 the three below are 44013, 44008 and 46047.
+- **On the adapted arm (A2).** The few-shot correction brings total height to 0.500 m at k = 100, against 0.507 m for the model as trained on the same strips. Wind-wave reaches only 0.281 m, against 0.249 m. Once 30 or more labelled hours exist, adaptation adds nothing for total height, and it still hurts the wind sea.
+
+**Where this leaves the two weak spots.**
+- **West Coast.** Label-free adaptation helps the West Coast fold a great deal for total height, but it is one group, so this design cannot confirm it.
+- **What works in general.** A few labelled hours at a new buoy are the lever that works across buoys.
+- **A possible next bar.** Binning by ERA5 wind-sea and swell heights jointly, not by total height, might keep the wind-sea climate that this version removed. That would be a new bar; it was not tried here.
