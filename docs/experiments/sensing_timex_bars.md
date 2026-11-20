@@ -1,7 +1,8 @@
 # Test 9: time-exposure and brightest images against one still
 
 Status: **bar T9 fixed 2026-11-19, before any image was packaged or any feature
-extracted.** Code: `scripts/sensing_timex_package.py` (desktop: triples and package),
+extracted; scored 2026-11-19: T9-A and T9-B not met, the still is better than either
+ten-minute image** (Results). Code: `scripts/sensing_timex_package.py` (desktop: triples and package),
 `scripts/sensing_timex_probe.py` (GPU server: frozen features, probes, scores); config
 `configs/experiments/sensing_timex_v1.yaml`.
 
@@ -96,3 +97,38 @@ server, one GPU: features of about 93,000 images (minutes), then 12 small heads;
 hour with the busy GPUs, peak about 15 GB of GPU memory. Launched under the project's GPU
 rule (at most 7 of the project's containers, a GPU with at least 40 GB free that keeps
 20 GB after the peak, at most two GPUs across tests 3 and 9 from this session).
+
+## Results (2026-11-19)
+
+Run `video-year-20261119t2229-t9-timex` (commit b88a8a7b1, one GPU, 100 min), after a
+smoke test. 30,931 triples; 2025: 10,942 triples on 362 days.
+
+How to read: RMSE is the typical error of H_s in metres (lower is better). A difference
+is the first input's RMSE minus the still's on the same triples, with the 97.5 % range when
+whole days are resampled 2,000 times; below zero would mean the input beats the still.
+
+| Bar | Compared (H_s RMSE, 2025) | Difference [97.5 %] | Met |
+|---|---|---|---|
+| T9-A | `timex` 0.308 m vs `still` 0.265 m | +0.043 m [+0.026, +0.061] | no |
+| T9-B | `brt` 0.311 m vs `still` 0.265 m | +0.045 m [+0.035, +0.056] | no |
+
+What it means:
+
+- **One still beats the ten-minute images, clearly.** Both intervals lie above zero: the
+  still is better than either summary image of the same ten minutes, by about 15 %. The
+  same holds in 2026 (0.240 m against 0.286 and 0.289 m), on the validation weeks, and at
+  each camera in 2025. Averaging or taking the maximum over ten minutes removes the
+  texture of individual waves, which a frozen image encoder reads better than the
+  breaker band the summaries keep.
+- **Adding them to the still does not help either:** `all3` 0.281 m against 0.265 m
+  (+0.015 m [+0.005, +0.025]) in 2025, level in 2026 (+0.007 m [-0.000, +0.014]).
+- **Every image input is far ahead of climatology** (0.613 m in 2025): the still's error
+  is 57 % lower.
+- **Sea-state classes** (four WMO classes read from the H_s estimates, all four cameras
+  pooled), 2025: the still's balanced accuracy 0.65 and macro-F1 0.71; `timex` 0.48 / 0.51,
+  `brt` 0.55 / 0.61. The Currituck ConvNeXt's 0.73 (one camera, fine-tuned) is context only.
+- **Limits:** one encoder (frozen DINOv3, trained on ordinary photographs, which the
+  smooth summary images are not) and one probe recipe; the validation weeks (41 days)
+  chose early epochs for `timex` and `brt` in some seeds. A model trained on the summary
+  images themselves could do better; this test asked whether they carry more for the
+  project's frozen encoders, and they do not.

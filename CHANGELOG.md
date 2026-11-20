@@ -68,6 +68,13 @@ separately (`docs/REPRODUCIBILITY.md`).
   its calls follow wind-wave height more than swell height; over 24 held-out
   buoys, swell share predicts the under-call (Spearman −0.89).
 
+### Results (2026-11-19, test 9: time-exposure and brightest images)
+- T9-A and T9-B not met: on the held-out year 2025 one still estimates H_s better than the
+  ten-minute time-exposure or brightest-pixel image of the same minutes (0.265 m against
+  0.308 and 0.311 m; +0.043 m [+0.026, +0.061] and +0.045 m [+0.035, +0.056]), and the three
+  together are no better than the still (0.281 m). The same in 2026 and at every camera.
+  Write-up: `docs/experiments/sensing_timex_bars.md`.
+
 ### Results (2026-11-19, test 3 video half: Kamagata's network)
 - T3-S: the project's whole-clip read-out (H_s RMSE 0.513 m) is ahead of Kamagata's
   SlowFast head with its physics loss (1.140 m) on the same 992 clips and date folds,
