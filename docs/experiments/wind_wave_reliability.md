@@ -89,3 +89,13 @@ uv run --locked --group forecast python scripts/wind_wave_reliability.py --forwa
 ```
 
 The per-fold fits and dates, scores and contrasts are tracked in `reports/wind-wave-reliability/forward/`.
+
+## Independent two-week replication
+
+### Protocol fixed November 20, 2026, before the window opened
+
+Use the first 14 complete UTC days starting at the **later** of November 28 at 00:00 UTC or the first midnight after the registered November confirmation's recorded cutoff. If that confirmation closes as expected, the replication runs from November 28 through December 11 inclusive. This rule makes the two experiments disjoint even if the November run is delayed. Score once the follow-up package's wave and wind coverage reaches the end of all 14 days. Report the outcome for that window regardless of the number of eligible strips.
+
+Use the registered C4b procedure (`cfda28b22`) to produce the measured-wind corrector, camera, registered gate and variance-weighted predictions for each buoy's original held-out fold. Include every C4b-eligible strip in the window with a measured wind speed and buoy wind-wave height. Use the same strips for all arms. Apply the full-calendar historical cuts and weights in `reports/wind-wave-reliability/fits.json` (SHA-256 `307c923d92793c9c23714ad5053f42dd4c2b86c8e3a0bbc853387280621a2a2a`). No new weights, local offsets, training or selection use the follow-up observations.
+
+The single endpoint is wind-wave height RMSE in metres. For success, require the conditional rule's paired strip-weighted 95% upper endpoints against **both the frozen constant blend and the variance-weighted blend** to be below zero. Use 2,000 whole-group draws and seed 0 as above. Also report the forecast, camera, gate, two-input rule, group and fold scores, and the equal-group intervals. Report the dates, available and matched strip counts, buoys, groups, and weight-file checksum. Do not extend the window in response to the results. All configurations still use retrospective ERA5 data, so this replication can establish transfer to later observations with those inputs.
