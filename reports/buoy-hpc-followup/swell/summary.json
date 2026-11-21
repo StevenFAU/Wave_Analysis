@@ -1,0 +1,22 @@
+{
+  "strips": 38334,
+  "buoys": 77,
+  "groups": 43,
+  "pooled_r2": {
+    "wind": 0.13282237586538925,
+    "whole": 0.44287416921528044,
+    "water": 0.02090017605072425,
+    "whole_wind": 0.44885184788596855,
+    "water_wind": 0.1280945874875763
+  },
+  "primary_comparator": "wind",
+  "primary_delta_rmse_m": 0.0024041340246939713,
+  "primary_95pct_m": [
+    -0.022310282275457817,
+    0.020239566480113217
+  ],
+  "primary_met": false,
+  "label_sha256": "eeeaae830660a3e7d3e950d67505e33173e23c2ec43223cfbc7beb3a1c8f5235",
+  "whole_run": "t5-s0",
+  "water_run": "buoy-probe-20261121t0229-swell-water-s0"
+}

@@ -109,3 +109,40 @@ uv run --locked --isolated --group forecast python scripts/buoy_hpc_followup.py 
 The default output directories are `runs/buoy-heights-followup-v1` and `runs/buoy-swell-followup-v1`. Use `--out` with a new path for a reproduction. For A, the forecast inputs can be rebuilt with `uv run --locked --isolated --group forecast python scripts/buoy_hpc_followup.py forecast --out runs/buoy-cutoff-forecast-replay`, then selected via `heights --forecast runs/buoy-cutoff-forecast-replay`.
 
 Report the primary decision from each `summary.json`, paired RMSE differences and intervals in metres, equal-group sensitivity from `contrasts.csv`, fold scores from `rmse.csv` and B's crop coverage. For B, include the pooled R² of both image arms and wind. Record the actual run IDs, elapsed GPU time and exclusions alongside the results. Commit and push the small report and score tables. Keep weights, embeddings and row-level outputs under the existing ignored `runs/` tree.
+
+## Results
+
+### B. Swell from the part of the image below the horizon
+
+**The water crop failed the primary test.** Adding water-crop features to measured wind changed the pooled swell-height RMSE by **+0.24 cm** (95% paired interval −2.23 to +2.02 cm). The criterion needed the upper endpoint below zero. The whole view carried far more swell information through the same checkpoints. Water + wind was **18.1 cm worse than whole + wind** (+15.4 to +22.1 cm) and lost in 42 of 43 geographic groups.
+
+The scored target is the 0.030–0.095 Hz band's equivalent height. On the scored test strips it averaged 0.85 m with a standard deviation of 0.95 m. Each ridge fit used the same rows for all five arms within a fold.
+
+| Ridge input (fit on training buoys) | Pooled RMSE (cm) | Pooled R² |
+|---|---:|---:|
+| Measured wind | 88.3 | 0.13 |
+| Water crop | 93.8 | 0.02 |
+| Water crop + wind | 88.6 | 0.13 |
+| Whole view | 70.8 | 0.44 |
+| Whole view + wind | 70.4 | 0.45 |
+
+The water crop alone barely improved on a constant prediction. Weighting each geographic group equally gave a small gain for a typical group: water + wind minus wind was −1.76 cm (−3.12 to −0.24 cm), better in 22 of 43 groups. The pooled loss came from fold 0. That fold is a single geographic group of 18 buoys with 23% of the scored strips. Water + wind did worse there (108.8 vs 104.6 cm) and slightly better in the other four folds (by 0.5–1.9 cm). Excluding group g41040 left every contrast essentially unchanged.
+
+| Fold | Scored test strips | Wind (cm) | Water + wind (cm) | Whole + wind (cm) |
+|---:|---:|---:|---:|---:|
+| 0 | 8,626 | 104.6 | 108.8 | 91.5 |
+| 1 | 7,196 | 82.9 | 81.0 | 67.5 |
+| 2 | 7,669 | 88.0 | 86.3 | 66.9 |
+| 3 | 7,739 | 81.5 | 80.8 | 57.8 |
+| 4 | 7,104 | 79.0 | 78.5 | 59.0 |
+
+**Coverage.** Of 41,091 held-out test strips, 38,334 were scored (93.3%; 77 buoys, 43 groups). Of 132,274 training strips, 123,103 were used (93.1%). The crop's minimum of three usable water views was the main filter: it alone removed 2,221 otherwise-eligible test strips (5.4%) and 7,555 training strips (5.7%). Missing wind removed 486 test strips and zero-total spectra removed 50. Every strip had whole-view features. As the protocol allows, 5,238 scored test strips (13.7%) had a zero swell band. Per-fold counts are in `filter_breakdown.csv`.
+
+What this does and does not show: the whole-view encoders were trained on full frames for total height. The crop resizes the water and drops the horizon, sky and hull. Through these encoders, little of the swell signal survives this crop. It does not show that the water pixels themselves lack swell information.
+
+**Run record.** Water features: `buoy-probe-20261121t0229-swell-water-s0`, commit `68b227ee0`, one shared H200, 2026-11-21 02:29–03:06 UTC. That is 0.61 GPU-hours, with the five folds taking 428–440 s each. Whole-view features: cached `runs/claims-inputs/t5-s0`. The scorer confirmed that each fold's whole-view and water checkpoints have the same hash. Score tables: `reports/buoy-hpc-followup/swell/` (`summary.json`, `rmse.csv`, `contrasts.csv`, `coverage.csv`, `filter_breakdown.csv`). Row-level predictions and embeddings stay under `runs/`. To reproduce the coverage breakdown:
+
+```bash
+uv run --locked --isolated --group forecast python scripts/buoy_swell_coverage.py \
+  --water runs/buoy-probe-20261121t0229-swell-water-s0 --out runs/swell-filter-breakdown.csv
+```
