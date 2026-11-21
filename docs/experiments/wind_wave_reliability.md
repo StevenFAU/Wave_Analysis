@@ -99,3 +99,22 @@ Use the first 14 complete UTC days starting at the **later** of November 28 at 0
 Use the registered C4b procedure (`cfda28b22`) to produce the measured-wind corrector, camera, registered gate and variance-weighted predictions for each buoy's original held-out fold. Include every C4b-eligible strip in the window with a measured wind speed and buoy wind-wave height. Use the same strips for all arms. Apply the full-calendar historical cuts and weights in `reports/wind-wave-reliability/fits.json` (SHA-256 `307c923d92793c9c23714ad5053f42dd4c2b86c8e3a0bbc853387280621a2a2a`). No new weights, local offsets, training or selection use the follow-up observations.
 
 The single endpoint is wind-wave height RMSE in metres. For success, require the conditional rule's paired strip-weighted 95% upper endpoints against **both the frozen constant blend and the variance-weighted blend** to be below zero. Use 2,000 whole-group draws and seed 0 as above. Also report the forecast, camera, gate, two-input rule, group and fold scores, and the equal-group intervals. Report the dates, available and matched strip counts, buoys, groups, and weight-file checksum. Do not extend the window in response to the results. All configurations still use retrospective ERA5 data, so this replication can establish transfer to later observations with those inputs.
+
+### Running the replication
+
+Applying the saved weights to the archived inputs exactly reproduced all three fitted blends' predictions on 34,723 historical strips. Including the four archived comparator arms, the replay matched the published pooled, fold and geographic-group RMSEs (47 score rows). Run it in a checkout with the archived historical predictions and package labels:
+
+```bash
+uv run --locked --group forecast python scripts/wind_wave_replication.py replay
+```
+
+Retain the original November package's `claims/cut.json`. Once the new window closes and ERA5 covers it, prepare a separate follow-up package and output directory using the C4b procedure. Its `claims.json` records the coverage cutoff and count of eligible wind-wave strips. Its `c4b_rows.parquet` supplies the base predictions. The incoming table may cover a longer period. The scorer selects the exact 14 UTC days, verifies the frozen weights, matches sample IDs, stations, groups and folds to the package labels, and checks each reference height. In the command below, supply those three input paths and a new output directory.
+
+```bash
+uv run --locked --group forecast python scripts/wind_wave_replication.py score \
+  --november-cut "$NOVEMBER_PACKAGE/claims/cut.json" \
+  --c4b-run "$FOLLOWUP_C4B_OUTPUT" --labels "$FOLLOWUP_PACKAGE/labels.csv" \
+  --out runs/wind-wave-reliability-replication
+```
+
+The output contains coverage, input hashes and the primary decision in `summary.json`, plus the scored rows, RMSEs and paired contrasts when data are available. Results for the independent window are pending.

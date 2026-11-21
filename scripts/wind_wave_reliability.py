@@ -225,6 +225,8 @@ def score(population, df, arms, candidate, comparators):
                 }
             )
     for scope, part in (("all", df), ("excluding_41040", df[df.station_group != "g41040"])):
+        if part.empty:
+            continue
         by_group = (
             part[arms].sub(part.observed, axis=0).pow(2).groupby(part.station_group).mean().pow(0.5)
         )

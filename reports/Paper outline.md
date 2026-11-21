@@ -356,6 +356,8 @@ Across the full station sample, the 63 largest underestimates had a median obser
 
 **Historical follow-up.** Fitting that rule on geographically separate calibration strips reduced pooled RMSE to 19.92 cm. A constant camera weight scored 20.10 cm, the variance blend 20.20 cm and the registered gate 20.79 cm. Adding a week of local wave measurements produced no overall improvement. This historical comparison was motivated by a station already inspected. [Protocol, intervals and buoy 41040 results](../docs/experiments/wind_wave_reliability.md) · [Fold and group scores](wind-wave-reliability/scores.csv)
 
+With the blend calibrated before October 29 and tested on October 31–November 13, the rule scored 21.56 cm against 21.77 cm for the constant and 21.83 cm for the variance blend. Both pooled gains had intervals below zero. With each geographic group weighted equally, both intervals included zero. An independent 14-day comparison of these three arms has been specified for after the November confirmation. [Time-cutoff scores](wind-wave-reliability/forward/scores.csv) · [Independent replication protocol](../docs/experiments/wind_wave_reliability.md#independent-two-week-replication)
+
 ## Still to land before submission
 
 | Item | Date | State on 2026-11-20 | What it decides |
