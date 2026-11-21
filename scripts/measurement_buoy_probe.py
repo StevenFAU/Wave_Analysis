@@ -17,7 +17,6 @@ from scipy.cluster.vq import kmeans2
 from scipy.linalg import solve
 
 from wave_analysis.config import data_dir
-from wave_analysis.datasets.buoycam import usable_view_mask
 
 TARGETS = [
     "slope_rms",
@@ -96,6 +95,7 @@ def extract(pkg, table, run, device, batch, water_only, workers=0):
     import torch
     from torch.utils.data import DataLoader
 
+    from wave_analysis.datasets.buoycam import usable_view_mask
     from wave_analysis.models.sea_state import TrainSettings, build_transforms
     from wave_analysis.models.wave_heights import HeightsDataset, MultiViewRegressor
 
