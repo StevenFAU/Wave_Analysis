@@ -1,0 +1,15 @@
+{
+  "date_split": [
+    "2026-10-29T00:00Z",
+    "2026-10-31T00:00Z"
+  ],
+  "source_sha256": {
+    "labels": "a1177f07fb6bc930c557126fd172b304a9c2562dbd5ce957766817a521e70914",
+    "gfs": "4cb22c2ebbe5320717fe61c45e771bcc5a4d7846c87757f5279659402eac0057",
+    "era5": "95a969cba3ed57bb35cfdfd5fa0f8f7cd5c0a03b9c771ed24829f1be41895976",
+    "depths": "a29a56ffe62040a18030bfa52deee7a54e28fa1a97222db71cf31df5200d0dcd"
+  },
+  "eligibility_archive_sha256": "76211456db0dd1e2175e6e48c00f36c55ed2ea5ba3a599b43853a1ae2a7da5a4",
+  "forecast_sha256": "07bb221e14e9d0388e43dfbb483d93c4dd6cde41356eeff5d636cd0a277891f5",
+  "strips": 7855
+}

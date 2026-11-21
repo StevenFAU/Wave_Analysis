@@ -112,6 +112,41 @@ Report the primary decision from each `summary.json`, paired RMSE differences an
 
 ## Results
 
+### A. Train before October 29 and score later at unseen buoys
+
+**The 50/50 blend met the primary criterion.** All five cameras and forecast correctors saw only strips dated before October 29. Averaging the camera with the corrected forecast reduced pooled wind-wave RMSE by **3.07 cm** relative to the forecast alone. The paired 95% interval was −5.03 to −1.80 cm. Its upper endpoint is below zero, as required.
+
+Scoring covers 7,855 strips from October 31 through November 13 at 67 held-out buoys in 39 geographic groups. Measured wind-wave height averaged 1.10 m with a standard deviation of 0.89 m.
+
+| Prediction (fitted on early strips only) | Pooled RMSE (cm) | Pooled R² | Groups where better than forecast |
+|---|---:|---:|---:|
+| Corrected forecast (ERA5 + GFS-Wave + measured wind) | 26.0 | 0.915 | — |
+| Camera | 29.3 | 0.892 | 14/39 |
+| 50/50 blend | 23.0 | 0.934 | 32/39 |
+
+The gain held under each sensitivity check. Weighting each geographic group equally gave −4.49 cm (−6.88 to −2.29 cm). Excluding group g41040 gave −3.12 cm (−5.07 to −1.83 cm). The blend beat the forecast in every fold:
+
+| Fold | Scored strips (buoys, groups) | Forecast (cm) | Camera (cm) | Blend (cm) | Blend − forecast (cm) |
+|---:|---:|---:|---:|---:|---:|
+| 0 | 1,925 (16, 1) | 26.0 | 30.2 | 23.5 | −2.5 |
+| 1 | 1,481 (14, 8) | 32.9 | 37.5 | 30.3 | −2.7 |
+| 2 | 1,457 (12, 8) | 26.6 | 23.7 | 20.7 | −5.8 |
+| 3 | 1,430 (12, 11) | 20.6 | 27.4 | 19.4 | −1.2 |
+| 4 | 1,562 (13, 11) | 22.4 | 25.3 | 18.8 | −3.5 |
+
+Compare the [earlier date-cutoff comparison](wind_wave_reliability.md#earlier-calibration-later-scoring) on the same 7,855 strips. There the base models had been fitted geographically on all dates. Restricting their training to early dates raised forecast RMSE from 24.3 to 26.0 cm and camera RMSE from 27.9 to 29.3 cm. The unfitted 50/50 blend still beat the early-only forecast by 3.1 cm. Earlier, the blend with a fitted constant weight beat its forecast by 2.5 cm.
+
+**Coverage.** The camera runs held out 9,397 later test strips at 74 buoys. Of these, 9,087 had a wind-wave label, and 7,855 (86% of labelled strips) are in the fixed scoring population. Of the 1,232 labelled strips left out, 828 fall after the historical eligibility archive ends (November 13, 01:00 UTC). The other 404 lacked a forecast input or measured wind. Camera checkpoints were selected on 23,675 validation strips. Validation and training both ended by October 28, 23:20 UTC (`calibration_coverage.csv`).
+
+What this does and does not show: this is a retrospective test. ERA5 is a reanalysis that was not available at the time of each strip. The scoring window had already been inspected in the earlier comparison. It shows that the camera's added value is not explained by the camera or the forecast corrector having trained on dates inside the scoring window. It is not a prospective forecast claim.
+
+**Run record.** The five seed-0 camera runs used commit `68b227ee0` on one shared H200: `buoy-fold0-20261121t0307-seed0-cutoff-oct29`, `buoy-fold1-20261121t0345-…`, `buoy-fold2-20261121t0424-…`, `buoy-fold3-20261121t0504-…` and `buoy-fold4-20261121t0543-…`, each ending `-seed0-cutoff-oct29`. They ran one after another from 03:07 to 06:22 UTC on 2026-11-21. Folds took 36.7–39.0 minutes each, 3.18 GPU-hours in total. Every run exited with code 0; there were no retries and no exclusions. The scorer checked each run's settings and its exact validation and test strip IDs. The forecast input was `runs/buoy-cutoff-forecast-v1/forecast.parquet` (SHA-256 `07bb221e…891f5`). Score tables: `reports/buoy-hpc-followup/heights/` (`summary.json` with prediction hashes, `rmse.csv`, `contrasts.csv`, `scored_coverage.csv`, `calibration_coverage.csv`, `forecast_preparation.json`). To reproduce the coverage table:
+
+```bash
+uv run --locked --isolated --group forecast python scripts/buoy_followup_coverage.py heights \
+  --runs runs/buoy-fold[0-4]-*-seed0-cutoff-oct29 --out runs/heights-scored-coverage.csv
+```
+
 ### B. Swell from the part of the image below the horizon
 
 **The water crop failed the primary test.** Adding water-crop features to measured wind changed the pooled swell-height RMSE by **+0.24 cm** (95% paired interval −2.23 to +2.02 cm). The criterion needed the upper endpoint below zero. The whole view carried far more swell information through the same checkpoints. Water + wind was **18.1 cm worse than whole + wind** (+15.4 to +22.1 cm) and lost in 42 of 43 geographic groups.
@@ -143,6 +178,6 @@ What this does and does not show: the whole-view encoders were trained on full f
 **Run record.** Water features: `buoy-probe-20261121t0229-swell-water-s0`, commit `68b227ee0`, one shared H200, 2026-11-21 02:29–03:06 UTC. That is 0.61 GPU-hours, with the five folds taking 428–440 s each. Whole-view features: cached `runs/claims-inputs/t5-s0`. The scorer confirmed that each fold's whole-view and water checkpoints have the same hash. Score tables: `reports/buoy-hpc-followup/swell/` (`summary.json`, `rmse.csv`, `contrasts.csv`, `coverage.csv`, `filter_breakdown.csv`). Row-level predictions and embeddings stay under `runs/`. To reproduce the coverage breakdown:
 
 ```bash
-uv run --locked --isolated --group forecast python scripts/buoy_swell_coverage.py \
+uv run --locked --isolated --group forecast python scripts/buoy_followup_coverage.py swell \
   --water runs/buoy-probe-20261121t0229-swell-water-s0 --out runs/swell-filter-breakdown.csv
 ```

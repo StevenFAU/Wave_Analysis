@@ -1,0 +1,40 @@
+{
+  "strips": 7855,
+  "buoys": 67,
+  "groups": 39,
+  "pooled_r2": {
+    "forecast": 0.914539293862864,
+    "camera": 0.8917493843850381,
+    "blend": 0.9335340097741266
+  },
+  "primary_comparator": "forecast",
+  "primary_delta_rmse_m": -0.03072923725887189,
+  "primary_95pct_m": [
+    -0.05033541392842582,
+    -0.018026915046442826
+  ],
+  "primary_met": true,
+  "camera_runs": {
+    "fold0": {
+      "run": "buoy-fold0-20261121t0307-seed0-cutoff-oct29",
+      "predictions_sha256": "be0e41674057d0f9820d182a8eff33a008a53471cacd15b468093271d2eb1756"
+    },
+    "fold1": {
+      "run": "buoy-fold1-20261121t0345-seed0-cutoff-oct29",
+      "predictions_sha256": "b89acb1ecc1d5bf1c1882a13f4e9b30ffa4abb0e07244bdd9b1a60d9598c37b4"
+    },
+    "fold2": {
+      "run": "buoy-fold2-20261121t0424-seed0-cutoff-oct29",
+      "predictions_sha256": "3cad92835535cf1d4b1650e9635dec84fb566875fdc437bac3b47f94ef6bc71a"
+    },
+    "fold3": {
+      "run": "buoy-fold3-20261121t0504-seed0-cutoff-oct29",
+      "predictions_sha256": "0cc27b9110d569ef5529802b2543832340ed78e1f42388f9dca34a4faaf90f94"
+    },
+    "fold4": {
+      "run": "buoy-fold4-20261121t0543-seed0-cutoff-oct29",
+      "predictions_sha256": "f3ee43d4ff703fe27e7022486a9cd5af545aab3c2a372fcb32f437147d7d96bd"
+    }
+  },
+  "forecast_sha256": "07bb221e14e9d0388e43dfbb483d93c4dd6cde41356eeff5d636cd0a277891f5"
+}
