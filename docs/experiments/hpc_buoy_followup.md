@@ -15,3 +15,97 @@ Train one seed-0 camera per fold from public DINOv3 ConvNeXt-Tiny weights using 
 Use the same five original seed-0 geographic height checkpoints for whole views and water crops. Use the existing below-horizon transform and its minimum of three usable water views. Extract the water embeddings and reuse the matching cached whole-view embeddings. Predict the lowest fixed band (0.030–0.095 Hz) as equivalent height in metres, four times the square root of its integrated variance. A zero-total spectrum is missing. A zero swell band in an otherwise valid spectrum is allowed.
 
 Use the identical eligible training and test rows for each arm within each fold. Fit the established training-standardized ridge (penalty 10) on training buoys. Evaluate whole features alone, water features alone, measured wind alone, and each image input with wind. Wind features are speed, gust, both squares and their product. Clip heights at zero. The primary contrast is water + wind minus wind in pooled RMSE, with the same paired geographic bootstrap as A. Compare water + wind against whole + wind to estimate the cost of the crop. Report pooled R², equal-group contrasts, per-fold outcomes and coverage before and after filtering. Resizing and discarding part of the scene can also affect skill. This control tests information retained under that specific crop.
+
+## Where Claude should start
+
+Use the main desktop checkout that holds `data/` and `runs/`. The prepared launcher checkout is `runs/hpc-buoy-launch`, pinned to `68b227ee059b698cb18c38f90de074e2b7ed67eb`. That code is already on the H200 server. Its locked environment is `1d319000489b` with torch 2.14.0+cu130. The public DINOv3 backbone loaded there with networking disabled. The server has both verified packages, and its five frozen checkpoint hashes match the five desktop whole-view feature caches. Neither new GPU experiment was launched during preparation. The final whole-clip and storm-video containers were both running at the last check.
+
+The CPU forecast fit for A is complete in `runs/buoy-cutoff-forecast-v1/`. All five correctors produced the expected 7,855 scored strips. The prepared `forecast.parquet` has SHA-256 `07bb221e14e9d0388e43dfbb483d93c4dd6cde41356eeff5d636cd0a277891f5`. The sibling `summary.json` identifies the source snapshots. Early-strip ERA5 interpolation uses only records before the cutoff. `coverage.csv` records geographic roles and dates before forecast input filtering. A fold-0 CPU smoke run exercised the actual pretrained camera trainer. A separate CPU smoke run extracted and saved below-horizon features with the original fold-0 checkpoint. Smoke outputs are for plumbing checks only.
+
+### Launch on the shared server
+
+Work from the main repository root in Bash. Set `GPU_HOST` to the lab server's configured SSH alias. The launchers reuse the desktop's authenticated SSH connection. Use the existing project launch lock when starting each job. Recheck free memory and project occupancy inside the lock, keep the project within its seven-container limit, and use a GPU with at least 40 GiB free. Give the active storm work priority. Allow one new follow-up container at a time. The five-fold camera baseline previously used 3.94 H200-hours in aggregate. The previous five-fold water extraction used about 30 minutes.
+
+```bash
+: "${GPU_HOST:?Set GPU_HOST to the configured lab SSH alias}"
+export GPU_HOST
+PIN=68b227ee059b698cb18c38f90de074e2b7ed67eb
+LAUNCH="$PWD/runs/hpc-buoy-launch"
+if [[ ! -d "$LAUNCH" ]]; then
+  git worktree add --detach "$LAUNCH" "$PIN"
+fi
+test "$(git -C "$LAUNCH" rev-parse HEAD)" = "$PIN"
+RUN="$LAUNCH/deploy/dgx/run.sh"
+MEASURE="$LAUNCH/deploy/dgx/measure.sh"
+LOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wave-analysis-gpu-launch.lock"
+"$RUN" status
+
+launch_one() (
+  set -euo pipefail
+  flock -x 9
+  snapshot=$("$RUN" check)
+  echo "$snapshot" >&2
+  count=$(awk '/^our containers running:/ {print $NF}' <<< "$snapshot")
+  [[ "$count" =~ ^[0-9]+$ ]] && (( count < 7 )) || { echo "Defer: project slots occupied" >&2; exit 1; }
+  devices=$(ssh -T -o BatchMode=yes "$GPU_HOST" 'set -o pipefail
+    docker ps -q --filter label=app=wave-analysis |
+    xargs -r docker inspect -f "{{range .HostConfig.DeviceRequests}}{{range .DeviceIDs}}{{println .}}{{end}}{{end}}"')
+  gpu=$(awk -v taken="$devices" '
+    BEGIN {n=split(taken, used, /[[:space:]]+/); for (i=1;i<=n;i++) busy[used[i]]=1}
+    NF==3 && $1~/^[0-7]$/ && $3>=40 && !($1 in busy) {print $2, $1}
+  ' <<< "$snapshot" | sort -nk1,1 -nk2,2 | awk 'NR==1 {print $2}')
+  [[ -n "$gpu" ]] || { echo "Defer: no suitable GPU" >&2; exit 1; }
+  GPU="$gpu" "$@"
+) 9>"$LOCK"
+```
+
+For A, run the block for one fold at a time. Start with `k=0`, fetch the completed run and check its exit status, then repeat with 1, 2, 3 and 4. Before a retry, check the running containers and already fetched run IDs. A closed SSH session can leave a healthy detached training job on the server.
+
+```bash
+k=0
+launch_one env PKG=ndbc_buoycam_heights_v2cv \
+    CONFIG=configs/experiments/ndbc_buoycam_heights_v2cv.yaml \
+    TRAIN_SCRIPT=scripts/train_wave_heights.py TAG=cutoff-oct29 \
+    "$RUN" train "fold$k" --seed 0 --backbone timm:convnext_tiny.dinov3_lvd1689m \
+    --lp-epochs 2 --backbone-lr-scale 0.1 --date-split 2026-10-29T00:00Z 2026-10-31T00:00Z
+```
+
+For B, use a single container. The launcher processes all five frozen checkpoints sequentially. Record the run name printed at launch.
+
+```bash
+checkpoints=(
+  0:buoy-fold0-20261118t2234-seed0-cv-dinov3-gentle
+  1:buoy-fold1-20261118t2342-seed0-cv-dinov3-gentle
+  2:buoy-fold2-20261118t2346-seed0-cv-dinov3-gentle
+  3:buoy-fold3-20261119t0038-seed0-cv-dinov3-gentle
+  4:buoy-fold4-20261119t0130-seed0-cv-dinov3-gentle
+)
+launch_one env PKG=ndbc_buoycam_slope_v1 EXTRA="--water-only --save-features" \
+    "$MEASURE" probe swell-water-s0 "${checkpoints[@]}"
+```
+
+### Fetch, score and publish
+
+For each run, set `RUN_ID` to the exact ID printed by the launcher. Follow its log until the final exit code. Fetch using the **main checkout's** launcher so outputs land beside the prepared desktop inputs.
+
+```bash
+"$RUN" logs "$RUN_ID" -f
+deploy/dgx/run.sh fetch "$RUN_ID"
+tail -1 "runs/$RUN_ID/train.log"
+```
+
+For interrupted monitoring, `"$RUN" status` and `"$RUN" logs "$RUN_ID"` recover the state. The terminal log ends with `finished with exit code 0` and a timestamp on success. The follow command uses remote `tail -f`, so detach the log reader when that line appears. Each completed camera run should have `metrics.json` and `predictions.csv`. Each of the five water fold directories should have `run.json`, `feature_rows.csv` and `features.npy`.
+
+Run the following scores from the main desktop checkout. Set `WATER_RUN_ID` to the fetched B run. The default whole-view input is the cached seed-0 set at `runs/claims-inputs/t5-s0`. The A scorer expects five run directories and checks the fold settings and exact validation and test strip IDs. If there are retries, pass the five successful directories explicitly.
+
+```bash
+export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
+uv run --locked --isolated --group forecast python scripts/buoy_hpc_followup.py heights \
+  --runs runs/buoy-fold[0-4]-*-seed0-cutoff-oct29
+uv run --locked --isolated --group forecast python scripts/buoy_hpc_followup.py swell \
+  --water "runs/$WATER_RUN_ID"
+```
+
+The default output directories are `runs/buoy-heights-followup-v1` and `runs/buoy-swell-followup-v1`. Use `--out` with a new path for a reproduction. For A, the forecast inputs can be rebuilt with `uv run --locked --isolated --group forecast python scripts/buoy_hpc_followup.py forecast --out runs/buoy-cutoff-forecast-replay`, then selected via `heights --forecast runs/buoy-cutoff-forecast-replay`.
+
+Report the primary decision from each `summary.json`, paired RMSE differences and intervals in metres, equal-group sensitivity from `contrasts.csv`, fold scores from `rmse.csv` and B's crop coverage. For B, include the pooled R² of both image arms and wind. Record the actual run IDs, elapsed GPU time and exclusions alongside the results. Commit and push the small report and score tables. Keep weights, embeddings and row-level outputs under the existing ignored `runs/` tree.
