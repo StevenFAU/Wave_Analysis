@@ -36,6 +36,25 @@ import pandas as pd
 TRAIN, VAL, TEST, EXCLUDED = "train", "val", "test", "excluded"
 
 
+def early_fit_late_test(
+    df: pd.DataFrame, role_col: str, fit_before: str, test_from: str
+) -> pd.DataFrame:
+    """Restrict an existing geographic split to early fitting and later held-out testing."""
+    stop, start = pd.Timestamp(fit_before), pd.Timestamp(test_from)
+    if stop.tzinfo is None or start.tzinfo is None or start <= stop:
+        raise ValueError("expected timezone-aware cutoffs with a positive gap")
+    if df.groupby("station_group")[role_col].nunique().gt(1).any():
+        raise ValueError("a geographic group has multiple split roles")
+    time = pd.to_datetime(df["time_utc"], utc=True)
+    roles = df[role_col]
+    if time.isna().any() or df.loc[roles.isin([TRAIN, VAL, TEST]), "station_group"].isna().any():
+        raise ValueError("missing strip time or station group")
+    kept = df[(roles.isin([TRAIN, VAL]) & (time < stop)) | ((roles == TEST) & (time >= start))]
+    if set(kept[role_col]) != {TRAIN, VAL, TEST}:
+        raise ValueError("empty geographic role after the date split")
+    return kept
+
+
 @dataclass
 class SplitResult:
     """Partition labels for each row plus the recipe that produced them."""

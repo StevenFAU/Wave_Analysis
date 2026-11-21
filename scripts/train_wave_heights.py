@@ -41,7 +41,7 @@ from wave_analysis.config import load_yaml, repo_root
 from wave_analysis.datasets import build_provenance, write_provenance
 from wave_analysis.datasets.buoycam import usable_view_mask
 from wave_analysis.datasets.provenance import git_state
-from wave_analysis.datasets.splits import TEST, TRAIN, VAL
+from wave_analysis.datasets.splits import TEST, TRAIN, VAL, early_fit_late_test
 from wave_analysis.evaluation.regression import pearson, r2, regression_report, rmse
 from wave_analysis.evaluation.uncertainty import block_bootstrap_ci
 from wave_analysis.models.sea_state import TrainSettings, build_transforms, input_size
@@ -78,6 +78,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--config", required=True)
     ap.add_argument("--package", required=True)
     ap.add_argument("--split", required=True, help="station or time")
+    ap.add_argument(
+        "--date-split",
+        nargs=2,
+        metavar=("FIT_BEFORE", "TEST_FROM"),
+        help="retain early train/validation and later test strips of a geographic fold",
+    )
     ap.add_argument("--out", required=True)
     ap.add_argument(
         "--aux", choices=("none", "horizon"), default="none", help="per-view extra inputs"
@@ -145,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
 
     labels = pd.read_csv(pkg / "labels.csv", dtype={"station_id": str})
     col = f"split_{args.split}"
+    if args.date_split:
+        labels = early_fit_late_test(labels, col, *args.date_split)
     boot = cfg["evaluation"]["bootstrap"]
     gcol = (
         boot["group_col"][args.split] if isinstance(boot["group_col"], dict) else boot["group_col"]
@@ -301,6 +309,8 @@ def main(argv: list[str] | None = None) -> int:
         "backbone_weights": args.backbone_weights,
     }  # fmt: skip
     run_info["init_heights_run"] = str(args.init_heights_run) if args.init_heights_run else None
+    if args.date_split:
+        run_info["date_split"] = args.date_split
     (out / "metrics.json").write_text(
         json.dumps({"run": run_info, "partitions": metrics}, indent=1, default=str)
     )
