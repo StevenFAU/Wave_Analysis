@@ -1,5 +1,7 @@
 # Paper outline: the buoy camera as a wind-sea sensor
 
+For the current project results, including the November 21 buoy and shore-video experiments, see the [internal progress report](Wave%20camera%20progress.md).
+
 Drafted November 20, 2026. The retrospective results are on `main` at `a1149f412`.
 The fresh-strip protocol and scorer are on `claude/fresh-strip-confirmation` at
 `cfda28b22`. [Registered comparison](../docs/experiments/sensing_model_bar.md) · [Reproduce the headline table](../docs/experiments/sensing_forecast_results.md#reproduce) · [Scoring inputs](../data/manifests/ml/forecast-fusion-nested-v1.sha256)

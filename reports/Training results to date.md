@@ -1,12 +1,14 @@
 # Training results to date
 
-Every model the project has trained up to 2026-11-20: what worked, what did not, the best
+Every model the project has trained up to 2026-11-21: what worked, what did not, the best
 scores, and where we stand against the published work. Each experiment's design was
 fixed in its doc before it was scored ("bars"); this report adds no new analysis.
 
-The retrospective results are on `main` at `a1149f412` (November 20, 2026). The
-fresh-strip protocol and scorer are on `claude/fresh-strip-confirmation`. The table
-at the end gives each result's original branch.
+The buoy results are on `main` at `944fa87ff` (November 21, 2026), including the two HPC
+follow-ups. The final shore-video run (M1-M7) is on `claude/video-whole-clip-491c90`,
+not yet merged. The storm-set class bars are scored once the storm re-run lands. The
+fresh-strip protocol and scorer are on `claude/fresh-strip-confirmation`. The table at
+the end gives each result's branch.
 
 ## Bottom line
 
@@ -36,7 +38,10 @@ is not significant when every station group is weighted equally. The wind-wave g
 that forecast is clear (0.226 to 0.208 m).
 
 This gain holds under a nested check, in which the fusion step never sees predictions
-from models trained on the test buoys. The last confirmation, on weeks archived after the
+from models trained on the test buoys. It also holds when the camera and the forecast
+correction train only on strips before October 29 and are scored from October 31 at
+unseen buoys: a plain 50/50 average of the two lowers wind-wave error from 0.260 to
+0.230 m (−3.1 cm [−5.0, −1.8]), and wins in all five folds. The last confirmation, on weeks archived after the
 package, is expected around November 27, once ERA5 waves, wind and gust cover November 21 at 16:00 UTC.
 
 **The best single model** is DINOv3 ConvNeXt-Tiny with the "gentle" recipe: the backbone
@@ -137,6 +142,7 @@ Also compared or used as context:
 | Total H_s, fusion (out of fold) | gated partition swap | **0.267 m** | ERA5 + wind 0.288 m |
 | Total H_s, camera + forecasts + wind (nested, 34,723 strips) | gated partition swap | **0.262 m** | ERA5 + GFS-Wave + wind 0.267 m |
 | Wind-wave height, camera + forecasts + wind (nested) | gated partition swap | **0.208 m** | ERA5 + GFS-Wave + wind 0.226 m |
+| Wind-wave height, trained before Oct 29, scored after Oct 31 | 50/50 camera + forecast | **0.230 m** | ERA5 + GFS-Wave + wind 0.260 m |
 | Wind-wave height, camera alone (sealed 12) | DINOv3-gentle | **0.214 m** | ERA5 0.341 m |
 | Wind-wave height, camera + ERA5 + wind (sealed 12) | Test 3 ridge | **0.199 m** | ERA5 + wind 0.286 m |
 | Wind-sea period Tm-1,0 (out of fold) | spectral head | **0.55 s** | ERA5 0.75 s |
@@ -145,13 +151,15 @@ Also compared or used as context:
 | Calm vs rough (Choi's task, sealed 12) | DINOv3-gentle | **99.2 %** | Choi's VGG16 re-run 94.7 % |
 | Kim's five classes, strips (sealed 12) | DINOv3-gentle | **70.2 %** | Kim's CNN re-run 50.1 % |
 | Shore H_s, single still (held-out year 2025) | frozen DINOv3 probe | **0.265 m** | climatology 0.613 m |
-| Shore H_s, video (18 dates) | V-JEPA 2, whole clip | **0.513 m** | Kamagata's head re-run 0.653 m |
-| Shore period T_p (18 dates) | pixel brightness spectrum | **2.46 s** | climatology 2.72 s |
+| Shore H_s, video (46 dates, final run) | DINOv3 averaged over the whole clip | **0.293 m**, R² 0.70 | climatology 0.545 m; V-JEPA 2 whole clip 0.305 m |
+| Shore H_s, video (18 dates, interim) | V-JEPA 2, whole clip | **0.513 m** | Kamagata's head re-run 0.653 m |
+| Shore period T_p (46 dates, final run) | whole clip + pixel spectrum | **2.59 s** | climatology 3.24 s |
 | Breaker type at unseen beaches | DINOv3 frames | **macro-F1 0.85** | Yin's CRNN 0.65 |
 
-The shore still (0.265 m) and the shore video (0.513 m) are different experiments. The
-still model trained on years of stills; the video model on 18 dates. Most of the gap is
-probably the amount of data, not the medium. This is a reading, not a test.
+The shore still (0.265 m, one camera, held-out year) and the shore video (0.293 m, four
+cameras, 46 dates) are different experiments, not a test of still against video. The
+interim video number (0.513 m on 18 dates) fell to 0.29 m with 46 dates, so most of the
+earlier gap was the amount of data, not the medium.
 
 ## Results by track
 
@@ -231,6 +239,19 @@ models that had trained on the outer test groups. They were redone with 30 inner
 runs, so that each fold's fusion step is fitted only on predictions from models that
 never saw that fold. Both hold: S2 under the same check is 0.2667 against 0.2883 m.
 
+**HPC follow-ups (2026-11-21; `docs/experiments/hpc_buoy_followup.md`):**
+
+| Test | Compared | Result |
+|---|---|---|
+| A. Early training, later scoring | camera and forecast correction trained only on strips before Oct 29; 50/50 average against the forecast, wind-wave height, 7,855 strips at 67 unseen buoys from Oct 31 | **Met.** 0.230 against 0.260 m (−3.07 cm [−5.03, −1.80]); better in 32 of 39 groups and in every fold; −4.49 cm with groups weighted equally. The camera alone is 0.293 m. |
+| B. Swell from the water below the horizon | water crop + wind against wind alone, swell-band height (0.030–0.095 Hz) | **Not met.** +0.24 cm [−2.23, +2.02]. The whole view + wind is 18 cm better than the crop + wind (0.704 against 0.886 m). |
+
+A is retrospective: ERA5 is a reanalysis, and the scoring window had been looked at
+before. It shows that the camera's added value is not from training on dates inside the
+scoring window; it is not a forecast claim. B shows that these encoders, trained on full
+frames, keep little swell signal in the cropped water. It does not show that the water
+pixels lack it.
+
 ### 5. New measurements from the buoy cameras (2026-11-19 to -20)
 
 | Bar | Compared (out of fold, 38,000-40,600 strips) | Result |
@@ -271,27 +292,48 @@ never saw that fold. Both hold: S2 under the same check is 0.2667 against 0.2883
 - **Attitude has no consistent effect on Yang's network.** It was 0.020 m worse on the
   sealed buoys and 0.022 m better (interval reaching zero) on the folds.
 
-### 7. Shore video (WebCOOS, CDIP labels; interim run, 992 clips, 18 dates)
+### 7. Shore video (WebCOOS, CDIP labels; final run, 3,685 clips, 46 dates)
+
+Four cameras (Currituck, Jennette's, Oak Island east and west), folds of whole dates.
+M1-M5 are scored on all 46 dates; M6-M7 only on the 28 confirmation dates, which no
+development choice saw. Climatology (the other folds' average label) scores H_s 0.545 m
+and T_p 3.24 s.
 
 | Bar | Compared | Result |
 |---|---|---|
-| M1 | V-JEPA 2 on 64 ordered frames against the middle frame repeated | **Not met.** H_s 0.533 against 0.535 m: motion inside 16 s adds nothing. |
-| M2 | the same for T_p | **Not met.** |
-| M3 | all 16-s windows of the clip averaged against the midpoint window | **Met, small.** 0.513 against 0.524 m (−0.011 [−0.018, −0.004]). |
-| M4 | the same for T_p | Met but meaningless: no probe beats climatology for T_p (2.72 s). |
-| M5 | whole clip + pixel brightness spectrum against whole clip, T_p | **Not met, narrowly.** 2.47 against 2.86 s; met on clips of 4 min or more. About half the gain is recalibration. |
+| M1 | V-JEPA 2 on 64 ordered frames against the middle frame repeated, H_s | **Met.** 0.331 against 0.368 m (−0.036 [−0.062, −0.009]). |
+| M2 | the same for T_p | **Met.** 2.79 against 2.96 s (−0.17 [−0.31, −0.05]). |
+| M3 | all 16-s windows of the clip averaged against the midpoint window, H_s | **Met, small.** 0.305 against 0.313 m (−0.008 [−0.011, −0.005]). |
+| M4 | the same for T_p | **Met, small.** 2.76 against 2.79 s (−0.027 [−0.046, −0.010]). |
+| M5 | whole clip + pixel brightness spectrum against whole clip, T_p | **Met.** 2.59 against 2.76 s (−0.18 [−0.32, −0.03]); the gain is the spectrum, not recalibration. |
+| M6 | spectrum v2 (14 features) against v1 (10), T_p | **Met, small.** 2.85 against 2.91 s (−0.059 [−0.098, −0.008]). |
+| M7 | breaking features added for H_s | **Not met.** +0.002 m. |
 
-- **The pixel brightness spectrum is the only shore T_p signal.** It scores 2.46 s alone,
-  against climatology's 2.72 s.
-- **Kim's five classes at unseen dates:** no skill, 58.4 % against 58.8 % for always
-  naming the most common class.
-- **Kamagata's measures at Oak Island (336 clips):**
-  - H_s: RMSE 0.661 m, R² 0.28, Pearson 0.55, against their published 0.586 m, 0.107
-    and 0.436 on their own data. Ahead on R² and Pearson, behind on RMSE.
-  - T_p: 2.79 s against their 1.42 s, so behind.
-- **Physics features v2:** a cleaner spectrum and breaking features, bars M6 and M7.
-  They are fixed on the development dates and will be scored on the final run's new
-  dates.
+- **M1 and M2 are met, but the gain is more frames, not motion.** The same 64 frames
+  shuffled do as well as in order (H_s −0.000 m [−0.024, +0.020]), and DINOv3 on the one
+  middle frame is level with video or ahead (0.312 against 0.331 m). Motion inside 16 s
+  adds nothing measurable to H_s or T_p. (For breaker type the order does matter: Y-B3.)
+- **Best shore height:** DINOv3 averaged over all windows of the clip, 0.293 m (R² 0.70);
+  V-JEPA 2 over the clip 0.305 m. Interim run on 18 dates: 0.513 m, so the data were
+  the limit.
+- **Best shore period:** the clip plus all 14 spectrum features, on the confirmation
+  dates T_p 2.70 s (R² 0.38) and T_e 1.43 s (R² 0.45), against climatology's 3.52 s and
+  1.98 s.
+- **Kim's five classes at unseen dates:** still no skill on ordinary days. 777 of 937
+  in-range clips are in the lowest class, so always naming it scores 82.9 %; `clip`
+  scores 83.4 %. The storm set decides this (T2-A, T2-B, T3-K).
+- **Kamagata's measures at Oak Island (1,770 clips, 44 unseen dates):**
+  - H_s: `clip` 0.290 m, R² 0.69, Pearson 0.84, against their published 0.586 m, 0.107
+    and 0.436 on their own five videos. About half their error.
+  - T_p: 3.17 s (spectrum alone 2.70 s) against their 1.42 s, so behind. Their test
+    set's T_p spread is not reported, so the period gap is hard to read.
+- **Storm days:** a first storm run trained on storm days only, against the bars'
+  rules, and is superseded. The corrected run, with all 46 ordinary dates in every
+  training fold, lands on 2026-11-21 late evening; its estimates feed T2-A, T2-B and
+  T3-K.
+
+Interim run (2026-11-19, 992 clips, 18 dates), for the record: M1, M2 and M5 not met,
+M3 and M4 met; H_s 0.513 m; pixel spectrum alone 2.46 s against climatology's 2.72 s.
 
 **Per-wave labels and the papers' video networks** (CDIP individual waves):
 
@@ -300,7 +342,7 @@ never saw that fold. Both hold: S2 under the same check is 0.2667 against 0.2883
 | T2-A, T2-B | Kim's classes on mean individual height | **Unassessable.** The sample is too calm: 1,133 of 1,444 clips are below 0.75 m, and only 5 reach 1.75 m. A sealed 24-date storm set (H_s ≥ 2 m) is downloading for this. |
 | T2-C | zero-crossing period from the pixel spectrum against climatology | **Not met.** 1.29 against 1.37 s (−0.08 [−0.20, +0.08]). |
 | T3-S | our whole-clip read-out against Kamagata's SlowFast head with their physics loss | **Ours ahead.** 0.513 against 1.140 m. But the physics loss, at our target scaling, makes their head predict about 2 m for every clip. **The fair number is without it: 0.513 against 0.653 m (−0.140 [−0.207, −0.061]).** |
-| T3-K | Kim's CNN-BiLSTM on shore video | Smoke test passes; the full run waits for the storm set. |
+| T3-K | Kim's CNN-BiLSTM on shore video | Trained (five folds, five seeds, 430 storm clips on 22 dates); scored with T2-A and T2-B once the storm re-run lands. |
 
 **Ten-minute summary images (test 9, frozen DINOv3 probes; 30,931 still / `timex` / `brt` triples, scored on the held-out year 2025, 10,942 triples on 362 days):**
 
@@ -349,9 +391,12 @@ encoder reads best. Adding them to the still does not help either.
   check.
 - **Frozen features with small heads:** they matched fine-tuning for slope and served
   breakers, wind and the visibility curve.
-- **Reading the whole shore clip** rather than one 16-s window (small).
-- **The pixel brightness spectrum** for shore period (the only signal that beats
-  climatology).
+- **Reading the whole shore clip** rather than one 16-s window (small, M3-M4), and more
+  shore data: 46 dates halved the interim height error.
+- **The pixel brightness spectrum** for shore period (M5, M6): it beats climatology and
+  adds to the clip estimate.
+- **Training the camera only on earlier dates** still adds to the forecast at later
+  dates (HPC follow-up A).
 
 ## What did not work
 
@@ -369,8 +414,11 @@ encoder reads best. Adding them to the still does not help either.
   harms wind-wave height. A few labelled hours at the new buoy work instead.
 - **Fine-tuning for slope:** level with frozen features, even with a stable recipe.
 - **Training period heads jointly with height:** cost 0.086 m in H_s.
-- **Motion inside 16 s of shore video, for height;** a learned record pooler (worse than
-  a plain average); temporal heads for breakers (order-free heads do as well).
+- **Motion inside 16 s of shore video, for height or period:** video beats a repeated
+  still only by seeing more frames; shuffled frames do as well. Also a learned record
+  pooler (worse than a plain average), breaking features for shore height (M7), and
+  temporal heads for breakers (order-free heads do as well).
+- **The water below the horizon, cropped, for swell** (HPC follow-up B): no gain over wind.
 - **Ten-minute `timex` and `brt` images:** worse than one still.
 - **Kim's five classes at shore cameras:** no skill at unseen dates, and too few rough
   days to test fairly (the storm set addresses this).
@@ -380,11 +428,11 @@ encoder reads best. Adding them to the still does not help either.
 
 - **Fresh strips (expected November 27).** The historical package check passed. Score S2
   and test 1 on the frozen window once ERA5 coverage reaches the registered cutoff.
-- **Final shore video run (automatic, about a day after the download ends on 2026-11-20
-  evening):** M1-M7 on all dates; M6 and M7 only on dates no development choice saw.
-- **Storm set (24 dates, about 78 GB, downloading 2026-11-20/21):** makes Kim's classes
-  on shore video, and the CNN-BiLSTM re-run, scoreable. Its scoring run is set up and
-  starts after the download.
+- **Storm set (22 daylight dates, 512 clips; corrected estimate run lands 2026-11-21
+  late evening):** T2-A, T2-B and T3-K (Kim's classes and Kim's CNN-BiLSTM, already
+  trained) are scored once on it.
+- **Merge:** the final shore-video write-up and the storm-set scoring branch merge into
+  `main` after the storm scores.
 - **Sealed 12 buoys:** reused for many decisions. Headline claims should move to the
   out-of-fold numbers and to fresh strips.
 - **Licences:** the Yin clips are CC BY 4.0 on figshare but recorded as CC BY-NC-ND in
@@ -403,6 +451,7 @@ encoder reads best. Adding them to the still does not help either.
 | Forecast fusion, nested | `claude/sensing-model-nested` (from `codex/sensing-model`) | `docs/experiments/sensing_model_bar.md` |
 | Site adaptation (test 6) | `claude/site-adaptation` | `docs/experiments/sensing_site_adaptation.md` |
 | Fresh-strip confirmation (to be scored) | `claude/fresh-strip-confirmation` | `docs/experiments/fresh_strip_confirmation.md` |
-| Shore video M1-M7, storm set | `claude/video-whole-clip-491c90` | `docs/experiments/webcoos_video.md` |
-| Per-wave labels, Kamagata and Kim video, `timex`/`brt` | `claude/sensing-shore-labels` (from `codex/sensing-shore`) | `docs/experiments/sensing_per_wave_bars.md`, `docs/experiments/sensing_timex_bars.md` |
+| Shore video M1-M7, storm set | `claude/video-whole-clip-491c90` (final run; not yet merged) | `docs/experiments/webcoos_video.md` |
+| Per-wave labels, Kamagata and Kim video, `timex`/`brt` | `claude/sensing-shore-labels` (from `codex/sensing-shore`); storm-set scoring on `claude/sensing-shore-storm` (not yet merged) | `docs/experiments/sensing_per_wave_bars.md`, `docs/experiments/sensing_timex_bars.md` |
+| HPC follow-ups: early training, water crop | `main` | `docs/experiments/hpc_buoy_followup.md` |
 | Seismic, NWPS | `codex/sensing-signals` | `docs/experiments/sensing_seismic_bar.md` |
